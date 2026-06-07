@@ -24,10 +24,12 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      # 4. Tulis parameter visual dari web lokal ke file temporary di server GitHub
+      # 4. Tulis parameter visual ke file menggunakan Environment Variable bawaan Runner
       - name: Create Temp Props
+        env:
+          CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload.item) }}
         run: |
-          echo '${{ json.encode(github.event.client_payload.item) }}' > temp-props.json
+          echo "$CLIENT_PAYLOAD" > temp-props.json
           cat temp-props.json
 
       # 5. Eksekusi render video menggunakan spesifikasi server GitHub
@@ -42,4 +44,3 @@ jobs:
           name: ${{ github.event.client_payload.item.id }}-video
           path: out/${{ github.event.client_payload.item.id }}.mp4
           retention-days: 3
-          
