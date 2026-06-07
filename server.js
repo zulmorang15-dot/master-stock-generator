@@ -32,7 +32,8 @@ app.post("/api/generate", async (req, res) => {
       "textInput": "KATA_KUNCI_SINGKAT_UNTUK_TEKS_DI_VIDEO",
       "color1": "#kode_hex_warna_1",
       "color2": "#kode_hex_warna_2",
-      "speed": 1.2
+      "speed": 1.2,
+      "style": "wajib_pilih_salah_satu_antara: glitch, pulse, atau cinematic"
     }
   `;
 

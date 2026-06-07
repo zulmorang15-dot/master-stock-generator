@@ -7,6 +7,7 @@ interface StockIdea {
   color1: string;
   color2: string;
   speed: number;
+  style: string; // <-- Tambahkan baris ini
   statusPreview: "idle" | "processing" | "success" | "failed";
 }
 
@@ -101,15 +102,16 @@ export const Dashboard: React.FC = () => {
           <h2 style={{ fontSize: "20px", marginBottom: "20px" }}>Hasil Analisis Ide untuk: <span style={{ color: "#60a5fa" }}>"{keyword}"</span></h2>
           
           <table style={{ width: "100%", borderCollapse: "collapse", backgroundColor: "#161b26", borderRadius: "12px", overflow: "hidden" }}>
-            <thead>
-              <tr style={{ backgroundColor: "#1f2535", color: "#d1d5db", textAlign: "left" }}>
-                <th style={{ padding: "15px" }}>No</th>
-                <th style={{ padding: "15px" }}>Rekomendasi Teks</th>
-                <th style={{ padding: "15px" }}>Warna & Speed</th>
-                <th style={{ padding: "15px" }}>Aksi</th>
-                <th style={{ padding: "15px" }}>Hasil Preview</th>
-              </tr>
-            </thead>
+<thead>
+  <tr style={{ backgroundColor: "#1f2535", color: "#d1d5db", textAlign: "left" }}>
+    <th style={{ padding: "15px" }}>No</th>
+    <th style={{ padding: "15px" }}>Rekomendasi Teks</th>
+    <th style={{ padding: "15px" }}>Warna & Speed</th>
+    <th style={{ padding: "15px" }}>Gaya Animasi</th> {/* <-- Tambahkan baris ini */}
+    <th style={{ padding: "15px" }}>Aksi</th>
+    <th style={{ padding: "15px" }}>Hasil Preview</th>
+  </tr>
+</thead>
             <tbody>
               {results.map((item, index) => (
                 <tr key={item.id} style={{ borderBottom: "1px solid #374151" }}>
@@ -120,6 +122,11 @@ export const Dashboard: React.FC = () => {
                     <span style={{ backgroundColor: item.color2, color: "black", padding: "4px 8px", borderRadius: "4px", fontSize: "12px", marginRight: "10px" }}>{item.color2}</span>
                     <span style={{ color: "#9ca3af", fontSize: "12px" }}>{item.speed}x</span>
                   </td>
+                  <td style={{ padding: "15px" }}>
+  <span style={{ backgroundColor: "#2d3748", color: "#63b3ed", padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", textTransform: "uppercase" }}>
+    {item.style || "glitch"}
+  </span>
+</td>
                   <td style={{ padding: "15px" }}>
                     <button
                       onClick={() => handleCreatePreview(item.id, index)}
