@@ -1,0 +1,45 @@
+name: Cloud Remotion Render
+
+on:
+  repository_dispatch:
+    types: [target-render-cloud]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Ambil kode template Remotion dari repositori Anda
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Siapkan lingkungan Node.js di server GitHub
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 3. Instal semua dependensi proyek (Remotion, dll)
+      - name: Install Dependencies
+        run: npm ci
+
+      # 4. Tulis parameter visual dari web lokal ke file temporary di server GitHub
+      - name: Create Temp Props
+        run: |
+          echo '${{ json.encode(github.event.client_payload.item) }}' > temp-props.json
+          cat temp-props.json
+
+      # 5. Eksekusi render video menggunakan spesifikasi server GitHub
+      - name: Execute Remotion Render
+        run: |
+          npx remotion render Composition out/${{ github.event.client_payload.item.id }}.mp4 --props=temp-props.json
+
+      # 6. Amankan hasil video (.mp4) agar bisa diunduh oleh Anda
+      - name: Upload Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.client_payload.item.id }}-video
+          path: out/${{ github.event.client_payload.item.id }}.mp4
+          retention-days: 3
+          

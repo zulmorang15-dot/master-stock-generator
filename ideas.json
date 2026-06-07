@@ -1,0 +1,37 @@
+[
+  {
+    "id": "digital_grid_data_flow",
+    "textInput": "DATA FLOW",
+    "color1": "#00FFFF",
+    "color2": "#007BFF",
+    "speed": 1.2
+  },
+  {
+    "id": "cyber_security_circuit",
+    "textInput": "CYBER SECURITY",
+    "color1": "#39FF14",
+    "color2": "#00FF7F",
+    "speed": 1.0
+  },
+  {
+    "id": "abstract_tech_portal",
+    "textInput": "FUTURE TECH",
+    "color1": "#8A2BE2",
+    "color2": "#FF00FF",
+    "speed": 1.5
+  },
+  {
+    "id": "minimal_hexagon_network",
+    "textInput": "BLOCKCHAIN DATA",
+    "color1": "#FFA500",
+    "color2": "#FFD700",
+    "speed": 0.8
+  },
+  {
+    "id": "dynamic_glitch_stream",
+    "textInput": "DIGITAL STREAM",
+    "color1": "#FF0000",
+    "color2": "#FF1493",
+    "speed": 1.7
+  }
+]
