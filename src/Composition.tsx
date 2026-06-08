@@ -1,158 +1,177 @@
 import React from 'react';
-import { AbsoluteFill, useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import { useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
+import { z } from 'zod';
 
-const NUM_NODES = 25;
-const NUM_PARTICLES = 50;
+export const myCompSchema = z.object({
+  titleText: z.string().default('Quantum Stream'),
+});
 
-const NODES_DATA = Array.from({ length: NUM_NODES }).map((_, i) => ({
-  x: Math.random() * 80 + 10,
-  y: Math.random() * 80 + 10,
-  id: i,
-}));
+interface MyCompositionProps {
+  titleText: string;
+}
 
-const PARTICLES_DATA = Array.from({ length: NUM_PARTICLES }).map((_, i) => ({
-  startNodeIndex: Math.floor(Math.random() * NODES_DATA.length),
-  endNodeIndex: Math.floor(Math.random() * NODES_DATA.length),
-  offset: Math.random() * 2 * Math.PI,
-  speed: 0.5 + Math.random() * 0.5,
-  size: 3 + Math.random() * 3,
-  color: `hsl(${200 + Math.random() * 60}, 100%, 70%)`,
-}));
+const Node: React.FC<{ frame: number; config: any; index: number; total: number }> = ({ frame, config, index, total }) => {
+  const normalizedFrame = frame / config.durationInFrames;
+  const t = normalizedFrame * Math.PI * 2; // Loop from 0 to 2PI
 
-export const MyComposition: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
+  const offsetAngle = (index / total) * Math.PI * 2;
+  
+  const x = Math.sin(t + offsetAngle) * 150 + Math.cos(t * 0.5 + offsetAngle * 0.7) * 80;
+  const y = Math.cos(t + offsetAngle * 1.5) * 150 + Math.sin(t * 0.5 + offsetAngle * 0.3) * 80;
+  const z = Math.sin(t * 2 + offsetAngle * 2) * 60 - 100;
+  
+  const scale = interpolate(Math.sin(t * 3 + offsetAngle * 5), [-1, 1], [0.7, 1.3]);
+  const opacity = interpolate(Math.sin(t * 4 + offsetAngle * 6), [-1, 1], [0.2, 0.9]);
 
-  const loopProgress = (frame % durationInFrames) / durationInFrames;
+  const colorHue = interpolate(t + offsetAngle, [0, Math.PI * 2], [200, 280], { extrapolateLeft: 'wrap', extrapolateRight: 'wrap' });
 
   return (
-    <AbsoluteFill>
-      {NODES_DATA.map((node1, i) =>
-        NODES_DATA.map((node2, j) => {
-          if (i >= j) return null;
-
-          const dist = Math.sqrt(
-            Math.pow(node1.x - node2.x, 2) + Math.pow(node1.y - node2.y, 2)
-          );
-          if (dist > 40) return null;
-
-          const opacity = interpolate(
-            Math.sin(loopProgress * 2 * Math.PI * 2 + i * 0.5),
-            [-1, 1],
-            [0.1, 0.4],
-            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-          );
-
-          return (
-            <div
-              key={`${node1.id}-${node2.id}`}
-              style={{
-                position: 'absolute',
-                left: `${(node1.x + node2.x) / 2}%`,
-                top: `${(node1.y + node2.y) / 2}%`,
-                width: `${dist}%`,
-                height: 2,
-                backgroundColor: `rgba(100, 200, 255, ${opacity})`,
-                transformOrigin: 'left center',
-                transform: `translate(-50%, -50%) rotate(${Math.atan2(
-                  node2.y - node1.y,
-                  node2.x - node1.x
-                ) *
-                  (180 / Math.PI)}deg)`,
-              }}
-            />
-          );
-        })
-      )}
-
-      {NODES_DATA.map((node, i) => {
-        const scale = interpolate(
-          Math.sin(loopProgress * 2 * Math.PI * 3 + i * 0.3),
-          [-1, 1],
-          [0.8, 1.2],
-          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-        );
-        const opacity = interpolate(
-          Math.sin(loopProgress * 2 * Math.PI * 2 + i * 0.5),
-          [-1, 1],
-          [0.5, 1],
-          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-        );
-        return (
-          <div
-            key={node.id}
-            style={{
-              position: 'absolute',
-              left: `${node.x}%`,
-              top: `${node.y}%`,
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              backgroundColor: `rgb(100, 200, 255)`,
-              boxShadow: `0 0 15px 5px rgba(100, 200, 255, ${opacity})`,
-              transform: `translate(-50%, -50%) scale(${scale})`,
-              opacity,
-              zIndex: 1,
-            }}
-          />
-        );
-      })}
-
-      {PARTICLES_DATA.map((particle, i) => {
-        const startNode = NODES_DATA[particle.startNodeIndex];
-        const endNode = NODES_DATA[particle.endNodeIndex];
-        if (!startNode || !endNode) return null;
-
-        const p = (loopProgress * particle.speed + particle.offset / (2 * Math.PI)) % 1;
-
-        const x = interpolate(p, [0, 1], [startNode.x, endNode.x]);
-        const y = interpolate(p, [0, 1], [startNode.y, endNode.y]);
-
-        const opacity = interpolate(p, [0, 0.1, 0.9, 1], [0, 1, 1, 0], {
-          extrapolateLeft: 'clamp',
-          extrapolateRight: 'clamp',
-        });
-        const scale = interpolate(p, [0, 0.5, 1], [0.5, 1.2, 0.5], {
-          extrapolateLeft: 'clamp',
-          extrapolateRight: 'clamp',
-        });
-
-        return (
-          <div
-            key={`particle-${i}`}
-            style={{
-              position: 'absolute',
-              left: `${x}%`,
-              top: `${y}%`,
-              width: particle.size,
-              height: particle.size,
-              borderRadius: '50%',
-              backgroundColor: particle.color,
-              boxShadow: `0 0 ${particle.size + 5}px ${particle.size}px ${particle.color}`,
-              transform: `translate(-50%, -50%) scale(${scale})`,
-              opacity,
-              zIndex: 2,
-            }}
-          />
-        );
-      })}
-
-      <div
-        style={{
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          transform: `translate(-50%, -50%)`,
-          fontFamily: 'monospace',
-          fontSize: '40px',
-          color: 'rgba(255, 255, 255, 0.1)',
-          opacity: interpolate(frame, [0, 30, durationInFrames - 30, durationInFrames], [0, 0.1, 0.1, 0], {easing: Easing.easeOutCubic}),
-          textShadow: '0 0 10px rgba(255,255,255,0.2)',
-          zIndex: 3,
-        }}
-      >
-        DATA_STREAM
-      </div>
-    </AbsoluteFill>
+    <div
+      style={{
+        position: 'absolute',
+        width: '15px',
+        height: '15px',
+        borderRadius: '50%',
+        background: `radial-gradient(circle, hsl(${colorHue}, 100%, 75%) 0%, hsla(${colorHue}, 100%, 50%, 0) 70%)`,
+        opacity,
+        transform: `translate3d(${x}px, ${y}px, ${z}px) scale(${scale})`,
+        filter: `blur(2px)`,
+        boxShadow: `0 0 18px hsla(${colorHue}, 100%, 65%, 0.9)`,
+      }}
+    />
   );
 };
+
+const Particle: React.FC<{ frame: number; config: any; index: number }> = ({ frame, config, index }) => {
+  const normalizedFrame = frame / config.durationInFrames;
+  const t = normalizedFrame * Math.PI * 2; // Loop from 0 to 2PI
+  const offset = index * 0.13;
+
+  const x = Math.sin(t * 1.2 + offset) * (180 + index * 5) + Math.cos(t * 0.7 + offset * 0.6) * (100 + index * 3);
+  const y = Math.cos(t * 1.1 + offset * 1.5) * (180 + index * 5) + Math.sin(t * 0.8 + offset * 0.9) * (100 + index * 3);
+  const z = interpolate(t + offset * 0.1, [0, Math.PI * 2], [-200, 200], { extrapolateLeft: 'wrap', extrapolateRight: 'wrap' });
+  const size = interpolate(Math.sin(t * 3 + offset * 2), [-1, 1], [4, 10]);
+  const opacity = interpolate(Math.sin(t * 5 + offset * 3), [-1, 1], [0.1, 0.7]);
+  const blur = interpolate(Math.abs(z), [0, 200], [0, 4]);
+
+  const colorHue = interpolate(t + offset, [0, Math.PI * 2], [240, 300], { extrapolateLeft: 'wrap', extrapolateRight: 'wrap' });
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        width: `${size}px`,
+        height: `${size}px`,
+        borderRadius: '50%',
+        background: `hsla(${colorHue}, 100%, 75%, 0.8)`,
+        opacity,
+        filter: `blur(${blur}px)`,
+        transform: `translate3d(${x}px, ${y}px, ${z}px)`,
+      }}
+    />
+  );
+};
+
+const StreamSegment: React.FC<{ frame: number; config: any; index: number }> = ({ frame, config, index }) => {
+  const normalizedFrame = frame / config.durationInFrames;
+  const t = normalizedFrame * Math.PI * 2;
+  const offset = index * 0.07;
+
+  const x = Math.sin(t * 0.9 + offset) * 200 + Math.cos(t * 0.4 + offset * 1.2) * 120;
+  const y = Math.cos(t * 0.8 + offset * 0.8) * 200 + Math.sin(t * 0.3 + offset * 0.5) * 120;
+  const z = Math.sin(t * 1.5 + offset * 1.8) * 70 - 150;
+
+  const rotation = interpolate(t * 2 + offset * 3, [0, Math.PI * 2], [0, 360], { extrapolateLeft: 'wrap', extrapolateRight: 'wrap' });
+  const scaleX = interpolate(Math.sin(t * 5 + offset * 4), [-1, 1], [0.8, 1.2]);
+  const opacity = interpolate(Math.sin(t * 6 + offset * 5), [-1, 1], [0.15, 0.5]);
+
+  const colorHue = interpolate(t + offset, [0, Math.PI * 2], [220, 260], { extrapolateLeft: 'wrap', extrapolateRight: 'wrap' });
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        width: '100px',
+        height: '3px',
+        background: `linear-gradient(90deg, transparent 0%, hsla(${colorHue}, 100%, 70%, 0.9) 50%, transparent 100%)`,
+        opacity,
+        transform: `translate3d(${x}px, ${y}px, ${z}px) rotateY(${rotation}deg) rotateX(${rotation / 2}deg) scaleX(${scaleX})`,
+        filter: `blur(0.8px)`,
+      }}
+    />
+  );
+};
+
+
+const MyComposition: React.FC<MyCompositionProps> = ({ titleText }) => {
+  const frame = useCurrentFrame();
+  const config = useVideoConfig();
+
+  const nodesCount = 12;
+  const particlesCount = 40;
+  const streamSegmentsCount = 20;
+
+  const textEntranceProgress = spring({ 
+    frame: frame - 10, 
+    fps: config.fps, 
+    config: { damping: 200, stiffness: 2000, mass: 2 }, 
+    from: 0, 
+    to: 1 
+  });
+
+  const textExitProgress = spring({
+    frame: frame - (config.durationInFrames - 30), 
+    fps: config.fps, 
+    config: { damping: 200, stiffness: 2000, mass: 2 }, 
+    from: 0, 
+    to: 1 
+  });
+
+  const opacity = interpolate(textExitProgress, [0, 1], [1, 0]);
+  const translateY = interpolate(textExitProgress, [0, 1], [0, -50]);
+  const scale = interpolate(textEntranceProgress, [0, 1], [0.8, 1]);
+  const blur = interpolate(textEntranceProgress, [0, 1], [10, 0]);
+
+  return (
+    <div
+      style={{
+        flex: 1,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        fontSize: '4em',
+        fontFamily: 'Roboto Mono, monospace',
+        fontWeight: 700,
+        color: 'white',
+        overflow: 'hidden',
+        position: 'relative',
+        perspective: '900px',
+        textAlign: 'center'
+      }}
+    >
+      {Array.from({ length: streamSegmentsCount }).map((_, i) => (
+        <StreamSegment key={`stream-seg-${i}`} frame={frame} config={config} index={i} />
+      ))}
+      {Array.from({ length: nodesCount }).map((_, i) => (
+        <Node key={`node-${i}`} frame={frame} config={config} index={i} total={nodesCount} />
+      ))}
+      {Array.from({ length: particlesCount }).map((_, i) => (
+        <Particle key={`particle-${i}`} frame={frame} config={config} index={i} />
+      ))}
+      <h1
+        style={{
+          opacity,
+          transform: `translateY(${translateY}px) scale(${scale})`,
+          filter: `blur(${blur}px)`,
+          textShadow: '0 0 25px rgba(0,255,255,0.8), 0 0 50px rgba(0,255,255,0.4)',
+          zIndex: 10,
+          position: 'absolute'
+        }}
+      >
+        {titleText}
+      </h1>
+    </div>
+  );
+};
+
+export default MyComposition;
