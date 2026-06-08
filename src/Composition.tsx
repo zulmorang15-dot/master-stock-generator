@@ -1,94 +1,55 @@
-import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
-import React from "react";
+import React from 'react';
+import { useCurrentFrame, interpolate, AbsoluteFill } from 'remotion';
 
-interface StyleProps {
-  textInput: string;
-  color1: string;
-  color2: string;
-  speed: number;
-  style: "glitch" | "pulse" | "cinematic";
-}
-
-export const MyComposition: React.FC<StyleProps> = ({
-  textInput = "SECURITY",
-  color1 = "#00ffff",
-  color2 = "#0080ff",
-  speed = 1,
-  style = "glitch",
-}) => {
+export const MyComposition: React.FC = () => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const durationInFrames = 150; // A reasonable duration for a loop segment
 
-  // Atur ritme frame berdasarkan kecepatan dari Gemini
-  const adjustedFrame = frame * speed;
+  const createStream = (index: number) => {
+    const delay = index * 10;
+    const progress = interpolate(frame - delay, [0, durationInFrames], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'wrap' });
 
-  // 1. ANIMASI GAYA: CINEMATIC (Fade in + Blur berkurang + Scale up pelan)
-  const opacityCinematic = interpolate(adjustedFrame, [0, 30], [0, 1], { extrapolateRight: "clamp" });
-  const blurCinematic = interpolate(adjustedFrame, [0, 30], [20, 0], { extrapolateRight: "clamp" });
-  const scaleCinematic = interpolate(adjustedFrame, [0, 150], [0.9, 1.1], { extrapolateRight: "clamp" });
+    const xPos = interpolate(progress, [0, 1], [-200, 1920 + 200]);
+    const yPos = Math.sin(progress * Math.PI * 2 + index * 0.5) * 200 + 540; // Wavy path
 
-  // 2. ANIMASI GAYA: PULSE (Teks membesar dengan efek Spring + Glow berkedip)
-  const scalePulse = spring({
-    frame: adjustedFrame,
-    fps,
-    config: { damping: 12 },
-  });
-  const glowPulse = Math.sin(adjustedFrame * 0.2) * 10 + 15; // Berkedip naik turun
+    const scale = interpolate(progress, [0, 0.1, 0.9, 1], [0.5, 1, 1, 0.5], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+    const opacity = interpolate(progress, [0, 0.05, 0.95, 1], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-  // 3. ANIMASI GAYA: GLITCH (Efek bergeser patah-patah acak ala cyberpunk)
-  const glitchOffset = Math.random() > 0.85 && adjustedFrame % 5 === 0 ? (Math.random() - 0.5) * 15 : 0;
-  const glitchOpacity = Math.random() > 0.92 ? 0.4 : 1;
+    const hue = interpolate(progress + index * 0.1, [0, 1], [240, 300]); // Shift hue slightly
+    const color = `hsl(${hue}, 100%, 70%)`;
 
-  // Kondisional Style Renderer
-  let textStyle: React.CSSProperties = {
-    fontFamily: "sans-serif",
-    fontWeight: "black" as any,
-    fontSize: "90px",
-    letterSpacing: "4px",
-    textAlign: "center",
-    textTransform: "uppercase",
-    transition: "all 0.1s ease",
+    return (
+      <div
+        key={index}
+        style={{
+          position: 'absolute',
+          width: 200,
+          height: 10,
+          borderRadius: 5,
+          background: `linear-gradient(90deg, transparent, ${color}, transparent)`,
+          boxShadow: `0 0 15px ${color}`,
+          transform: `translate(${xPos}px, ${yPos}px) scaleX(${scale})`,
+          opacity,
+          filter: `blur(1px)`,
+          zIndex: 10 + index,
+        }}
+      />
+    );
   };
 
-  if (style === "glitch") {
-    textStyle = {
-      ...textStyle,
-      color: color1,
-      textShadow: `${glitchOffset}px 0px 0px ${color2}, -${glitchOffset}px 0px 0px #ff00ff, 0 0 20px ${color1}`,
-      transform: `scale(${1 + Math.sin(adjustedFrame * 0.02) * 0.05})`,
-      opacity: glitchOpacity,
-    };
-  } else if (style === "pulse") {
-    textStyle = {
-      ...textStyle,
-      color: "#ffffff",
-      textShadow: `0 0 ${glowPulse}px ${color1}, 0 0 ${glowPulse + 10}px ${color2}`,
-      transform: `scale(${scalePulse})`,
-    };
-  } else if (style === "cinematic") {
-    textStyle = {
-      ...textStyle,
-      color: "transparent",
-      WebkitTextStroke: `2px ${color1}`,
-      filter: `blur(${blurCinematic}px) drop-shadow(0 0 15px ${color2})`,
-      opacity: opacityCinematic,
-      transform: `scale(${scaleCinematic})`,
-    };
-  }
-
   return (
-    <div
-      style={{
-        flex: 1,
-        backgroundColor: "#05070c",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundImage: "radial-gradient(circle, #111625 1px, transparent 1px)",
-        backgroundSize: "40px 40px",
-      }}
-    >
-      <h1 style={textStyle}>{textInput}</h1>
-    </div>
+    <AbsoluteFill style={{ backgroundColor: '#0A0A1A', overflow: 'hidden' }}>
+      {Array.from({ length: 15 }).map((_, i) => createStream(i))}
+
+      {/* Adding a subtle background grid/dots for context */}
+      <div style={{
+        position: 'absolute',
+        width: '100%',
+        height: '100%',
+        backgroundImage: `radial-gradient(circle, #0F0F2F 1px, transparent 1px)`,
+        backgroundSize: '40px 40px',
+        opacity: 0.1,
+      }} />
+    </AbsoluteFill>
   );
 };
