@@ -1,19 +1,21 @@
-import { Composition } from "remotion";
+import { Composition, getInputProps } from "remotion";
 import { MyComposition } from "./Composition";
 import { Dashboard } from "./Dashboard";
 import React from "react";
 
+
 export const RemotionRoot: React.FC = () => {
+  // Membaca durasi dinamis yang dikirim dari cloud, jika tidak ada default-nya 150 frame
+  const config = (getInputProps() as any) || {};
+  const dynamicDuration = config.durationInFrames || 150;
+
   return (
     <>
-      {/* 1. Tampilan Dashboard Utama Kita */}
       <Dashboard />
-
-      {/* 2. Registrasi internal Remotion agar mesin render tahu parameternya */}
       <Composition
         id="Composition"
         component={MyComposition}
-        durationInFrames={150}
+        durationInFrames={dynamicDuration} // <-- Sekarang durasinya dinamis!
         fps={30}
         width={1920}
         height={1080}

@@ -32,15 +32,15 @@ jobs:
           echo "$CLIENT_PAYLOAD" > temp-props.json
           cat temp-props.json
 
-      # 5. Eksekusi render video menggunakan spesifikasi server GitHub
+# 5. Eksekusi render video menggunakan spesifikasi server GitHub (Dukungan Transparan & Durasi Dinamis)
       - name: Execute Remotion Render
         run: |
-          npx remotion render Composition out/${{ github.event.client_payload.item.id }}.mp4 --props=temp-props.json
+          npx remotion render Composition out/${{ github.event.client_payload.item.id }}.mov --props=temp-props.json --duration=${{ github.event.client_payload.item.durationInFrames }} --codec=prores4444
 
-      # 6. Amankan hasil video (.mp4) agar bisa diunduh oleh Anda
+      # 6. Amankan hasil video (.mov Alpha) agar bisa diunduh
       - name: Upload Video Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.client_payload.item.id }}-video
-          path: out/${{ github.event.client_payload.item.id }}.mp4
+          path: out/${{ github.event.client_payload.item.id }}.mov
           retention-days: 3
