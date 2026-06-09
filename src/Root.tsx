@@ -1,5 +1,5 @@
 import { Composition, getInputProps } from "remotion";
-import { MyComposition } from "./Composition";
+import MyComposition from "./Composition";
 import { Dashboard } from "./Dashboard";
 import React from "react";
 
