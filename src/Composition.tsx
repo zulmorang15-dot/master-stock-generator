@@ -1,121 +1,659 @@
-The user wants a Remotion component that replicates the provided HTML/JS (Three.js + GSAP) visual exactly, but using only Remotion APIs (no Three.js, no GSAP, no external libs). The HTML features:
-1. A dark radial gradient background.
-2. A Three.js scene with:
-   - Reflective floor (plane) with grid.
-   - Three floating holographic rings (torus) rotating and bobbing.
-   - 1200 additive particles floating up and drifting.
-   - Two moving point lights (blue and white) sweeping across the floor.
-   - Camera parallax drift.
-3. UI Layer (HTML/CSS):
-   - Two video cards (left/right) with glassmorphism, HUD corners, light sweep animation.
-   - Center subscribe zone with three rotating rings (outer, middle, inner) and a pulsing center.
-   - Two horizontal HUD lines (top/bottom).
-   - GSAP floating animations on cards and subscribe zone.
+import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
 
-Constraints:
-- Must be a single .tsx file.
-- First line import from remotion only.
-- No Three.js, no GSAP, no external libs.
-- Must simulate 3D scene using 2D/3D CSS transforms or Canvas 2D? Remotion supports WebGL via `<Canvas>` but we cannot import three. We can use Remotion's `<Canvas>` component (from remotion) to draw 2D, but 3D is tricky. However, the instruction says "Do NOT import from 'three'". It doesn't explicitly forbid using Remotion's `<Canvas>` for 2D drawing. But replicating a full 3D scene with perspective, fog, lights, particles, rings, floor reflection in 2D Canvas is heavy but doable with math.
-- However, the user expects "high-fidelity 4K video rendering for commercial microstock". The original uses Three.js. In Remotion, we can use `<Canvas>` to draw the background frame by frame. We'll need to implement a pseudo-3D engine or simulate the look with 2D layers (parallax, scaling).
-- Given the complexity, we can approximate the 3D scene using 2D Canvas with perspective projection for particles, rings, floor grid, and lights. But that's a lot of code.
-- Alternative: Since Remotion runs in Chrome/Puppeteer, we could actually use Three.js inside Remotion by importing it? But rule says "Do NOT import from 'three'". So we cannot.
-- We must re-implement the visual using HTML/CSS (with Remotion's interpolate) and maybe Canvas 2D for particles.
-- The UI layer (video cards, subscribe zone, HUD lines) can be done with HTML/CSS (styled divs) driven by Remotion interpolate.
-- The Three.js background: we can simulate with a `<Canvas>` component drawing:
-  - Radial gradient background (already in CSS).
-  - Floor grid: draw lines in perspective.
-  - Rings: draw torus-like shapes (ellipses) rotating.
-  - Particles: draw circles with additive blending (globalCompositeOperation='lighter').
-  - Lights: draw radial gradients on floor.
-  - Camera parallax: shift everything slightly.
+const ORIGINAL_WIDTH = 1920;
+const ORIGINAL_HEIGHT = 1080;
+const PARTICLE_COUNT = 120;
 
-But writing a full 3D renderer in 2D Canvas within a single Remotion component is huge. However, the instruction says "single, production-grade Remotion component". We must try.
+// Pre-calculated static particle data (deterministic, outside component)
+const PARTICLES: { x: number; y: number; size: number; opacity: number; speed: number; drift: number }[] = [];
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  const seed1 = (i * 7919 + 12347) % 10000 / 10000;
+  const seed2 = (i * 6271 + 9001) % 10000 / 10000;
+  const seed3 = (i * 3571 + 5003) % 10000 / 10000;
+  const seed4 = (i * 4423 + 7177) % 10000 / 10000;
+  const seed5 = (i * 2311 + 3001) % 10000 / 10000;
+  PARTICLES.push({
+    x: seed1 * 1920,
+    y: seed2 * 1080,
+    size: seed3 * 3 + 1,
+    opacity: seed4 * 0.5 + 0.1,
+    speed: seed5 * 0.4 + 0.1,
+    drift: ((i * 1337 + 4321) % 10000 / 10000 - 0.5) * 20,
+  });
+}
 
-We can break down:
-- Use `useVideoConfig` for width, height, fps.
-- Use `useCurrentFrame` for time.
-- Define ORIGINAL_WIDTH=1920, ORIGINAL_HEIGHT=1080.
-- Scale factor for 4K auto-fit.
-- Determine loop duration: LCM of all cycles.
-  - Sweep: 6s (left), 6s (right) with 3s delay -> overall 6s.
-  - Ring rotations: outer 15s, middle 20s, inner 10s (alternate). LCM of 15,20,10 = 60s. But cap at 15s max. So we need to adjust speeds to fit within 15s loop. The requirement: "Duration Cap: Between 5 and 15 seconds MAX. Use LCM of all animation cycles. Cap at 15s max." So we must compress animations to fit a loop <=15s. We can set a base loop duration, e.g., 12 seconds (LCM of 3,4,6,12?). Let's pick 12 seconds as loop duration.
-  - GSAP floats: card left/right 4s, sub-zone 3.5s. Lights: 8s, 10s. Camera: 12s, 10s. LCM of 4, 3.5, 8, 10, 12, 10 -> not integer. We'll approximate with a 12s loop and adjust easing to loop seamlessly.
-  - We'll set `const LOOP_DURATION = 12;` seconds.
-  - Then `const localFrame = frame % (fps * LOOP_DURATION);`
-  - All interpolations use `localFrame / fps` as time in seconds.
+// Pre-calculated grid lines (deterministic)
+const GRID_LINES_H: number[] = [];
+const GRID_LINES_V: number[] = [];
+for (let i = 0; i <= 20; i++) {
+  GRID_LINES_H.push((i / 20) * 1080);
+  GRID_LINES_V.push((i / 20) * 1920);
+}
 
-- Pre-calculate random particles: generate static array of 1200 particles with x,y,z, speed, drift phase.
+// Pre-calculated ring data
+const RING_DATA = [
+  { baseY: 680, speedMult: 0.1, sinOffset: 0, scale: 1.0 },
+  { baseY: 620, speedMult: 0.15, sinOffset: 1, scale: 0.85 },
+  { baseY: 560, speedMult: 0.2, sinOffset: 2, scale: 0.70 },
+];
 
-- For the 3D scene, we'll implement a simple perspective projection: 
-  - Camera position: x, y, z. Look at target.
-  - Project 3D points to 2D: scale = focalLength / (focalLength + z), x2d = x * scale + centerX, y2d = y * scale + centerY.
-  - Focal length ~ 500.
-  - We'll simulate floor grid as lines in XZ plane at y=-6.
-  - Rings: torus geometry approximated as circles (since they are horizontal rings). Actually they are TorusGeometry rotated x=PI/2, so they are horizontal rings. We can draw them as circles with stroke.
-  - Particles: points with size based on depth.
-  - Lights: draw radial gradients on floor plane (at y=-6) at light positions.
+// Deterministic sin approximation using frame
+function frameSin(frameAngle: number): number {
+  const normalized = ((frameAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  const x = normalized / (2 * Math.PI);
+  // Taylor-like approximation is fine; use direct trig with frame which is deterministic
+  return Math.sin(normalized);
+}
 
-- Fog: fade particles and grid with distance.
+const LuxuryFuturisticEndscreen = () => {
+  const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
 
-- Since we cannot use WebGL, we'll use Canvas 2D API inside a `<Canvas>` component from Remotion? Actually Remotion has a `<Canvas>` component that gives a canvas ref and we can draw on it. But we need to draw each frame. We'll use `<Canvas width={width} height={height}>` and a draw function.
+  const inputProps = (getInputProps() as any) || {};
+  const judul = inputProps.judul || 'Stock Video';
+  const keywordsList = (inputProps.keywords || 'motion, abstract, loop').split(',');
 
-- However, the UI layer (video cards, etc.) is HTML/CSS. We can overlay HTML on top of the Canvas. In Remotion, we can have a wrapper div with the Canvas as background (absolute) and UI layer as absolute on top.
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
 
-- The original HTML has `#endscreen-container` with width 1920, height 1080, and transform scale. We'll replicate that with a div scaled by scaleFactor.
+  // ─── CYCLE DURATIONS ─────────────────────────────────────────────────────────
+  // ring-outer: 15s, ring-middle: 20s, ring-inner: 10s, pulse: 4s, sweep: 6s
+  // card float: 8s cycle (4s yoyo), subzone float: 7s cycle
+  // LCM(15,20,10,4,6,8,7) capped at 15s
+  const cycleDuration = 12; // 12s master cycle
+  const cycleFrames = fps * cycleDuration;
+  const localFrame = frame % cycleFrames;
+  const t = localFrame / fps; // time in seconds within cycle
 
-- The background radial gradient is CSS on container. We'll keep that.
+  // ─── RING OUTER: 360deg in 15s ───────────────────────────────────────────────
+  const ringOuterAngle = (t / 15) * 360;
 
-- The Three.js canvas was absolute top:0 left:0 width:100% height:100% z-index:1 opacity:0.8. We'll make our Canvas same.
+  // ─── RING MIDDLE: reverse 360deg in 20s ──────────────────────────────────────
+  const ringMiddleAngle = -((t / 20) * 360);
 
-- UI layer z-index:10.
+  // ─── RING INNER: oscillate (10s ease-in-out alternate) ───────────────────────
+  // Map to 0->360 over 10s symmetrically looped over 12s cycle
+  const ringInnerLocal = localFrame % (fps * 10);
+  const ringInnerAngle = interpolate(
+    ringInnerLocal,
+    [0, fps * 5, fps * 10],
+    [0, 360, 0],
+    { easing: Easing.inOut(Easing.sin) }
+  );
 
-- So structure:
-  <div style={containerStyle}>
-    <Canvas style={canvasStyle} width={ORIGINAL_WIDTH} height={ORIGINAL_HEIGHT} onDraw={drawBackground} />
-    <div className="ui-layer"> ... </div>
-  </div>
+  // ─── PULSE: scale + glow, 4s ease-in-out symmetric loop ──────────────────────
+  const pulseLocal = localFrame % (fps * 4);
+  const pulseScale = interpolate(
+    pulseLocal,
+    [0, fps * 2, fps * 4],
+    [1, 1.02, 1],
+    { easing: Easing.inOut(Easing.sin) }
+  );
+  const pulseGlowOpacity = interpolate(
+    pulseLocal,
+    [0, fps * 2, fps * 4],
+    [0.4, 0.7, 0.4],
+    { easing: Easing.inOut(Easing.sin) }
+  );
+  const pulseInnerGlow = interpolate(
+    pulseLocal,
+    [0, fps * 2, fps * 4],
+    [0.2, 0.4, 0.2],
+    { easing: Easing.inOut(Easing.sin) }
+  );
 
-- But Remotion's `<Canvas>` component expects a `draw` function that receives (ctx, width, height). We'll define drawBackground.
+  // ─── LIGHT SWEEP LEFT CARD: 6s cycle ─────────────────────────────────────────
+  // 0% left:-150%, 20% left:200%, 100% left:200%
+  // Sweep travels from -150% to 200% in first 20% of 6s (1.2s), then stays
+  const sweepLocal = localFrame % (fps * 6);
+  const sweepLeftPos = interpolate(
+    sweepLocal,
+    [0, fps * 1.2, fps * 6],
+    [-150, 200, 200],
+    {
+      easing: Easing.bezier(0.4, 0, 0.2, 1),
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    }
+  );
 
-- We need to compute everything in drawBackground using current frame time.
+  // Right card delayed by 3s — offset by 3s in the 6s cycle
+  const sweepRightLocal = (localFrame + fps * 3) % (fps * 6);
+  const sweepRightPos = interpolate(
+    sweepRightLocal,
+    [0, fps * 1.2, fps * 6],
+    [-150, 200, 200],
+    {
+      easing: Easing.bezier(0.4, 0, 0.2, 1),
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    }
+  );
 
-- Since we need to use `useCurrentFrame` inside the component, but the draw function is a callback. We can pass the current frame time as a prop to the Canvas? Actually Remotion's Canvas `onDraw` receives a `frame` prop? Looking at Remotion docs: `<Canvas width={1920} height={1080} onDraw={(ctx, frame) => { ... }} />` The second argument is the frame number. Yes! So we can use that frame directly in draw function. That's perfect.
+  // ─── CARD FLOAT: yoyo 4s → 8s symmetric cycle ────────────────────────────────
+  const cardFloatLocal = localFrame % (fps * 8);
+  const cardLeftFloat = interpolate(
+    cardFloatLocal,
+    [0, fps * 4, fps * 8],
+    [0, -15, 0],
+    { easing: Easing.inOut(Easing.sin) }
+  );
+  // Right card staggered by 1s
+  const cardRightFloatLocal = (localFrame + fps * 1) % (fps * 8);
+  const cardRightFloat = interpolate(
+    cardRightFloatLocal,
+    [0, fps * 4, fps * 8],
+    [0, -15, 0],
+    { easing: Easing.inOut(Easing.sin) }
+  );
 
-- So we don't need useCurrentFrame for the background; we get frame in onDraw.
+  // ─── SUBZONE FLOAT: yoyo 3.5s → 7s symmetric cycle ───────────────────────────
+  const subzoneLocal = localFrame % (fps * 7);
+  const subzoneFloat = interpolate(
+    subzoneLocal,
+    [0, fps * 3.5, fps * 7],
+    [0, 10, 0],
+    { easing: Easing.inOut(Easing.sin) }
+  );
 
-- For UI animations, we need useCurrentFrame in the component.
+  // ─── HUD LINE PULSE ───────────────────────────────────────────────────────────
+  const hudLineLocal = localFrame % (fps * 6);
+  const hudLineOpacity = interpolate(
+    hudLineLocal,
+    [0, fps * 3, fps * 6],
+    [0.5, 0.8, 0.5],
+    { easing: Easing.inOut(Easing.sin) }
+  );
 
-- We'll create a component `LuxuryFuturisticEndscreen`.
+  // ─── TITLE FADE-IN ───────────────────────────────────────────────────────────
+  const titleOpacity = interpolate(
+    frame,
+    [0, fps * 1.5],
+    [0, 1],
+    { extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) }
+  );
+  const titleY = interpolate(
+    frame,
+    [0, fps * 1.5],
+    [20, 0],
+    { extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) }
+  );
 
-- Steps:
-  1. Import line.
-  2. Define constants: ORIGINAL_WIDTH, ORIGINAL_HEIGHT, LOOP_DURATION=12, FPS? We'll get fps from useVideoConfig.
-  3. Pre-calculate particles array (outside component).
-  4. Component:
-     - useVideoConfig -> width, height, fps.
-     - scaleFactor = Math.min(width/ORIGINAL_WIDTH, height/ORIGINAL_HEIGHT) * 0.85.
-     - frame = useCurrentFrame().
-     - localFrame = frame % (fps * LOOP_DURATION).
-     - time = localFrame / fps.
-     - inputProps = getInputProps().
-     - Compute all interpolations for UI elements.
-     - Render container div with scale transform.
-     - Inside: Canvas for background, UI layer div.
+  // ─── KEYWORDS FADE-IN (staggered) ────────────────────────────────────────────
+  const kwOpacity = interpolate(
+    frame,
+    [fps * 1.0, fps * 2.5],
+    [0, 1],
+    { extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) }
+  );
 
-- For UI animations:
-   - Video cards float: y offset = interpolate(time, [0, 2, 4], [-15, 15, -15])? Original GSAP: y: "-=15" over 4s, yoyo, repeat. So it goes from 0 to -15 to 0 over 4s? Actually "-=15" means relative to current. Starting at 0, goes to -15 over 4s, then back to 0 over 4s (since yoyo). So period 8s. But we have loop 12s. We'll make a 4s cycle (0->-15->0) and loop. So interpolate with inputRange [0, 2, 4] output [-15, 15, -15]? Wait: at t=0, y=0; t=2, y=-15; t=4, y=0. So output [0, -15, 0]. But GSAP ease sine.inOut. Use Easing.inOut(Easing.sin).
-   - Left card delay? stagger: 1. So left starts at 0, right starts at 1s? Actually stagger: 1 means each element starts 1s apart. So left at 0, right at 1s. We'll offset time for right by 1s.
-   - Subscribe zone: y: "+=10" over 3.5s, yoyo. So period 7s. Interpolate [0, 1.75, 3.5] -> [0, 10, 0].
-   - Light sweeps on video cards: CSS animation sweep 6s cubic-bezier(0.4,0,0.2,1) infinite. Left starts at 0, right delay 3s. We'll replicate with interpolate for left: left position from -150% to 200% over 1.2s (20% of 6s) then stay at 200% for rest. Actually keyframes: 0% left:-150%, 20% left:200%, 100% left:200%. So it moves quickly then stops. We'll do: for t in [0,6): if t<1.2 interpolate from -150 to 200, else 200. But seamless loop requires first and last same. At t=0, left=-150; at t=6, left=200 (not same). So we need to adjust to loop seamlessly. Since the animation is infinite, we can make it loop by having the sweep repeat every 6s, but at the loop boundary (12s) we need continuity. At t=0: -150, t=6: 200, t=12: -150? Not continuous. Better to make the sweep a continuous loop: move from -150 to 200 over 6s, then instantly back to -150? But CSS animation doesn't do that; it stays at 200% for 80% of time. That means at the end of 6s it's at 200%, then next cycle starts at -150% (jump). That's not seamless. However, the original CSS animation is infinite, so it jumps. For Remotion seamless loop, we must avoid jumps. We can modify to make it continuous: sweep across over 6s, then quickly reset? But we have 12s loop. We can do two sweeps in 12s: each 6s, but at 6s it jumps. To make seamless, we can have the sweep move from -150 to 200 over 6s, then from 200 to -150 over 0s? Not good. Alternatively, we can make the sweep a continuous back-and-forth? But original is one-way. Since the requirement says "Symmetrical Interpolation: First and last value in every interpolate() output MUST be identical for seamless looping." We must ensure that at t=0 and t=LOOP_DURATION, the value is same. So we need to design the sweep such that at t=0 and t=12, left position is same. We can make the sweep period 12s: move from -150 to 200 over 2.4s (20% of 12), stay at 200 for 9.6s, then at 12s jump back to -150? That's still a jump. To avoid jump, we can have it move back from 200 to -150 over the last 2.4s? But that changes animation. However, the original is not seamless either (it jumps). For microstock, seamless loop is required. So we must create a seamless version. Let's make the sweep move continuously across the card: from -150% to 200% over 6s, then instantly back to -150%? That's a jump. To make it seamless, we can have two sweeps overlapping? Or we can make it a ping-pong: sweep left to right over 6s, then right to left over 6s. That would be seamless at 12s. But original is one-way. The requirement: "The visual output must be a 1:1 mirror of the original HTML". But also "Absolute Seamless Looping". There's a conflict. Usually for microstock, they want seamless loops. We'll prioritize seamless looping and approximate the visual. We'll make the sweep a continuous motion: left: -150% to 200% over 6s, then 200% to -150% over 6s (reverse). That's a 12s cycle. For right card, delay 3s (half cycle). So at t=0, left at -150, right at 200? Actually delay 3s means right starts 3s later. If left goes -150->200 in 6s, at t=3 left is halfway. Right starts at -150 at t=3. That might look okay. We'll implement with interpolate using modulo.
+  // ─── AMBIENT BACKGROUND PULSE (camera light movement approximation) ───────────
+  const bgPulseLocal = localFrame % (fps * 12);
+  const bgLightX = interpolate(
+    bgPulseLocal,
+    [0, fps * 6, fps * 12],
+    [0, 1, 0],
+    { easing: Easing.inOut(Easing.sin) }
+  );
 
-   - Rings rotation:
-     - Outer: 15s linear 360deg. In 12s loop, we can do 360 * (12/15) = 288 deg per loop? But need seamless: at t=0 and t=12, rotation must be same modulo 360. So we can rotate at speed 360/15 = 24 deg/s. Over 12s -> 288 deg. Not multiple of 360. So at t=12, rotation = 288 deg, not 0. To make seamless, we need rotation at t=12 to be multiple of 360. So we can adjust speed: make it rotate 360 deg in 12s (30 deg/s). That's different from original 15s. But we can keep original speed and accept that at loop boundary it jumps? Requirement says first and last value identical. So we must adjust speeds to fit loop duration. We'll set loop duration to 12s and make all rotations complete integer cycles in 12s.
-     - Outer: 12s per 360deg (1 cycle).
-     - Middle: reverse, 12s per 360deg (1 cycle).
-     - Inner: alternate 10s ease-in-out. Alternate means 0->360->0 over 20s. In 12s, we can do 0->360 over 6s, then 360->0 over 6s (using ease-in-out). That's seamless at 12s.
-     - Pulse: 4s ease-in-out. 12s is multiple of 4 (3 cycles). Good.
+  // ─── 3D RINGS (CSS perspective simulation) ────────────────────────────────────
+  // Holographic ring vertical float (sin-based)
+  const ring3dSin0 = frameSin((t * 1.0 + RING_DATA[0].sinOffset) * (Math.PI / 3));
+  const ring3dSin1 = frameSin((t * 1.0 + RING_DATA[1].sinOffset) * (Math.PI / 3));
+  const ring3dSin2 = frameSin((t * 1.0 + RING_DATA[2].sinOffset) * (Math.PI / 3));
 
-   - HUD lines: static.
+  // ─── GRID OPACITY PULSE ──────────────────────────────────────────────────────
+  const gridLocal = localFrame % (fps * 8);
+  const gridOpacity = interpolate(
+    gridLocal,
+    [0, fps * 4, fps * 8],
+    [0.08, 0.15, 0.08],
+    { easing: Easing.inOut(Easing.sin) }
+  );
 
-   - Camera parallax: original GSAP moves camera x: 2 over 12s yoyo, y: 4.5 to 5? Actually camera.position.y from 5 to 4.5? Wait: camera.position.set(0,5,25). GSAP to y:4.5 over 12s yoyo. So y oscillates 5 -> 4.5 -> 5 over 24s? Actually duration 12, yoyo, repeat -1: so 12s to go 5->4.5, 12s back. Period 24s. We'll compress to 12s period: 5->4.5->5 over 12s. Similarly x: 0->2->0 over 12s. LookTarget x: 0->2
+  // ─── PARTICLE ANIMATION ──────────────────────────────────────────────────────
+  const particleTime = t; // seconds, deterministic
+
+  return (
+    <div
+      style={{
+        width,
+        height,
+        background: '#02050a',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
+      {/* MAIN SCALED WRAPPER */}
+      <div
+        style={{
+          width: ORIGINAL_WIDTH,
+          height: ORIGINAL_HEIGHT,
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+          transformOrigin: 'center center',
+          overflow: 'hidden',
+          background: `radial-gradient(circle at ${50 + bgLightX * 10}% 50%, #050b1a 0%, #020408 100%)`,
+        }}
+      >
+
+        {/* ═══ BACKGROUND LAYER: Simulated 3D Environment ══════════════════════ */}
+
+        {/* Perspective floor with gradient */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            width: '100%',
+            height: '55%',
+            background: `linear-gradient(180deg, transparent 0%, rgba(0,4,20,0.8) 40%, #020408 100%)`,
+            zIndex: 2,
+          }}
+        />
+
+        {/* Grid floor — perspective simulation */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: '-20%',
+            width: '140%',
+            height: '50%',
+            zIndex: 1,
+            opacity: gridOpacity,
+            transform: 'perspective(600px) rotateX(70deg)',
+            transformOrigin: 'bottom center',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Horizontal grid lines */}
+          {Array.from({ length: 15 }, (_, i) => (
+            <div
+              key={`h${i}`}
+              style={{
+                position: 'absolute',
+                left: 0,
+                width: '100%',
+                height: 1,
+                top: `${(i / 14) * 100}%`,
+                background: i === 0 ? 'rgba(0,240,255,0.6)' : 'rgba(0,68,136,0.8)',
+              }}
+            />
+          ))}
+          {/* Vertical grid lines */}
+          {Array.from({ length: 20 }, (_, i) => (
+            <div
+              key={`v${i}`}
+              style={{
+                position: 'absolute',
+                top: 0,
+                height: '100%',
+                width: 1,
+                left: `${(i / 19) * 100}%`,
+                background: i === 0 || i === 19 ? 'rgba(0,240,255,0.6)' : 'rgba(0,68,136,0.8)',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* ═══ HOLOGRAPHIC 3D RINGS (CSS perspective) ══════════════════════════ */}
+        {[0, 1, 2].map((idx) => {
+          const ringData = RING_DATA[idx];
+          const ringRadius = 220 - idx * 40;
+          const sinVal = [ring3dSin0, ring3dSin1, ring3dSin2][idx];
+          const yPos = ORIGINAL_HEIGHT * 0.45 + sinVal * 15;
+          const ringRotZ = idx === 0
+            ? (t * ringData.speedMult * 360) % 360
+            : idx === 1
+              ? -(t * ringData.speedMult * 360) % 360
+              : (t * ringData.speedMult * 360) % 360;
+
+          return (
+            <div
+              key={`3dring${idx}`}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: yPos,
+                width: ringRadius * 2.5,
+                height: ringRadius * 0.5,
+                marginLeft: -(ringRadius * 2.5) / 2,
+                marginTop: -(ringRadius * 0.5) / 2,
+                borderRadius: '50%',
+                border: `2px solid rgba(0,240,255,${0.3 - idx * 0.05})`,
+                boxShadow: `0 0 30px rgba(0,240,255,0.15), 0 0 60px rgba(0,240,255,0.08)`,
+                transform: `rotateX(80deg) rotateZ(${ringRotZ}deg)`,
+                transformOrigin: 'center center',
+                zIndex: 3,
+                opacity: 0.6 - idx * 0.1,
+              }}
+            />
+          );
+        })}
+
+        {/* ═══ AMBIENT PARTICLES ═══════════════════════════════════════════════ */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 4,
+            overflow: 'hidden',
+          }}
+        >
+          {PARTICLES.map((p, i) => {
+            // Deterministic float: each particle moves at its own speed
+            const cycleSeconds = 15; // particle reset cycle
+            const particleLocalT = particleTime % cycleSeconds;
+            const traveled = (p.speed * particleLocalT * 80);
+            const rawY = p.y - traveled;
+            const wrappedY = ((rawY % ORIGINAL_HEIGHT) + ORIGINAL_HEIGHT) % ORIGINAL_HEIGHT;
+            const driftX = p.x + Math.sin(particleTime * 0.5 + i * 0.3) * p.drift;
+            const wrappedX = ((driftX % ORIGINAL_WIDTH) + ORIGINAL_WIDTH) % ORIGINAL_WIDTH;
+
+            return (
+              <div
+                key={`p${i}`}
+                style={{
+                  position: 'absolute',
+                  left: wrappedX,
+                  top: wrappedY,
+                  width: p.size,
+                  height: p.size,
+                  borderRadius: '50%',
+                  background: `radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(0,240,255,0.7) 40%, transparent 100%)`,
+                  opacity: p.opacity,
+                  boxShadow: `0 0 ${p.size * 2}px rgba(0,240,255,0.6)`,
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {/* ═══ AMBIENT LIGHT BLOBS (floor lighting simulation) ════════════════ */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: `${10 + bgLightX * 30}%`,
+            width: 400,
+            height: 300,
+            background: 'radial-gradient(circle, rgba(0,240,255,0.12) 0%, transparent 70%)',
+            zIndex: 5,
+            filter: 'blur(40px)',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            right: `${10 + bgLightX * 25}%`,
+            width: 400,
+            height: 300,
+            background: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%)',
+            zIndex: 5,
+            filter: 'blur(40px)',
+          }}
+        />
+
+        {/* ═══ UI LAYER ════════════════════════════════════════════════════════ */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 10,
+          }}
+        >
+
+          {/* ── HUD LINE TOP ── */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 120,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 600,
+              height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(0,240,255,0.5), transparent)',
+              opacity: hudLineOpacity,
+            }}
+          />
+
+          {/* ── HUD LINE BOTTOM ── */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 120,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 600,
+              height: 1,
+              background: 'linear-gradient(90deg, transparent, rgba(0,240,255,0.5), transparent)',
+              opacity: hudLineOpacity,
+            }}
+          />
+
+          {/* ── VIDEO CARD LEFT ── */}
+          <div
+            style={{
+              position: 'absolute',
+              width: 600,
+              height: 337,
+              top: '50%',
+              left: 220,
+              transform: `translateY(calc(-50% + ${cardLeftFloat}px))`,
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(0,170,255,0.05) 100%)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(0,200,255,0.2)',
+              borderRadius: 12,
+              boxShadow: `0 20px 50px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 0 20px rgba(0,150,255,0.1), 0 0 30px rgba(0,150,255,0.15)`,
+              overflow: 'hidden',
+            }}
+          >
+            {/* Light sweep */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: `${sweepLeftPos}%`,
+                width: '50%',
+                height: '100%',
+                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%)',
+                transform: 'skewX(-25deg)',
+              }}
+            />
+            {/* HUD corners */}
+            <div style={{ position: 'absolute', top: 10, left: 10, width: 20, height: 20, borderTop: '2px solid #00f0ff', borderLeft: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
+            <div style={{ position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderTop: '2px solid #00f0ff', borderRight: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
+            <div style={{ position: 'absolute', bottom: 10, left: 10, width: 20, height: 20, borderBottom: '2px solid #00f0ff', borderLeft: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
+            <div style={{ position: 'absolute', bottom: 10, right: 10, width: 20, height: 20, borderBottom: '2px solid #00f0ff', borderRight: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
+
+            {/* Card inner content hint */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: '50%',
+                  border: '2px solid rgba(0,240,255,0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 20px rgba(0,240,255,0.2)',
+                }}
+              >
+                <div
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderTop: '12px solid transparent',
+                    borderBottom: '12px solid transparent',
+                    borderLeft: '20px solid rgba(0,240,255,0.6)',
+                    marginLeft: 4,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── VIDEO CARD RIGHT ── */}
+          <div
+            style={{
+              position: 'absolute',
+              width: 600,
+              height: 337,
+              top: '50%',
+              right: 220,
+              transform: `translateY(calc(-50% + ${cardRightFloat}px))`,
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(0,170,255,0.05) 100%)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(0,200,255,0.2)',
+              borderRadius: 12,
+              boxShadow: `0 20px 50px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 0 20px rgba(0,150,255,0.1), 0 0 30px rgba(0,150,255,0.15)`,
+              overflow: 'hidden',
+            }}
+          >
+            {/* Light sweep */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: `${sweepRightPos}%`,
+                width: '50%',
+                height: '100%',
+                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%)',
+                transform: 'skewX(-25deg)',
+              }}
+            />
+            {/* HUD corners */}
+            <div style={{ position: 'absolute', top: 10, left: 10, width: 20, height: 20, borderTop: '2px solid #00f0ff', borderLeft: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
+            <div style={{ position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderTop: '2px solid #00f0ff', borderRight: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
+            <div style={{ position: 'absolute', bottom: 10, left: 10, width: 20, height: 20, borderBottom: '2px solid #00f0ff', borderLeft: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
+            <div style={{ position: 'absolute', bottom: 10, right: 10, width: 20, height: 20, borderBottom: '2px solid #00f0ff', borderRight: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
+
+            {/* Card inner content hint */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: '50%',
+                  border: '2px solid rgba(0,240,255,0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 20px rgba(0,240,255,0.2)',
+                }}
+              >
+                <div
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderTop: '12px solid transparent',
+                    borderBottom: '12px solid transparent',
+                    borderLeft: '20px solid rgba(0,240,255,0.6)',
+                    marginLeft: 4,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── SUBSCRIBE ZONE (CENTER) ── */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: `translate(-50%, calc(-50% + ${subzoneFloat}px))`,
+              width: 240,
+              height: 240,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            {/* Ring Outer */}
+            <div
+              style={{
+                position: 'absolute',
+                width: 220,
+                height: 220,
+                borderRadius: '50%',
+                borderTop: '2px solid #00f0ff',
+                borderBottom: '2px solid #ffffff',
+                borderLeft: '2px solid transparent',
+                borderRight: '2px solid transparent',
+                boxShadow: '0 0 40px rgba(0,240,255,0.2)',
+                transform: `rotate(${ringOuterAngle}deg)`,
+              }}
+            />
+
+            {/* Ring Middle (dashed simulation with border) */}
+            <div
+              style={{
+                position: 'absolute',
+                width: 190,
+                height: 190,
+                borderRadius: '50%',
+                border: '1px dashed rgba(255,255,255,0.4)',
+                transform: `rotate(${ringMiddleAngle}deg)`,
+              }}
+            />
+
+            {/* Ring Inner */}
+            <div
+              style={{
+                position: 'absolute',
+                width: 160,
+                height: 160,
+                borderRadius: '50%',
+                borderLeft: '2px solid rgba(0,200,255,0.8)',
+                borderRight: '2px solid rgba(0,200,255,0.8)',
+                borderTop: '2px solid transparent',
+                borderBottom: '2px solid transparent',
+                transform: `rotate(${ringInnerAngle}deg)`,
+              }}
+            />
+
+            {/* Sub Center */}
+            <div
+              style={{
+                width: 140,
+                height: 140,
+                background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(0,150,255,0.05) 60%, transparent 100%)',
+                borderRadius: '50%',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                border: '2px solid rgba(255,255,255,0.5)',
+                boxShadow: `0 0 ${pulseGlowOpacity * 60}px rgba(0,240,255,${pulseGlowOpacity}), inset 0 0 ${pulseInnerGlow * 60}px rgba(255,255,255,${pulseInnerGlow})`,
+                transform: `scale(${pulseScale})`,
+                display:
