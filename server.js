@@ -736,6 +736,27 @@ app.get("/api/saved-items", (req, res) => {
   }
 });
 
+  // GET: Export all keywords to CSV for download
+  app.get("/api/export-keywords", (req, res) => {
+    try {
+      const dbPath = path.join(__dirname, "saved-items.json");
+      const data = fs.readFileSync(dbPath, "utf-8");
+      const items = JSON.parse(data);
+      let csv = "id,keywords\n";
+      items.forEach((item) => {
+        const escapedId = (item.id || "").replace(/"/g, '""');
+        const escapedKeywords = (item.keywords || "").replace(/"/g, '""');
+        csv += `"${escapedId}","${escapedKeywords}"\n`;
+      });
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment; filename=keywords.csv");
+      res.send(csv);
+    } catch (error) {
+      console.error("❌ Failed to export keywords:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
 // POST: Simpan atau update baris
 app.post("/api/save-item", (req, res) => {
   try {
@@ -764,16 +785,23 @@ app.post("/api/save-item", (req, res) => {
 // DELETE: Hapus baris dari penyimpanan
 app.delete("/api/delete-item/:id", (req, res) => {
   try {
-    const { id } = req.params;
+    const id = decodeURIComponent(req.params.id);
     const dbPath = path.join(__dirname, "saved-items.json");
     const data = fs.readFileSync(dbPath, "utf-8");
     let items = JSON.parse(data);
     
+    const beforeCount = items.length;
     items = items.filter(i => i.id !== id);
     
+    if (items.length === beforeCount) {
+      return res.status(404).json({ error: `Item "${id}" tidak ditemukan` });
+    }
+    
     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+    console.log(`🗑 Item "${id}" berhasil dihapus dari database`);
     res.json({ success: true });
   } catch (error) {
+    console.error("❌ Gagal hapus item:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -868,6 +896,42 @@ app.post("/api/render-4k", async (req, res) => {
 // Global map to track Git Action run trigger SHAs
 const gitRuns = {};
 
+// Global map to track batch render jobs and SSE streams
+const batchJobs = {};
+
+// Helper: Save or update item in database file
+function saveOrUpdateItem(item) {
+  const dbPath = path.join(__dirname, "saved-items.json");
+  const data = fs.readFileSync(dbPath, "utf-8");
+  let items = JSON.parse(data);
+  const index = items.findIndex(i => i.id === item.id);
+  if (index !== -1) {
+    items[index] = { ...items[index], ...item };
+  } else {
+    items.push(item);
+  }
+  fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+}
+
+// Helper: Add logs for SSE batch rendering
+function addLog(jobId, message, type = 'info') {
+  const time = new Date().toLocaleTimeString('id-ID');
+  const logEntry = { message, type, time };
+  
+  if (!batchJobs[jobId]) {
+    batchJobs[jobId] = { logs: [], clients: [], status: 'running' };
+  }
+  
+  batchJobs[jobId].logs.push(logEntry);
+  
+  // Stream to all connected clients
+  batchJobs[jobId].clients.forEach(client => {
+    client.write(`data: ${JSON.stringify(logEntry)}\n\n`);
+  });
+  
+  console.log(`[Batch Job ${jobId}] [${type}] ${message}`);
+}
+
 // Helper: Unzip function supporting cross-platform (PowerShell Expand-Archive on Windows, unzip on Unix)
 function unzipFile(zipPath, destDir) {
   if (process.platform === "win32") {
@@ -877,6 +941,441 @@ function unzipFile(zipPath, destDir) {
     // Linux/macOS unzip
     execSync(`unzip -o "${zipPath}" -d "${destDir}"`);
   }
+}
+
+// Helper: Internal function to check GitHub actions run status and download artifacts
+async function checkGithubRenderStatusInternal(id, renderType) {
+  const trackingKey = `${id}_${renderType}`;
+  
+  const finalFilename = renderType === "preview" ? `${id}-preview.mp4` : `${id}-4k.mov`;
+  const legacyFilename = renderType === "preview" ? `${id}.mp4` : `${id}_4k.mov`;
+  const finalPath = renderType === "preview" 
+    ? path.join(__dirname, "public", "previews", finalFilename)
+    : path.join(__dirname, "out", finalFilename);
+  const legacyPath = renderType === "preview"
+    ? path.join(__dirname, "public", "previews", legacyFilename)
+    : path.join(__dirname, "out", legacyFilename);
+    
+  if (fs.existsSync(finalPath)) {
+    const fileUrl = renderType === "preview" ? `/previews/${finalFilename}` : `/out/${finalFilename}`;
+    return { status: "success", url: fileUrl, localPath: finalPath };
+  }
+  if (fs.existsSync(legacyPath)) {
+    const fileUrl = renderType === "preview" ? `/previews/${legacyFilename}` : `/out/${legacyFilename}`;
+    return { status: "success", url: fileUrl, localPath: legacyPath };
+  }
+
+  const runInfo = gitRuns[trackingKey];
+  if (!runInfo) {
+    return { status: "not_found", message: "Render belum pernah ditrigger untuk item ini" };
+  }
+
+  const workflowFile = runInfo.workflowFile || (renderType === "preview" ? "render-preview.yml" : "render-4k.yml");
+  const url = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/runs?event=workflow_dispatch&per_page=10`;
+  const response = await axios.get(url, {
+    headers: {
+      Authorization: "token " + GITHUB_TOKEN,
+      Accept: "application/vnd.github.v3+json"
+    }
+  });
+
+  const runs = response.data.workflow_runs || [];
+  const triggeredAt = runInfo.triggeredAt ? new Date(runInfo.triggeredAt - 30000) : new Date(0); // 30s buffer
+  
+  let matchedRun = null;
+  if (runInfo.runId) {
+    matchedRun = runs.find(run => run.id === runInfo.runId);
+  } else {
+    matchedRun = runs.find(run => new Date(run.created_at) >= triggeredAt);
+  }
+
+  if (!matchedRun) {
+    return { status: "queued", message: "Menunggu GitHub memproses workflow dispatch..." };
+  }
+
+  runInfo.runId = matchedRun.id;
+
+  if (matchedRun.status !== "completed") {
+    return { status: "rendering", progress: matchedRun.status };
+  }
+
+  if (matchedRun.conclusion !== "success") {
+    return { status: "failed", error: `Workflow selesai dengan kesimpulan: ${matchedRun.conclusion}` };
+  }
+
+  // Download artifact
+  console.log(`⬇️ Workflow sukses! Mendapatkan link artifact untuk ${id}...`);
+  const artifactsUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/runs/${matchedRun.id}/artifacts`;
+  const artifactsRes = await axios.get(artifactsUrl, {
+    headers: {
+      Authorization: "token " + GITHUB_TOKEN,
+      Accept: "application/vnd.github.v3+json"
+    }
+  });
+
+  const artifacts = artifactsRes.data.artifacts || [];
+  const targetArtifactName = `${id}-${renderType}-video`;
+  const matchedArtifact = artifacts.find(a => a.name === targetArtifactName);
+
+  if (!matchedArtifact) {
+    throw new Error(`Artifact "${targetArtifactName}" tidak ditemukan di GitHub run ini.`);
+  }
+
+  // Download artifact ZIP
+  const zipFilename = `temp-artifact-${id}-${renderType}.zip`;
+  const tempZipPath = path.join(__dirname, zipFilename);
+  const downloadUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/artifacts/${matchedArtifact.id}/zip`;
+  
+  console.log(`Downloading zip artifact from: ${downloadUrl}`);
+  const downloadRes = await axios({
+    method: "get",
+    url: downloadUrl,
+    responseType: "stream",
+    headers: {
+      Authorization: "token " + GITHUB_TOKEN,
+      Accept: "application/vnd.github.v3+json"
+    }
+  });
+
+  const writer = fs.createWriteStream(tempZipPath);
+  downloadRes.data.pipe(writer);
+
+  await new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", reject);
+  });
+
+  console.log(`✅ Artifact ZIP terdownload. Ekstraksi file...`);
+
+  // Ekstrak ZIP
+  const tempExtractDir = path.join(__dirname, `temp_extracted_${id}_${renderType}`);
+  if (fs.existsSync(tempExtractDir)) {
+    fs.rmSync(tempExtractDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(tempExtractDir, { recursive: true });
+
+  unzipFile(tempZipPath, tempExtractDir);
+
+  // Cari file video hasil render di dalam folder ekstraksi
+  const files = fs.readdirSync(tempExtractDir);
+  const videoFile = files.find(f => f.endsWith(".mp4") || f.endsWith(".mov"));
+
+  if (!videoFile) {
+    fs.rmSync(tempExtractDir, { recursive: true, force: true });
+    fs.unlinkSync(tempZipPath);
+    throw new Error("Tidak ada file video di dalam zip artifact.");
+  }
+
+  const sourceFilePath = path.join(tempExtractDir, videoFile);
+  fs.renameSync(sourceFilePath, finalPath);
+
+  // Bersihkan file sementara
+  fs.rmSync(tempExtractDir, { recursive: true, force: true });
+  fs.unlinkSync(tempZipPath);
+
+  console.log(`🎉 Sukses mengunduh dan mengekstrak ${renderType} video untuk ${id}!`);
+  const fileUrl = renderType === "preview" ? `/previews/${finalFilename}` : `/out/${finalFilename}`;
+  return { status: "success", url: fileUrl, localPath: finalPath };
+}
+
+// Helper: Polling background thread to wait for github rendering
+async function waitForRender(id, renderType, jobId) {
+  addLog(jobId, `Menunggu proses rendering video preview di GitHub Actions...`, 'info');
+  const startTime = Date.now();
+  const timeoutMs = 20 * 60 * 1000; // 20 menit timeout
+  
+  while (Date.now() - startTime < timeoutMs) {
+    const finalFilename = renderType === "preview" ? `${id}-preview.mp4` : `${id}-4k.mov`;
+    const legacyFilename = renderType === "preview" ? `${id}.mp4` : `${id}_4k.mov`;
+    const finalPath = renderType === "preview" 
+      ? path.join(__dirname, "public", "previews", finalFilename)
+      : path.join(__dirname, "out", finalFilename);
+    const legacyPath = renderType === "preview"
+      ? path.join(__dirname, "public", "previews", legacyFilename)
+      : path.join(__dirname, "out", legacyFilename);
+      
+    if (fs.existsSync(finalPath) || fs.existsSync(legacyPath)) {
+      addLog(jobId, `Video preview untuk ${id} berhasil ditemukan secara lokal!`, 'success');
+      return true;
+    }
+    
+    try {
+      const statusResult = await checkGithubRenderStatusInternal(id, renderType);
+      if (statusResult.status === 'success') {
+        addLog(jobId, `Video preview untuk ${id} berhasil diunduh dari GitHub!`, 'success');
+        return true;
+      } else if (statusResult.status === 'failed') {
+        throw new Error(statusResult.error || 'Workflow failed');
+      } else {
+        addLog(jobId, `Status render: ${statusResult.status} (${statusResult.progress || 'menunggu runner'})...`, 'info');
+      }
+    } catch (err) {
+      addLog(jobId, `Informasi status render: ${err.message}`, 'info');
+    }
+    
+    // Tunggu 15 detik sebelum mengecek ulang
+    await new Promise(resolve => setTimeout(resolve, 15000));
+  }
+  throw new Error("Timeout rendering video di GitHub Actions.");
+}
+
+// Helper: Jalankan job batch di background secara sekuensial
+async function runBatchJob(jobId, files, loop, transparent) {
+  addLog(jobId, `Mulai memproses batch dengan ${files.length} file...`, 'info');
+  
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const stepNum = i + 1;
+    const totalFiles = files.length;
+    
+    addLog(jobId, `[${stepNum}/${totalFiles}] Membaca file: ${file.name}`, 'info');
+    
+    try {
+      // 1. Sanitasi ID (Mencegah command injection)
+      const baseName = path.basename(file.name, '.html');
+      const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+      
+      addLog(jobId, `Menggunakan ID tersanitasi: ${sanitizedId}`, 'info');
+
+      // 2. Generate SEO Metadata
+      addLog(jobId, `Menghasilkan metadata SEO via AI untuk ${sanitizedId}...`, 'info');
+      
+      const seoPrompt = `Kamu adalah pakar Creative Director SEO Microstock USA.
+Analisis file HTML berikut dan buat metadata SEO yang luar biasa kreatif, visualnya mewah, dan bernilai jual tinggi untuk dipasarkan di Adobe Stock.
+
+HTML Content:
+${file.content}
+
+Keluarkan hasil dalam format JSON murni berbentuk objek tanpa teks pengantar/penutup apa pun.
+DILARANG menggunakan karakter double quote (") di dalam nilai string. Gunakan single quote (') jika perlu.
+Struktur objek wajib persis seperti ini:
+{
+  "judul": "Rekomendasi judul video SEO bahasa Inggris (maksimal 12 kata). DILARANG menggunakan kata teknis pemrograman seperti CSS, keyframes, requestAnimationFrame, HTML, canvas, SVG, easing, DLL. Gunakan istilah komersial video seperti: smooth animation, fluid movement, modern UI UX elements overlay, app interface template, abstract particles, seamless loop, data visualization, animated infographics, interactive design concept.",
+  "keywords": "35-50 kata kunci bahasa Inggris dipisah koma. DILARANG menggunakan istilah teknis pemrograman (CSS transition, keyframes, requestAnimationFrame, SVG, canvas, loop). WAJIB menerjemahkan ke istilah komersial video stock dan disusun berdasarkan Teknik 3 Pilar dengan 7-10 keyword pertama adalah yang paling krusial. Pilar 1 (What/Isi: mouse click, subscribe button, loading bar, progress indicator, dll), Pilar 2 (Visual/Style: minimalist, flat design, modern UI, isolated, 4k. Jika video transparan, keyword 'alpha channel' and 'transparent background' WAJIB ditaruh di 10 keyword pertama), Pilar 3 (Kegunaan/Context: website promo, social media asset, app presentation, marketing material).",
+  "deskripsi": "Deskripsi detail visual bahasa Inggris untuk Adobe Stock (minimal 15 kata). Terjemahkan istilah kode ke visual: jangan sebut keyframes/easing/canvas, tapi gunakan smooth animation, fluid movement, dll.",
+  "kategori": "Kategori Adobe Stock (Technology/Abstract/Business)"
+}`;
+
+      let aiResponse = "";
+      if (genAI) {
+        aiResponse = await callGemini(seoPrompt);
+      } else {
+        aiResponse = await callOpenRouter(seoPrompt, "gemini-2.0-flash");
+      }
+
+      let jsonText = aiResponse.trim();
+      if (jsonText.startsWith("```json")) {
+        jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+      } else if (jsonText.includes("```")) {
+        jsonText = jsonText.split("```")[1].split("```")[0].trim();
+      }
+      
+      jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+      const seoData = JSON.parse(jsonText);
+      addLog(jobId, `Metadata SEO berhasil didapat. Judul: "${seoData.judul}"`, 'success');
+
+      // 3. Simpan state awal ke database
+      const itemData = {
+        id: sanitizedId,
+        fileName: file.name,
+        judul: seoData.judul,
+        keywords: seoData.keywords,
+        deskripsi: seoData.deskripsi,
+        kategori: seoData.kategori,
+        durationInFrames: 150,
+        htmlPreview: file.content,
+        loop: !!loop,
+        transparent: !!transparent,
+        statusConvertTsx: 'processing-tsx',
+        statusRender4k: 'idle',
+        previewUrl: '',
+        outputPath4k: '',
+        createdAt: new Date().toISOString()
+      };
+      
+      saveOrUpdateItem(itemData);
+      
+      // 4. Konversi HTML ke TSX
+      addLog(jobId, `Mengonversi HTML ke kode Remotion TSX...`, 'info');
+      
+      const conversionPrompt = `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
+You need to understand that Remotion renders videos frame-by-frame offline (using Puppeteer/Chrome). Therefore, any real-time browser features (like CSS @keyframes, transition, Date.now(), setInterval, or Math.random()) will cause severe synchronization bugs and frame-tearing in the final .mp4 export.
+
+**OBJECTIVE:**
+Convert the provided HTML/CSS/JS code into a single, production-grade Remotion component (.tsx). The visual output must be a 1:1 mirror of the original HTML, but entirely re-engineered for frame-locked rendering.
+
+**0. MANDATORY IMPORT RULE (ABSOLUTE — NEVER VIOLATE):**
+The FIRST LINE of the output file MUST ALWAYS be exactly this (copy-paste, no changes):
+import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
+- Do NOT import from any local files (e.g. './input', './utils', './config', etc.) — these files do not exist.
+- Do NOT import from 'three', 'gsap', or any external library.
+- Do NOT import React — it is auto-injected by the JSX transform.
+- NEVER add any import other than the single remotion import line above.
+
+**BANNED FUNCTIONS (WILL CAUSE RUNTIME CRASH — NEVER USE):**
+- EasingEaseOut, EasingEaseIn, EasingEaseInOut — these do not exist in Remotion. Use Easing.out(Easing.quad), Easing.in(Easing.quad), Easing.inOut(Easing.quad).
+- Valid Easing values: Easing.linear, Easing.ease, Easing.quad, Easing.cubic, Easing.sin, Easing.circle, Easing.exp, Easing.elastic(), Easing.back(), Easing.bounce, Easing.bezier(), Easing.in(), Easing.out(), Easing.inOut()
+- Date.now(), performance.now(), new Date() — BANNED, breaks deterministic frame rendering.
+- Math.random() inside component render — BANNED. Pre-calculate outside the component into a static const array.
+- setInterval(), setTimeout(), requestAnimationFrame() — BANNED.
+- Any CSS @keyframes, CSS transition, CSS animation property — BANNED.
+
+**1. Dynamic Identification:**
+- Identify the main subject from the HTML and use it as the PascalCase component name (e.g., GlowingButton).
+
+**2. Visual Parity & Animation (CRITICAL):**
+- Motion Mirroring: Analyze the original CSS @keyframes. Map every percentage (0%, 50%, 100%) exactly into the inputRange of Remotion's interpolate() function.
+- Easing Match: Translate CSS easing (e.g., ease-in-out) to the exact equivalent Remotion Easing API.
+- Frame-Locked: ALL motion, opacity, and scale changes MUST be strictly driven by useCurrentFrame().
+
+**3. Deterministic Rendering:**
+- Never use Math.random() inside the component render. Pre-calculate random elements (particles, positions, delays) in a static const array OUTSIDE the component function.
+
+**4. 4K Auto-Fit Landscape Scaling (CRITICAL):**
+- Define: const ORIGINAL_WIDTH = 1920; const ORIGINAL_HEIGHT = 1080;
+- Inside the component: const { width, height, fps } = useVideoConfig();
+- const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
+- Apply transform: scale(\${scaleFactor}) and transformOrigin: 'center center' to the main wrapper div.
+
+**5. Absolute Seamless Looping & Duration Cap (CRITICAL):**
+- Duration Cap: Between 5 and 15 seconds MAX.
+- Use LCM of all animation cycles. Cap at 15s max.
+- Apply const localFrame = frame % (fps * cycleDuration) for each element to loop perfectly.
+- Symmetrical Interpolation: First and last value in every interpolate() output MUST be identical for seamless looping.
+
+**6. Dynamic Text Overlay — Safe getInputProps (CRITICAL):**
+- Use this EXACT pattern at the top of the component body (safe with fallback):
+  const inputProps = (getInputProps() as any) || {};
+  const judul = inputProps.judul || 'Stock Video';
+  const keywordsList = (inputProps.keywords || 'motion, abstract, loop').split(',');
+- Render judul as an elegant glowing title at the bottom-left with a smooth fade-in animation.
+- Render keywordsList as small glassmorphic badge tags below the title.
+
+**7. Output Structure:**
+- Provide ONLY the raw .tsx file content — no markdown fences, no explanation text.
+- The main component MUST have \`export default ComponentName;\` as the LAST line.
+
+HERE IS THE HTML TO CONVERT:
+
+${file.content}
+
+OUTPUT: Start directly with the import line. No markdown. No explanation.`;
+
+      let tsxResponse = "";
+      if (genAI) {
+        tsxResponse = await callGemini(conversionPrompt);
+      } else {
+        tsxResponse = await callOpenRouter(conversionPrompt, "gemini-2.0-flash");
+      }
+
+      let tsxCode = tsxResponse.trim();
+      if (tsxCode.startsWith("```typescript") || tsxCode.startsWith("```tsx")) {
+        const parts = tsxCode.split("```");
+        tsxCode = parts[1].split("\n").slice(1).join("\n").split("```")[0].trim();
+      } else if (tsxCode.startsWith("```")) {
+        tsxCode = tsxCode.split("```")[1].split("```")[0].trim();
+      }
+
+      itemData.promptCode = tsxCode;
+      saveOrUpdateItem(itemData);
+      addLog(jobId, `Konversi HTML ke TSX sukses!`, 'success');
+
+      // 5. Tulis src/Composition.tsx lokal
+      addLog(jobId, `Menulis file src/Composition.tsx...`, 'info');
+      fs.writeFileSync("src/Composition.tsx", tsxCode);
+
+      // 6. Push ke GitHub
+      addLog(jobId, `Mendorong kode TSX ke repositori GitHub...`, 'info');
+      execSync("git add src/Composition.tsx", { stdio: "inherit" });
+      try {
+        execSync(`git commit -m "Batch HTML ke TSX: ${sanitizedId}"`, { stdio: "inherit" });
+      } catch (e) {
+        // No changes is fine
+      }
+      execSync("git push origin main", { stdio: "inherit" });
+
+      const sha = execSync("git rev-parse HEAD").toString().trim();
+      addLog(jobId, `Kode berhasil didorong. Commit SHA: ${sha}`, 'success');
+
+      // 7. Trigger GitHub Action
+      addLog(jobId, `Memicu GitHub Actions cloud rendering...`, 'info');
+      const workflowFile = "render-preview.yml";
+      const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
+      
+      await axios.post(
+        workflowDispatchUrl,
+        {
+          ref: "main",
+          inputs: {
+            composition_id: sanitizedId,
+            duration_frames: "150",
+            judul: itemData.judul || "Stock Video",
+            keywords: itemData.keywords || "motion, abstract, loop"
+          }
+        },
+        {
+          headers: {
+            Authorization: "token " + GITHUB_TOKEN,
+            Accept: "application/vnd.github.v3+json"
+          }
+        }
+      );
+
+      const trackingKey = `${sanitizedId}_preview`;
+      gitRuns[trackingKey] = {
+        sha: sha,
+        status: "triggered",
+        runId: null,
+        triggeredAt: Date.now(),
+        workflowFile: workflowFile
+      };
+      
+      itemData.statusConvertTsx = 'processing-preview';
+      saveOrUpdateItem(itemData);
+      addLog(jobId, `Workflow dispatch berhasil dikirim ke GitHub.`, 'success');
+
+      // 8. Tunggu rendering selesai & unduh hasilnya
+      const renderSuccess = await waitForRender(sanitizedId, 'preview', jobId);
+      if (renderSuccess) {
+        const fileUrl = `/previews/${sanitizedId}-preview.mp4`;
+        itemData.previewUrl = fileUrl;
+        itemData.statusConvertTsx = 'success';
+        saveOrUpdateItem(itemData);
+        addLog(jobId, `[Sukses] Video preview untuk ${sanitizedId} selesai diproses!`, 'success');
+      } else {
+        throw new Error(`Rendering gagal untuk ${sanitizedId}`);
+      }
+
+    } catch (err) {
+      addLog(jobId, `Gagal memproses ${file.name}: ${err.message}`, 'error');
+      
+      // Simpan status failed
+      const baseName = path.basename(file.name, '.html');
+      const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+      try {
+        const dbPath = path.join(__dirname, "saved-items.json");
+        const data = fs.readFileSync(dbPath, "utf-8");
+        const items = JSON.parse(data);
+        const item = items.find(i => i.id === sanitizedId);
+        if (item) {
+          item.statusConvertTsx = 'failed';
+          fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+        }
+      } catch (dbErr) {
+        console.error("Gagal update DB status failed:", dbErr);
+      }
+    }
+  }
+
+  addLog(jobId, `Semua file dalam batch selesai diproses.`, 'success');
+  batchJobs[jobId].status = 'completed';
+  
+  // Kirim event selesai ke SSE clients
+  batchJobs[jobId].clients.forEach(client => {
+    client.write(`data: ${JSON.stringify({ type: 'done', message: 'Semua proses selesai' })}\n\n`);
+    client.end();
+  });
+  batchJobs[jobId].clients = [];
 }
 
 // POST: Trigger GitHub rendering dispatch (workflow_dispatch)
@@ -950,159 +1449,206 @@ app.post("/api/trigger-github-render", async (req, res) => {
   }
 });
 
+// POST: Mulai pemrosesan batch HTML
+app.post("/api/process-html-batch", (req, res) => {
+  const { files, loop, transparent } = req.body;
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    return res.status(400).json({ error: "Data batch file tidak valid atau kosong" });
+  }
+
+  const jobId = 'job_' + Date.now();
+  batchJobs[jobId] = {
+    logs: [],
+    clients: [],
+    status: 'running'
+  };
+
+  // Kirim respons langsung agar UI bisa langsung menginisiasi SSE stream
+  res.json({ jobId });
+
+  // Jalankan background job secara asinkron
+  runBatchJob(jobId, files, loop, transparent).catch(err => {
+    console.error(`Eror fatal saat menjalankan batch ${jobId}:`, err);
+  });
+});
+
+// GET: Hubungkan stream SSE untuk log batch
+app.get("/api/batch-logs/:jobId", (req, res) => {
+  const { jobId } = req.params;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  if (!batchJobs[jobId]) {
+    batchJobs[jobId] = { logs: [], clients: [], status: 'completed' };
+  }
+
+  // Kirim semua log yang terkumpul sejauh ini
+  batchJobs[jobId].logs.forEach(log => {
+    res.write(`data: ${JSON.stringify(log)}\n\n`);
+  });
+
+  // Jika status job sudah rampung, kirim event penutup
+  if (batchJobs[jobId].status === 'completed' || batchJobs[jobId].status === 'failed') {
+    res.write(`data: ${JSON.stringify({ type: 'done', message: 'Job selesai' })}\n\n`);
+    res.end();
+    return;
+  }
+
+  // Daftarkan koneksi klien
+  batchJobs[jobId].clients.push(res);
+
+  req.on('close', () => {
+    if (batchJobs[jobId]) {
+      batchJobs[jobId].clients = batchJobs[jobId].clients.filter(c => c !== res);
+    }
+  });
+});
+
+// POST: Trigger render 4K ProRes
+app.post("/api/trigger-4k/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    const data = fs.readFileSync(dbPath, "utf-8");
+    const items = JSON.parse(data);
+    const item = items.find(i => i.id === id);
+    if (!item) {
+      return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
+    }
+
+    if (!item.promptCode) {
+      return res.status(400).json({ error: "Item tidak memiliki kode TSX untuk dirender" });
+    }
+
+    // Update status render 4k ke processing
+    item.statusRender4k = 'processing';
+    fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+
+    console.log(`🚀 Memicu render 4K untuk item: ${id}`);
+
+    // Tulis file src/Composition.tsx
+    fs.writeFileSync("src/Composition.tsx", item.promptCode);
+
+    // Commit & Push kode yang akan dirender
+    execSync("git add src/Composition.tsx", { stdio: "inherit" });
+    try {
+      execSync(`git commit -m "Render 4K: ${id}"`, { stdio: "inherit" });
+    } catch (e) {
+      console.log("ℹ️ Tidak ada perubahan kode baru untuk di-commit.");
+    }
+    execSync("git push origin main", { stdio: "inherit" });
+
+    const sha = execSync("git rev-parse HEAD").toString().trim();
+
+    // Trigger GitHub workflow dispatch untuk render-4k.yml
+    const workflowFile = "render-4k.yml";
+    const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
+
+    await axios.post(
+      workflowDispatchUrl,
+      {
+        ref: "main",
+        inputs: {
+          composition_id: id,
+          duration_frames: String(Number(item.durationInFrames) || 150),
+          judul: item.judul || "Stock Video",
+          keywords: item.keywords || "motion, abstract, loop"
+        }
+      },
+      {
+        headers: {
+          Authorization: "token " + GITHUB_TOKEN,
+          Accept: "application/vnd.github.v3+json"
+        }
+      }
+    );
+
+    const trackingKey = `${id}_4k`;
+    gitRuns[trackingKey] = {
+      sha: sha,
+      status: "triggered",
+      runId: null,
+      triggeredAt: Date.now(),
+      workflowFile: workflowFile
+    };
+
+    res.json({ success: true, sha });
+  } catch (error) {
+    console.error(`❌ Gagal di trigger-4k untuk ${id}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH: Update data parsial item
+app.patch("/api/saved-items/:id", (req, res) => {
+  const { id } = req.params;
+  const updates = req.body;
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    const data = fs.readFileSync(dbPath, "utf-8");
+    let items = JSON.parse(data);
+
+    const index = items.findIndex(i => i.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
+    }
+
+    items[index] = { ...items[index], ...updates };
+    fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+
+    res.json({ success: true, item: items[index] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET: Stream preview file MP4
+app.get("/api/preview-file/:id", (req, res) => {
+  const { id } = req.params;
+  const finalFilename = `${id}-preview.mp4`;
+  const legacyFilename = `${id}.mp4`;
+
+  const finalPath = path.join(__dirname, "public", "previews", finalFilename);
+  const legacyPath = path.join(__dirname, "public", "previews", legacyFilename);
+
+  if (fs.existsSync(finalPath)) {
+    return res.sendFile(finalPath);
+  } else if (fs.existsSync(legacyPath)) {
+    return res.sendFile(legacyPath);
+  } else {
+    return res.status(404).json({ error: "File preview tidak ditemukan secara lokal" });
+  }
+});
+
+// GET: Stream/Download 4K ProRes MOV file
+app.get("/api/4k-file/:id", (req, res) => {
+  const { id } = req.params;
+  const finalFilename = `${id}-4k.mov`;
+  const legacyFilename = `${id}_4k.mov`;
+
+  const finalPath = path.join(__dirname, "out", finalFilename);
+  const legacyPath = path.join(__dirname, "out", legacyFilename);
+
+  if (fs.existsSync(finalPath)) {
+    return res.sendFile(finalPath);
+  } else if (fs.existsSync(legacyPath)) {
+    return res.sendFile(legacyPath);
+  } else {
+    return res.status(404).json({ error: "File 4K ProRes tidak ditemukan secara lokal" });
+  }
+});
+
 // GET: Cek status render GitHub dan download artifact jika selesai
 app.get("/api/check-render-status/:id/:renderType", async (req, res) => {
   const { id, renderType } = req.params;
-  const trackingKey = `${id}_${renderType}`;
-  
-  // 1. Cek apakah file output sudah ada secara lokal
-  // New naming: {id}-preview.mp4 / {id}-4k.mov (matches new YML artifact naming)
-  const finalFilename = renderType === "preview" ? `${id}-preview.mp4` : `${id}-4k.mov`;
-  const legacyFilename = renderType === "preview" ? `${id}.mp4` : `${id}_4k.mov`;
-  const finalPath = renderType === "preview" 
-    ? path.join(__dirname, "public", "previews", finalFilename)
-    : path.join(__dirname, "out", finalFilename);
-  // Also check legacy path for backward compatibility
-  const legacyPath = renderType === "preview"
-    ? path.join(__dirname, "public", "previews", legacyFilename)
-    : path.join(__dirname, "out", legacyFilename);
-    
-  if (fs.existsSync(finalPath)) {
-    const fileUrl = renderType === "preview" ? `/previews/${finalFilename}` : `/out/${finalFilename}`;
-    return res.json({ status: "success", url: fileUrl, localPath: finalPath });
-  }
-  if (fs.existsSync(legacyPath)) {
-    const fileUrl = renderType === "preview" ? `/previews/${legacyFilename}` : `/out/${legacyFilename}`;
-    return res.json({ status: "success", url: fileUrl, localPath: legacyPath });
-  }
-
-  // 2. Ambil run info dari tracking map
-  const runInfo = gitRuns[trackingKey];
-  if (!runInfo) {
-    return res.json({ status: "not_found", message: "Render belum pernah ditrigger untuk item ini" });
-  }
-
   try {
-    // 3. Query GitHub Actions runs — check workflow_dispatch runs from the correct workflow file
-    const workflowFile = runInfo.workflowFile || (renderType === "preview" ? "render-preview.yml" : "render-4k.yml");
-    const url = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/runs?event=workflow_dispatch&per_page=10`;
-    const response = await axios.get(url, {
-      headers: {
-        Authorization: "token " + GITHUB_TOKEN,
-        Accept: "application/vnd.github.v3+json"
-      }
-    });
-
-    const runs = response.data.workflow_runs || [];
-
-    // For workflow_dispatch: find the most recent run created AFTER we triggered it
-    // (triggeredAt is stored in ms, GitHub's created_at is an ISO string)
-    const triggeredAt = runInfo.triggeredAt ? new Date(runInfo.triggeredAt - 30000) : new Date(0); // 30s buffer
-    
-    let matchedRun = null;
-    // If we already have a runId, use it directly
-    if (runInfo.runId) {
-      matchedRun = runs.find(run => run.id === runInfo.runId);
-    } else {
-      // Find the most recent run created after our trigger time
-      matchedRun = runs.find(run => new Date(run.created_at) >= triggeredAt);
-    }
-
-    if (!matchedRun) {
-      return res.json({ status: "queued", message: "Menunggu GitHub memproses workflow dispatch..." });
-    }
-
-    runInfo.runId = matchedRun.id;
-
-    // 4. Jika statusnya belum selesai
-    if (matchedRun.status !== "completed") {
-      return res.json({ status: "rendering", progress: matchedRun.status });
-    }
-
-    // 5. Jika status selesai tapi gagal
-    if (matchedRun.conclusion !== "success") {
-      return res.json({ status: "failed", error: `Workflow selesai dengan kesimpulan: ${matchedRun.conclusion}` });
-    }
-
-    // 6. Jika sukses, download artifact
-    console.log(`⬇️ Workflow sukses! Mendapatkan link artifact untuk ${id}...`);
-    const artifactsUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/runs/${matchedRun.id}/artifacts`;
-    const artifactsRes = await axios.get(artifactsUrl, {
-      headers: {
-        Authorization: "token " + GITHUB_TOKEN,
-        Accept: "application/vnd.github.v3+json"
-      }
-    });
-
-    const artifacts = artifactsRes.data.artifacts || [];
-    const targetArtifactName = `${id}-${renderType}-video`;
-    const matchedArtifact = artifacts.find(a => a.name === targetArtifactName);
-
-    if (!matchedArtifact) {
-      return res.status(404).json({ status: "failed", error: `Artifact "${targetArtifactName}" tidak ditemukan di GitHub run ini.` });
-    }
-
-    // Download artifact ZIP
-    const zipFilename = `temp-artifact-${id}-${renderType}.zip`;
-    const tempZipPath = path.join(__dirname, zipFilename);
-    const downloadUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/artifacts/${matchedArtifact.id}/zip`;
-    
-    console.log(`Downloading zip artifact from: ${downloadUrl}`);
-    const downloadRes = await axios({
-      method: "get",
-      url: downloadUrl,
-      responseType: "stream",
-      headers: {
-        Authorization: "token " + GITHUB_TOKEN,
-        Accept: "application/vnd.github.v3+json"
-      }
-    });
-
-    const writer = fs.createWriteStream(tempZipPath);
-    downloadRes.data.pipe(writer);
-
-    await new Promise((resolve, reject) => {
-      writer.on("finish", resolve);
-      writer.on("error", reject);
-    });
-
-    console.log(`✅ Artifact ZIP terdownload. Ekstraksi file...`);
-
-    // Ekstrak ZIP
-    const tempExtractDir = path.join(__dirname, `temp_extracted_${id}_${renderType}`);
-    if (fs.existsSync(tempExtractDir)) {
-      fs.rmSync(tempExtractDir, { recursive: true, force: true });
-    }
-    fs.mkdirSync(tempExtractDir, { recursive: true });
-
-    unzipFile(tempZipPath, tempExtractDir);
-
-    // Cari file video hasil render di dalam folder ekstraksi
-    const files = fs.readdirSync(tempExtractDir);
-    const videoFile = files.find(f => f.endsWith(".mp4") || f.endsWith(".mov"));
-
-    if (!videoFile) {
-      // Clean up
-      fs.rmSync(tempExtractDir, { recursive: true, force: true });
-      fs.unlinkSync(tempZipPath);
-      throw new Error("Tidak ada file video di dalam zip artifact.");
-    }
-
-    const sourceFilePath = path.join(tempExtractDir, videoFile);
-    
-    // Pindahkan ke folder tujuan yang sesuai
-    fs.renameSync(sourceFilePath, finalPath);
-
-    // Bersihkan file sementara
-    fs.rmSync(tempExtractDir, { recursive: true, force: true });
-    fs.unlinkSync(tempZipPath);
-
-    console.log(`🎉 Sukses mengunduh dan mengekstrak ${renderType} video untuk ${id}!`);
-    const fileUrl = renderType === "preview" ? `/previews/${finalFilename}` : `/out/${finalFilename}`;
-    res.json({ status: "success", url: fileUrl, localPath: finalPath });
-
+    const result = await checkGithubRenderStatusInternal(id, renderType);
+    res.json(result);
   } catch (error) {
-    console.error(`❌ Gagal di check-render-status:`, error.message);
+    console.error(`❌ Gagal di check-render-status untuk ${id}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });

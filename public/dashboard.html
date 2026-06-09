@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remotion Stock Generator</title>
+  <meta name="description" content="Otomasi pipeline produksi video stock Remotion — upload HTML, generate, render di GitHub Actions." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #070b14;
+      --bg2: #0d1424;
+      --bg3: #131d30;
+      --border: rgba(56,189,248,0.12);
+      --border-hover: rgba(56,189,248,0.35);
+      --cyan: #38bdf8;
+      --cyan-dim: rgba(56,189,248,0.15);
+      --green: #10b981;
+      --green-dim: rgba(16,185,129,0.15);
+      --red: #ef4444;
+      --red-dim: rgba(239,68,68,0.15);
+      --amber: #f59e0b;
+      --text: #e2e8f0;
+      --text-dim: #64748b;
+      --text-mid: #94a3b8;
+      --purple: #a855f7;
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    /* ── HEADER ─────────────────────────────────── */
+    .header {
+      background: linear-gradient(180deg, rgba(56,189,248,0.06) 0%, transparent 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 22px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-icon { font-size: 28px; }
+    .header-title {
+      font-size: 22px;
+      font-weight: 800;
+      background: linear-gradient(90deg, #38bdf8, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .header-sub { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+    /* ── MAIN LAYOUT ───────────────────────────── */
+    .main { max-width: 1200px; margin: 0 auto; padding: 36px 24px 60px; }
+    /* ── INPUT CARD ────────────────────────────── */
+    .input-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .input-card::before {
+      content: '';
+      position: absolute;
+      top: -60px; right: -60px;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    /* ── DROP ZONE ─────────────────────────────── */
+    .drop-zone {
+      border: 2px dashed rgba(56,189,248,0.25);
+      border-radius: var(--radius-sm);
+      padding: 36px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      position: relative;
+      background: rgba(56,189,248,0.03);
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+    }
+    .drop-zone.drag-over { transform: scale(1.01); }
+    .drop-icon {
+      font-size: 44px;
+      margin-bottom: 14px;
+      filter: drop-shadow(0 0 12px rgba(56,189,248,0.4));
+    }
+    .drop-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .drop-sub { font-size: 13px; color: var(--text-dim); margin-bottom: 18px; }
+    .btn-browse {
+      display: inline-block;
+      padding: 9px 22px;
+      background: var(--cyan-dim);
+      border: 1px solid rgba(56,189,248,0.4);
+      color: var(--cyan);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-browse:hover { background: rgba(56,189,248,0.25); }
+    /* ── FILE LIST ─────────────────────────────── */
+    .file-list { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      animation: slideIn 0.2s ease;
+    }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    .file-name { flex: 1; font-family: 'JetBrains Mono', monospace; color: var(--cyan); }
+    .file-size { color: var(--text-dim); font-size: 11px; }
+    .file-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1; }
+    .file-remove:hover { color: var(--red); }
+    /* ── OPTIONS ROW ───────────────────────────── */
+    .options-row {
+      display: flex;
+      gap: 24px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+    .option-group { display: flex; align-items: center; gap: 12px; }
+    .option-label { font-size: 13px; font-weight: 500; color: var(--text-mid); white-space: nowrap; }
+    .toggle-group { display: flex; gap: 4px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 4px; }
+    .toggle-btn {
+      padding: 7px 18px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: transparent;
+      color: var(--text-dim);
+    }
+    .toggle-btn.active {
+      background: var(--cyan);
+      color: #070b14;
+      box-shadow: 0 2px 8px rgba(56,189,248,0.3);
+    }
+    .toggle-btn.active.green { background: var(--green); box-shadow: 0 2px 8px rgba(16,185,129,0.3); }
+    /* ── GENERATE BUTTON ───────────────────────── */
+    .btn-generate {
+      width: 100%;
+      margin-top: 28px;
+      padding: 18px;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.25s ease;
+      background: linear-gradient(135deg, #0ea5e9, #6366f1, #a855f7);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(56,189,248,0.2);
+    }
+    .btn-generate:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(56,189,248,0.35);
+    }
+    .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-generate::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
+      transform: translateX(-100%);
+      transition: transform 0.5s ease;
+    }
+    .btn-generate:hover::before { transform: translateX(100%); }
+    /* ── LOG TERMINAL ──────────────────────────── */
+    .log-panel {
+      background: #050810;
+      border: 1px solid rgba(56,189,248,0.2);
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+      background: rgba(56,189,248,0.05);
+      border-bottom: 1px solid rgba(56,189,248,0.12);
+    }
+    .log-title { font-size: 13px; font-weight: 600; color: var(--cyan); display: flex; align-items: center; gap: 8px; }
+    .log-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); animation: blink 1.2s ease-in-out infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .log-dot.idle { background: var(--text-dim); box-shadow: none; animation: none; }
+    .log-status { font-size: 12px; color: var(--text-dim); }
+    .log-body {
+      padding: 16px 20px;
+      min-height: 120px;
+      max-height: 280px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.7;
+    }
+    .log-body::-webkit-scrollbar { width: 6px; }
+    .log-body::-webkit-scrollbar-track { background: transparent; }
+    .log-body::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.2); border-radius: 3px; }
+    .log-line { display: flex; gap: 10px; align-items: flex-start; }
+    .log-time { color: var(--text-dim); flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+    .log-msg { flex: 1; white-space: pre-wrap; word-break: break-word; }
+    .log-msg.info { color: #cbd5e1; }
+    .log-msg.success { color: var(--green); }
+    .log-msg.error { color: var(--red); }
+    /* ── RESULTS SECTION ───────────────────────── */
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .results-title {
+      font-size: 20px;
+      font-weight: 700;
+      background: linear-gradient(90deg, #10b981, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .btn-refresh {
+      padding: 8px 16px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text-mid);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-refresh:hover { border-color: var(--cyan); color: var(--cyan); }
+    /* ── TABLE ─────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      font-size: 13px;
+    }
+    thead tr { background: var(--bg3); }
+    th {
+      padding: 14px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-bottom: 1px solid rgba(30,41,59,0.8);
+      transition: background 0.15s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(56,189,248,0.03); }
+    td { padding: 14px 16px; vertical-align: top; }
+    .td-no { color: var(--text-dim); font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .td-file { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cyan); }
+    /* ── EDITABLE FIELDS ───────────────────────── */
+    .edit-wrap { position: relative; }
+    .edit-field {
+      width: 100%;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      resize: none;
+      line-height: 1.5;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .edit-field:focus { border-color: rgba(56,189,248,0.4); background: rgba(56,189,248,0.04); }
+    .btn-copy {
+      position: absolute;
+      top: 4px; right: 4px;
+      padding: 3px 8px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      border-radius: 4px;
+      font-size: 10px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .edit-wrap:hover .btn-copy { opacity: 1; }
+    .btn-copy:hover { color: var(--cyan); border-color: var(--cyan); }
+    .btn-copy.copied { color: var(--green); border-color: var(--green); }
+    /* ── VIDEO PREVIEW CELL ────────────────────── */
+    .preview-cell { min-width: 180px; }
+    .preview-video {
+      width: 160px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: block;
+      background: #000;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-queued { background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+    .badge-converting { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid rgba(245,158,11,0.3); }
+    .badge-rendering { background: rgba(56,189,248,0.1); color: var(--cyan); border: 1px solid rgba(56,189,248,0.3); }
+    .badge-success { background: var(--green-dim); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .badge-error { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    .spin { display: inline-block; animation: spin 1.2s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* ── ACTION BUTTONS ────────────────────────── */
+    .actions { display: flex; flex-direction: column; gap: 7px; min-width: 130px; }
+    .btn-action {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .btn-4k { background: linear-gradient(135deg, #7c3aed, #6366f1); color: #fff; }
+    .btn-4k:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(124,58,237,0.4); }
+    .btn-dl { background: var(--green-dim); border: 1px solid rgba(16,185,129,0.4); color: var(--green); }
+    .btn-dl:hover { background: rgba(16,185,129,0.25); }
+    .btn-del { background: var(--red-dim); border: 1px solid rgba(239,68,68,0.3); color: var(--red); }
+    .btn-del:hover { background: rgba(239,68,68,0.25); }
+    .btn-action:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+    /* ── EMPTY STATE ────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--text-dim);
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+    .empty-text { font-size: 15px; margin-bottom: 8px; }
+    .empty-sub { font-size: 13px; opacity: 0.6; }
+    /* ── TOAST ──────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 28px; right: 28px;
+      padding: 12px 20px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      z-index: 1000;
+      animation: toastIn 0.25s ease;
+      max-width: 320px;
+    }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    .toast.success { border-color: rgba(16,185,129,0.5); color: var(--green); }
+    .toast.error { border-color: rgba(239,68,68,0.5); color: var(--red); }
+    /* ── SCROLL ─────────────────────────────────── */
+    html { scroll-behavior: smooth; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-icon">🎬</div>
+  <div>
+    <div class="header-title">Remotion Stock Generator</div>
+    <div class="header-sub">Upload HTML animasi → AI convert → Render 4K di GitHub Actions</div>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- ═══════════ INPUT CARD ═══════════ -->
+  <div class="input-card">
+    <!-- Drop Zone -->
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="drop-icon">📁</div>
+      <div class="drop-title">Drag & drop file .html ke sini</div>
+      <div class="drop-sub">Mendukung multi-file (maks. 10 file)</div>
+      <label class="btn-browse" onclick="event.stopPropagation()">
+        Pilih File HTML
+        <input type="file" id="fileInput" multiple accept=".html" hidden onchange="handleFileSelect(this.files)" />
+      </label>
+      <div class="file-list" id="fileList"></div>
+    </div>
+
+    <!-- Options -->
+    <div class="options-row">
+      <div class="option-group">
+        <span class="option-label">🔄 Loop Video</span>
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="loopYes" onclick="setLoop(true)">Ya</button>
+          <button class="toggle-btn" id="loopNo" onclick="setLoop(false)">Tidak</button>
+        </div>
+      </div>
+      <div class="option-group">
+        <span class="option-label">🎨 Background</span>
+        <div class="toggle-group">
+          <button class="toggle-btn" id="bgTransp" onclick="setBg(true)">Transparan</button>
+          <button class="toggle-btn active" id="bgSolid" onclick="setBg(false)">Solid</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Generate Button -->
+    <button class="btn-generate" id="btnGenerate" onclick="startGenerate()" disabled>
+      ⚡ &nbsp;GENERATE ASSET
+    </button>
+  </div>
+
+  <!-- ═══════════ LOG TERMINAL ═══════════ -->
+  <div class="log-panel" id="logPanel" style="display:none">
+    <div class="log-header">
+      <div class="log-title">
+        <div class="log-dot" id="logDot"></div>
+        📡 Live Process Log
+      </div>
+      <span class="log-status" id="logStatus">Memproses...</span>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+
+  <!-- ═══════════ RESULTS ═══════════ -->
+  <div>
+    <div class="results-header">
+      <div class="results-title">📂 Hasil & Antrian Render</div>
+      <button class="btn-refresh" onclick="loadResults()">🔄 Refresh</button>
+    </div>
+    <div class="table-wrap" id="resultsContainer">
+      <div class="empty-state">
+        <div class="empty-icon">🎞</div>
+        <div class="empty-text">Belum ada hasil</div>
+        <div class="empty-sub">Upload file HTML di atas dan tekan Generate Asset</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // ═══════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════
+  let selectedFiles = [];
+  let loopEnabled = true;
+  let transparentBg = false;
+  let isGenerating = false;
+  let pollTimers = {};
+
+  // ═══════════════════════════════════════════
+  // FILE HANDLING
+  // ═══════════════════════════════════════════
+  const dropZone = document.getElementById('dropZone');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.html'));
+    addFiles(files);
+  });
+
+  function handleFileSelect(files) {
+    addFiles(Array.from(files));
+    document.getElementById('fileInput').value = '';
+  }
+
+  function addFiles(newFiles) {
+    for (const f of newFiles) {
+      if (selectedFiles.length >= 10) { showToast('Maksimal 10 file per batch', 'error'); break; }
+      if (!selectedFiles.find(x => x.file.name === f.file?.name || x.name === f.name)) {
+        selectedFiles.push({ file: f, name: f.name, size: f.size, content: null });
+      }
+    }
+    renderFileList();
+    updateGenerateBtn();
+  }
+
+  function removeFile(idx) {
+    selectedFiles.splice(idx, 1);
+    renderFileList();
+    updateGenerateBtn();
+  }
+
+  function renderFileList() {
+    const el = document.getElementById('fileList');
+    if (selectedFiles.length === 0) { el.innerHTML = ''; return; }
+    el.innerHTML = selectedFiles.map((f, i) => `
+      <div class="file-item">
+        <span>📄</span>
+        <span class="file-name">${f.name}</span>
+        <span class="file-size">${(f.size / 1024).toFixed(1)} KB</span>
+        <button class="file-remove" onclick="removeFile(${i})" title="Hapus">✕</button>
+      </div>`).join('');
+  }
+
+  function updateGenerateBtn() {
+    const btn = document.getElementById('btnGenerate');
+    btn.disabled = selectedFiles.length === 0 || isGenerating;
+    if (isGenerating) btn.textContent = '⏳  Memproses...';
+    else if (selectedFiles.length === 0) btn.textContent = '⚡  GENERATE ASSET';
+    else btn.innerHTML = `⚡ &nbsp;GENERATE ASSET &nbsp;<span style="opacity:0.7;font-weight:400">(${selectedFiles.length} file)</span>`;
+  }
+
+  // ═══════════════════════════════════════════
+  // TOGGLES
+  // ═══════════════════════════════════════════
+  function setLoop(val) {
+    loopEnabled = val;
+    document.getElementById('loopYes').classList.toggle('active', val);
+    document.getElementById('loopNo').classList.toggle('active', !val);
+  }
+
+  function setBg(isTransparent) {
+    transparentBg = isTransparent;
+    document.getElementById('bgTransp').classList.toggle('active', isTransparent);
+    document.getElementById('bgSolid').classList.toggle('active', !isTransparent);
+  }
+
+  // ═══════════════════════════════════════════
+  // GENERATE
+  // ═══════════════════════════════════════════
+  async function startGenerate() {
+    if (selectedFiles.length === 0 || isGenerating) return;
+    isGenerating = true;
+    updateGenerateBtn();
+
+    // Show log panel
+    const logPanel = document.getElementById('logPanel');
+    logPanel.style.display = 'block';
+    logPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('logBody').innerHTML = '';
+    document.getElementById('logStatus').textContent = 'Memproses...';
+    document.getElementById('logDot').classList.remove('idle');
+
+    try {
+      // Read all files as text
+      addLog('🔄 Membaca file HTML...', 'info');
+      const filesPayload = await Promise.all(selectedFiles.map(async f => {
+        const content = await readFileText(f.file);
+        return { name: f.name, content };
+      }));
+
+      // POST to start batch
+      addLog(`📦 Mengirim ${filesPayload.length} file ke server...`, 'info');
+      const resp = await fetch('/api/process-html-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: filesPayload, loop: loopEnabled, transparent: transparentBg })
+      });
+      const { jobId, error } = await resp.json();
+      if (error) throw new Error(error);
+
+      // Connect SSE
+      addLog(`🔌 Terhubung ke job: ${jobId}`, 'info');
+      const es = new EventSource(`/api/batch-logs/${jobId}`);
+
+      es.onmessage = (ev) => {
+        const data = JSON.parse(ev.data);
+        if (data.type === 'done') {
+          es.close();
+          isGenerating = false;
+          updateGenerateBtn();
+          selectedFiles = [];
+          renderFileList();
+          document.getElementById('logDot').classList.add('idle');
+          document.getElementById('logStatus').textContent = 'Selesai';
+          showToast('✅ Semua file diproses!', 'success');
+          setTimeout(loadResults, 1500);
+        } else {
+          addLog(data.message, data.type || 'info', data.time);
+        }
+      };
+      es.onerror = () => {
+        es.close();
+        isGenerating = false;
+        updateGenerateBtn();
+        document.getElementById('logDot').classList.add('idle');
+        document.getElementById('logStatus').textContent = 'Koneksi terputus';
+        addLog('⚠️ Koneksi SSE terputus. Cek server.', 'error');
+      };
+
+    } catch(err) {
+      addLog('❌ Error: ' + err.message, 'error');
+      isGenerating = false;
+      updateGenerateBtn();
+      document.getElementById('logDot').classList.add('idle');
+      document.getElementById('logStatus').textContent = 'Error';
+    }
+  }
+
+  function readFileText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+
+  function addLog(message, type = 'info', time = null) {
+    const body = document.getElementById('logBody');
+    const t = time || new Date().toLocaleTimeString('id-ID');
+    const div = document.createElement('div');
+    div.className = 'log-line';
+    div.innerHTML = `<span class="log-time">${t}</span><span class="log-msg ${type}">${escHtml(message)}</span>`;
+    body.appendChild(div);
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ═══════════════════════════════════════════
+  // RESULTS TABLE
+  // ═══════════════════════════════════════════
+  async function loadResults() {
+    try {
+      const resp = await fetch('/api/saved-items');
+      const items = await resp.json();
+      renderTable(items);
+      // Auto-poll items that are still rendering
+      items.forEach(item => {
+        if (item.statusConvertTsx === 'processing-preview' || item.statusConvertTsx === 'processing-tsx') {
+          startPolling(item.id, 'preview');
+        }
+        if (item.statusRender4k === 'processing') {
+          startPolling(item.id, '4k');
+        }
+      });
+    } catch(err) {
+      console.error('Gagal load results:', err);
+    }
+  }
+
+  function renderTable(items) {
+    const container = document.getElementById('resultsContainer');
+    if (!items || items.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-text">Belum ada hasil</div><div class="empty-sub">Upload file HTML di atas dan tekan Generate Asset</div></div>`;
+      return;
+    }
+
+    // Sort newest first
+    const sorted = [...items].reverse();
+
+    container.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:44px">No</th>
+              <th style="width:140px">File HTML</th>
+              <th style="width:220px">Rekomendasi Judul</th>
+              <th>Rekomendasi Keywords</th>
+              <th style="width:200px">Preview Video</th>
+              <th style="width:145px">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map((item, i) => renderRow(item, i + 1)).join('')}
+          </tbody>
+        </table>
+      </div>`;
+
+    // Attach change listeners for editable fields
+    sorted.forEach(item => {
+      const titleEl = document.getElementById(`title_${item.id}`);
+      const kwEl = document.getElementById(`kw_${item.id}`);
+      if (titleEl) titleEl.addEventListener('blur', () => saveField(item.id, 'judul', titleEl.value));
+      if (kwEl) kwEl.addEventListener('blur', () => saveField(item.id, 'keywords', kwEl.value));
+    });
+  }
+
+  function renderRow(item, no) {
+    const previewCell = renderPreviewCell(item);
+    const actsCell = renderActionsCell(item);
+    const kwShort = (item.keywords || '').split(',').slice(0,6).join(', ') + ((item.keywords||'').split(',').length > 6 ? '...' : '');
+
+    return `
+      <tr id="row_${item.id}">
+        <td class="td-no">${no}</td>
+        <td class="td-file">${escHtml(item.fileName || item.id)}</td>
+        <td>
+          <div class="edit-wrap">
+            <input id="title_${item.id}" class="edit-field" type="text" value="${escHtml(item.judul||'')}" placeholder="Judul video..." style="height:36px" />
+            <button class="btn-copy" onclick="copyText('${escHtml(item.judul||'')}', this)">📋</button>
+          </div>
+        </td>
+        <td>
+          <div class="edit-wrap">
+            <textarea id="kw_${item.id}" class="edit-field" rows="4" placeholder="Keywords...">${escHtml(item.keywords||'')}</textarea>
+            <button class="btn-copy" onclick="copyText(document.getElementById('kw_${item.id}').value, this)">📋</button>
+          </div>
+        </td>
+        <td class="preview-cell">${previewCell}</td>
+        <td>${actsCell}</td>
+      </tr>`;
+  }
+
+  function renderPreviewCell(item) {
+    if (item.previewUrl) {
+      return `<video class="preview-video" src="/api/preview-file/${item.id}" controls muted loop playsinline></video>`;
+    }
+    if (item.statusConvertTsx === 'processing-tsx') {
+      return `<span class="status-badge badge-converting"><span class="spin">⚙</span> Converting TSX...</span>`;
+    }
+    if (item.statusConvertTsx === 'processing-preview') {
+      return `<span class="status-badge badge-rendering"><span class="spin">☁</span> Rendering di Cloud...</span>`;
+    }
+    if (item.statusConvertTsx === 'failed') {
+      return `<span class="status-badge badge-error">❌ Gagal</span>`;
+    }
+    return `<span class="status-badge badge-queued">⏳ Antrian</span>`;
+  }
+
+  function renderActionsCell(item) {
+    const has4k = item.outputPath4k;
+    const hasPreview = !!item.previewUrl;
+    const is4kRendering = item.statusRender4k === 'processing';
+    const canGen4k = (item.statusConvertTsx === 'success' || hasPreview) && item.promptCode;
+
+    const btn4k = canGen4k
+      ? `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${is4kRendering ? 'disabled' : ''}>${is4kRendering ? '<span class="spin">☁</span> Rendering...' : '🚀 Generate 4K'}</button>`
+      : `<button class="btn-action btn-4k" disabled style="opacity:0.35">🚀 Generate 4K</button>`;
+
+    const btnDl = hasPreview
+      ? `<a class="btn-action btn-dl" href="/api/preview-file/${item.id}" download="${item.id}-preview.mp4">⬇ Download Preview</a>`
+      : '';
+
+    const btnDl4k = has4k
+      ? `<a class="btn-action btn-dl" href="/api/4k-file/${item.id}" download="${item.id}-4k.mov">⬇ Download 4K</a>`
+      : '';
+
+    const btnDel = `<button class="btn-action btn-del" onclick="deleteItem('${item.id}')">🗑 Hapus</button>`;
+
+    return `<div class="actions">${btn4k}${btnDl}${btnDl4k}${btnDel}</div>`;
+  }
+
+  // ═══════════════════════════════════════════
+  // POLLING
+  // ═══════════════════════════════════════════
+  function startPolling(itemId, renderType) {
+    const key = `${itemId}_${renderType}`;
+    if (pollTimers[key]) return; // already polling
+    pollTimers[key] = setInterval(() => checkStatus(itemId, renderType, key), 15000);
+  }
+
+  async function checkStatus(itemId, renderType, key) {
+    try {
+      const resp = await fetch(`/api/check-render-status/${itemId}/${renderType}`);
+      const data = await resp.json();
+
+      if (data.status === 'success') {
+        clearInterval(pollTimers[key]);
+        delete pollTimers[key];
+
+        // Update DB and re-render
+        if (renderType === 'preview') {
+          await fetch(`/api/save-item`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item: { id: itemId, previewUrl: data.url, statusConvertTsx: 'success' } })
+          });
+        } else {
+          await fetch(`/api/save-item`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item: { id: itemId, outputPath4k: data.url, statusRender4k: 'success' } })
+          });
+        }
+        showToast(`✅ ${renderType === 'preview' ? 'Preview' : '4K'} siap: ${itemId}`, 'success');
+        loadResults();
+
+      } else if (data.status === 'failed') {
+        clearInterval(pollTimers[key]);
+        delete pollTimers[key];
+        showToast(`❌ Render ${renderType} gagal: ${itemId}`, 'error');
+        loadResults();
+      }
+    } catch(e) { console.error('Polling error:', e); }
+  }
+
+  // ═══════════════════════════════════════════
+  // ACTIONS
+  // ═══════════════════════════════════════════
+  async function trigger4K(id) {
+    if (!confirm(`Generate 4K ProRes untuk "${id}"?\n\nProses ini akan git push dan trigger GitHub Actions (~10-15 menit).`)) return;
+    try {
+      const resp = await fetch(`/api/trigger-4k/${id}`, { method: 'POST' });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('🚀 4K render dipicu! Pantau di GitHub Actions.', 'success');
+      startPolling(id, '4k');
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal: ' + err.message, 'error');
+    }
+  }
+
+  async function deleteItem(id) {
+    if (!confirm(`Hapus item "${id}" dari daftar?\nFile video tidak ikut terhapus.`)) return;
+    try {
+      const resp = await fetch(`/api/delete-item/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Gagal hapus');
+      showToast('🗑 Item dihapus', 'success');
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal hapus: ' + err.message, 'error');
+    }
+  }
+
+  async function saveField(id, field, value) {
+    try {
+      await fetch('/api/save-item', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: { id, [field]: value } })
+      });
+    } catch(e) { console.error('Save field error:', e); }
+  }
+
+  async function copyText(text, btn) {
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = '✓';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '📋'; btn.classList.remove('copied'); }, 2000);
+    } catch(e) {}
+  }
+
+  // ═══════════════════════════════════════════
+  // TOAST
+  // ═══════════════════════════════════════════
+  function showToast(msg, type = 'info') {
+    const old = document.querySelector('.toast');
+    if (old) old.remove();
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+  }
+
+  // ═══════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════
+  loadResults();
+  // Auto-refresh every 30s
+  setInterval(loadResults, 30000);
+</script>
+
+</body>
+</html>
