@@ -1,210 +1,121 @@
-The user wants a Remotion component that replicates the provided HTML/JS/Three.js/GSAP scene.
-Key constraints:
-1.  **Single .tsx file**, starting with the mandatory import line.
-2.  **No external libs** (Three.js, GSAP, React import). Must re-implement logic natively in Remotion/React.
-3.  **Frame-locked rendering**: Use `useCurrentFrame`, `interpolate`, `Easing`. No `Date.now`, `Math.random` in render, `setInterval`, CSS animations.
-4.  **4K Auto-Fit**: `ORIGINAL_WIDTH=1920`, `ORIGINAL_HEIGHT=1080`, scale factor logic.
-5.  **Seamless Looping**: LCM of cycles, capped at 15s. Symmetrical interpolation.
-6.  **Dynamic Text**: `getInputProps` for title/keywords.
-7.  **Visual Parity**: Must look like the HTML output (dark bg, video cards with sweeps, center subscribe rings, Three.js background: floor, grid, rings, particles, lights, camera move).
+The user wants a Remotion component that replicates the provided HTML/JS (Three.js + GSAP) visual exactly, but using only Remotion APIs (no Three.js, no GSAP, no external libs). The HTML features:
+1. A dark radial gradient background.
+2. A Three.js scene with:
+   - Reflective floor (plane) with grid.
+   - Three floating holographic rings (torus) rotating and bobbing.
+   - 1200 additive particles floating up and drifting.
+   - Two moving point lights (blue and white) sweeping across the floor.
+   - Camera parallax drift.
+3. UI Layer (HTML/CSS):
+   - Two video cards (left/right) with glassmorphism, HUD corners, light sweep animation.
+   - Center subscribe zone with three rotating rings (outer, middle, inner) and a pulsing center.
+   - Two horizontal HUD lines (top/bottom).
+   - GSAP floating animations on cards and subscribe zone.
 
-**Major Challenge**: The original uses Three.js for a 3D background. Remotion runs in a headless Chrome (Puppeteer). We *can* use Three.js inside Remotion if we bundle it, but the prompt says: "Do NOT import from 'three', 'gsap', or any external library." and "NEVER add any import other than the single remotion import line above."
+Constraints:
+- Must be a single .tsx file.
+- First line import from remotion only.
+- No Three.js, no GSAP, no external libs.
+- Must simulate 3D scene using 2D/3D CSS transforms or Canvas 2D? Remotion supports WebGL via `<Canvas>` but we cannot import three. We can use Remotion's `<Canvas>` component (from remotion) to draw 2D, but 3D is tricky. However, the instruction says "Do NOT import from 'three'". It doesn't explicitly forbid using Remotion's `<Canvas>` for 2D drawing. But replicating a full 3D scene with perspective, fog, lights, particles, rings, floor reflection in 2D Canvas is heavy but doable with math.
+- However, the user expects "high-fidelity 4K video rendering for commercial microstock". The original uses Three.js. In Remotion, we can use `<Canvas>` to draw the background frame by frame. We'll need to implement a pseudo-3D engine or simulate the look with 2D layers (parallax, scaling).
+- Given the complexity, we can approximate the 3D scene using 2D Canvas with perspective projection for particles, rings, floor grid, and lights. But that's a lot of code.
+- Alternative: Since Remotion runs in Chrome/Puppeteer, we could actually use Three.js inside Remotion by importing it? But rule says "Do NOT import from 'three'". So we cannot.
+- We must re-implement the visual using HTML/CSS (with Remotion's interpolate) and maybe Canvas 2D for particles.
+- The UI layer (video cards, subscribe zone, HUD lines) can be done with HTML/CSS (styled divs) driven by Remotion interpolate.
+- The Three.js background: we can simulate with a `<Canvas>` component drawing:
+  - Radial gradient background (already in CSS).
+  - Floor grid: draw lines in perspective.
+  - Rings: draw torus-like shapes (ellipses) rotating.
+  - Particles: draw circles with additive blending (globalCompositeOperation='lighter').
+  - Lights: draw radial gradients on floor.
+  - Camera parallax: shift everything slightly.
 
-This means I must **re-implement the 3D scene using pure CSS/HTML/Canvas 2D or SVG** inside the Remotion component, simulating the 3D look (floor, grid, rings, particles, lights) with 2D transforms and canvas drawing, OR use a `<canvas>` element and draw the 3D scene manually using Canvas 2D API (software rendering) frame-by-frame.
+But writing a full 3D renderer in 2D Canvas within a single Remotion component is huge. However, the instruction says "single, production-grade Remotion component". We must try.
 
-Given the complexity of the Three.js scene (perspective camera, moving lights, floor reflection, particles, rings), a full software rasterizer in JS inside a Remotion component is extremely heavy and prone to timeout/performance issues in Puppeteer.
+We can break down:
+- Use `useVideoConfig` for width, height, fps.
+- Use `useCurrentFrame` for time.
+- Define ORIGINAL_WIDTH=1920, ORIGINAL_HEIGHT=1080.
+- Scale factor for 4K auto-fit.
+- Determine loop duration: LCM of all cycles.
+  - Sweep: 6s (left), 6s (right) with 3s delay -> overall 6s.
+  - Ring rotations: outer 15s, middle 20s, inner 10s (alternate). LCM of 15,20,10 = 60s. But cap at 15s max. So we need to adjust speeds to fit within 15s loop. The requirement: "Duration Cap: Between 5 and 15 seconds MAX. Use LCM of all animation cycles. Cap at 15s max." So we must compress animations to fit a loop <=15s. We can set a base loop duration, e.g., 12 seconds (LCM of 3,4,6,12?). Let's pick 12 seconds as loop duration.
+  - GSAP floats: card left/right 4s, sub-zone 3.5s. Lights: 8s, 10s. Camera: 12s, 10s. LCM of 4, 3.5, 8, 10, 12, 10 -> not integer. We'll approximate with a 12s loop and adjust easing to loop seamlessly.
+  - We'll set `const LOOP_DURATION = 12;` seconds.
+  - Then `const localFrame = frame % (fps * LOOP_DURATION);`
+  - All interpolations use `localFrame / fps` as time in seconds.
 
-However, the prompt says: "The visual output must be a 1:1 mirror of the original HTML, but entirely re-engineered for frame-locked rendering." and "Do NOT import from 'three'".
+- Pre-calculate random particles: generate static array of 1200 particles with x,y,z, speed, drift phase.
 
-Strategy: **Simulate the 3D background using layered 2D elements (CSS transforms, Canvas 2D for particles/grid) and Remotion interpolation.** This is the only way to satisfy "No external imports" and "Frame-locked".
+- For the 3D scene, we'll implement a simple perspective projection: 
+  - Camera position: x, y, z. Look at target.
+  - Project 3D points to 2D: scale = focalLength / (focalLength + z), x2d = x * scale + centerX, y2d = y * scale + centerY.
+  - Focal length ~ 500.
+  - We'll simulate floor grid as lines in XZ plane at y=-6.
+  - Rings: torus geometry approximated as circles (since they are horizontal rings). Actually they are TorusGeometry rotated x=PI/2, so they are horizontal rings. We can draw them as circles with stroke.
+  - Particles: points with size based on depth.
+  - Lights: draw radial gradients on floor plane (at y=-6) at light positions.
 
-**Scene Breakdown & Remotion Implementation Plan:**
+- Fog: fade particles and grid with distance.
 
-1.  **Container**: 1920x1080, scaled to fit viewport (handled by Remotion root usually, but we apply scale factor to wrapper).
-2.  **Background Gradient**: Radial gradient (CSS).
-3.  **3D Floor/Grid Simulation**:
-    *   Floor: A large div with perspective transform (`rotateX`), gradient simulating reflectivity.
-    *   Grid: Canvas 2D drawing lines in perspective, animated scrolling.
-4.  **Holographic Rings**: 3 Rings. SVG or Canvas circles, scaled/positioned in "3D" (Y position + scale = depth), rotating Z, floating Y.
-5.  **Particles**: 1200 particles. Pre-calculate positions/speeds in `static const` array. Render via Canvas 2D (single canvas, clear/draw each frame) for performance. Additive blending via `globalCompositeOperation='lighter'`.
-6.  **Lights (Floor Highlights)**: Simulated as large radial gradients (divs or canvas) moving on the "floor" plane.
-7.  **Camera Parallax**: Simulated by translating the entire "3D background group" (floor, grid, rings, particles, lights) slightly opposite to camera movement.
-8.  **UI Layer (Video Cards, Subscribe Zone)**: Standard React divs with Remotion-driven animations (floating, sweeps, ring rotations, pulse).
-9.  **Loop Duration Calculation**:
-    *   Card Float: 4s (GSAP yoyo 4s -> 8s full cycle? No, GSAP `duration: 4, yoyo: true, repeat: -1` means 4s up, 4s down = 8s cycle).
-    *   Sub Zone Float: 3.5s * 2 = 7s cycle.
-    *   Sweep Left: 6s.
-    *   Sweep Right: 6s (delay 3s).
-    *   Ring Outer Rot: 15s.
-    *   Ring Middle Rot: 20s.
-    *   Ring Inner Rot: 10s (alternate -> 20s cycle).
-    *   Pulse: 4s.
-    *   Blue Light: 8s * 2 = 16s.
-    *   White Light: 10s * 2 = 20s.
-    *   Camera X: 12s * 2 = 24s.
-    *   Look Target: 10s * 2 = 20s.
-    *   Rings Rot Z: Continuous (0.1, 0.15, 0.2 rad/s). Periods: ~62s, ~41s, ~31s.
-    *   Rings Float Y: Sin(time). Period ~6s.
-    *   Particles: Continuous drift.
+- Since we cannot use WebGL, we'll use Canvas 2D API inside a `<Canvas>` component from Remotion? Actually Remotion has a `<Canvas>` component that gives a canvas ref and we can draw on it. But we need to draw each frame. We'll use `<Canvas width={width} height={height}>` and a draw function.
 
-    **LCM Strategy**: Cap at 15s (Requirement 5: "Duration Cap: Between 5 and 15 seconds MAX. Use LCM of all animation cycles. Cap at 15s max.").
-    Since exact LCM of all these (8, 7, 6, 15, 20, 20, 4, 16, 20, 24, 20...) is huge, we **must** normalize/adjust cycle durations to fit a common loop duration <= 15s.
-    Let's pick **12 seconds (12s)** as the master loop duration. It divides well by 4, 6, 3, 12.
-    We will map all animations to fit within 12s (or 10s, or 12s).
-    *   Card Float: 4s up/down -> 8s cycle. Fit to 12s? Speed up slightly to 6s cycle (3s up, 3s down). Or 4s cycle (2s up, 2s down). Let's use **4s cycle** (2s up, 2s down) for cards. **6s cycle** for sub-zone (3s up, 3s down).
-    *   Sweep: 6s cycle. Perfect.
-    *   Rings Rot: Outer 15s -> speed up to 12s (or 6s, 4s, 3s). Middle 20s -> 12s. Inner 20s (alt) -> 12s.
-    *   Pulse: 4s -> 4s (fits 12s).
-    *   Lights/Camera: Speed up to 12s cycle.
-    *   Particles: Loop height in 12s.
+- However, the UI layer (video cards, etc.) is HTML/CSS. We can overlay HTML on top of the Canvas. In Remotion, we can have a wrapper div with the Canvas as background (absolute) and UI layer as absolute on top.
 
-    **Decision**: Master Loop = **12 Seconds** (FPS * 12 frames).
-    `const DURATION_IN_FRAMES = fps * 12;`
-    `const localFrame = frame % DURATION_IN_FRAMES;`
+- The original HTML has `#endscreen-container` with width 1920, height 1080, and transform scale. We'll replicate that with a div scaled by scaleFactor.
 
-10. **Pre-calculation**:
-    *   Particles: 1200 items. `x, y, z, speedY, driftPhase, size, opacity`. Static const array.
-    *   Rings: 3 items. Initial Y, Scale, RotSpeed, FloatAmp.
-    *   Lights: Paths pre-calculated.
+- The background radial gradient is CSS on container. We'll keep that.
 
-11. **Canvas 2D Rendering**:
-    *   Use a `<canvas ref={canvasRef} width={1920} height={1080}>`.
-    *   `useEffect` or render-phase drawing? Remotion renders frame by frame. Drawing must happen **during render** (synchronous) or via `useMemo`/`useEffect` with frame dependency.
-    *   Best practice in Remotion for Canvas: Draw inside the component body (synchronous) using `useCurrentFrame` to get props, or use a `Canvas` component that takes `frame` as prop and draws in `useLayoutEffect` / `useEffect`. But Remotion docs recommend drawing in a `useEffect` with `frame` dependency, or using the `<Canvas>` component from `@remotion/canvas` (banned import).
-    *   **Alternative**: Render particles/rings/grid as **DOM elements** (divs) for simplicity? 1200 divs = bad performance. 3 rings = fine. Grid lines = many divs.
-    *   **Best Compromise**: Use a single `<canvas>` for the "Three.js Background" layer (Grid, Particles, Rings, Lights, Floor). Draw it **synchronously in the render phase** using a ref and `useCurrentFrame`. Remotion executes the component function for every frame. We can grab the canvas context and draw immediately. This is deterministic and frame-locked.
-    *   *Caveat*: React might batch/skip renders? No, Remotion calls component for every frame.
-    *   *Implementation*: `const canvasRef = useRef<HTMLCanvasElement>(null);` -> `const ctx = canvasRef.current?.getContext('2d');` -> `if(ctx) drawBackground(ctx, localFrame, fps, width, height);` inside component body.
+- The Three.js canvas was absolute top:0 left:0 width:100% height:100% z-index:1 opacity:0.8. We'll make our Canvas same.
 
-12. **Drawing Logic (Canvas 2D)**:
-    *   **Coordinate System**: Simulate 3D Perspective.
-        *   Camera: `cx, cy, cz` (position), `lookAtX, lookAtY`.
-        *   Projection: `scale = focalLength / (focalLength + z)`. `screenX = (x - camX) * scale + centerX`. `screenY = (y - camY) * scale + centerY`.
-    *   **Floor**: Draw a large plane at y=-6. Perspective grid lines.
-    *   **Grid Helper**: Lines on floor.
-    *   **Rings**: Torus -> Project as ellipses (circles scaled by perspective). Rotate Z.
-    *   **Particles**: Points. Additive blending (`lighter`).
-    *   **Lights**: Radial gradients on floor plane.
+- UI layer z-index:10.
 
-    This is a **lot of code** for a single file. I need to write a compact but complete software renderer.
+- So structure:
+  <div style={containerStyle}>
+    <Canvas style={canvasStyle} width={ORIGINAL_WIDTH} height={ORIGINAL_HEIGHT} onDraw={drawBackground} />
+    <div className="ui-layer"> ... </div>
+  </div>
 
-13. **UI Layer (React DOM)**:
-    *   Video Cards: Two divs. Floating Y animation (sin/cos). Light Sweep (div moving left->right).
-    *   HUD Corners: 4 divs per card (border pieces).
-    *   Subscribe Zone: Center. 3 Rings (Rotating Z). Center Circle (Pulse Scale).
-    *   HUD Lines: Top/Bottom bars.
-    *   Text Overlay: Title + Keywords badges.
+- But Remotion's `<Canvas>` component expects a `draw` function that receives (ctx, width, height). We'll define drawBackground.
 
-14. **Easing Mapping**:
-    *   GSAP `sine.inOut` -> `Easing.inOut(Easing.sin)`
-    *   GSAP `linear` -> `Easing.linear`
-    *   GSAP `ease-in-out` (CSS) -> `Easing.inOut(Easing.quad)` or `Easing.inOut(Easing.sin)`. CSS `ease-in-out` ~= `cubic-bezier(0.42, 0, 0.58, 1)`. Remotion `Easing.inOut(Easing.cubic)` is close. `Easing.inOut(Easing.sin)` is standard sine.
-    *   CSS `cubic-bezier(0.4, 0, 0.2, 1)` (Material Design standard) -> `Easing.bezier(0.4, 0, 0.2, 1)`.
+- We need to compute everything in drawBackground using current frame time.
 
-15. **Structure**:
-    *   Imports.
-    *   Constants (ORIGINAL_W/H, PARTICLE_COUNT, PRECALC DATA).
-    *   Component `LuxuryFuturisticEndscreen`.
-    *   Hooks: `useVideoConfig`, `useCurrentFrame`.
-    *   Input Props.
-    *   Loop Frame Calc.
-    *   Canvas Ref + Draw Call (Sync).
-    *   Return JSX: Wrapper (Scale) -> Canvas (Background) -> UI Layer (Cards, Subscribe, HUD Lines, Text).
+- Since we need to use `useCurrentFrame` inside the component, but the draw function is a callback. We can pass the current frame time as a prop to the Canvas? Actually Remotion's Canvas `onDraw` receives a `frame` prop? Looking at Remotion docs: `<Canvas width={1920} height={1080} onDraw={(ctx, frame) => { ... }} />` The second argument is the frame number. Yes! So we can use that frame directly in draw function. That's perfect.
 
-**Writing the Code - Mental Draft**:
+- So we don't need useCurrentFrame for the background; we get frame in onDraw.
 
-```tsx
-import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
+- For UI animations, we need useCurrentFrame in the component.
 
-// Constants
-const ORIGINAL_WIDTH = 1920;
-const ORIGINAL_HEIGHT = 1080;
-const MASTER_LOOP_DURATION = 12; // Seconds
-const PARTICLE_COUNT = 800; // Reduced for perf, 1200 might be slow in software render
+- We'll create a component `LuxuryFuturisticEndscreen`.
 
-// Pre-calc Particles
-const particles = Array.from({length: PARTICLE_COUNT}, (_, i) => {
-  // Deterministic pseudo-random via seed/i
-  const rand = (seed: number) => { /* simple hash */ };
-  return { x: ..., y: ..., z: ..., speedY: ..., drift: ..., size: ..., opacity: ... };
-});
+- Steps:
+  1. Import line.
+  2. Define constants: ORIGINAL_WIDTH, ORIGINAL_HEIGHT, LOOP_DURATION=12, FPS? We'll get fps from useVideoConfig.
+  3. Pre-calculate particles array (outside component).
+  4. Component:
+     - useVideoConfig -> width, height, fps.
+     - scaleFactor = Math.min(width/ORIGINAL_WIDTH, height/ORIGINAL_HEIGHT) * 0.85.
+     - frame = useCurrentFrame().
+     - localFrame = frame % (fps * LOOP_DURATION).
+     - time = localFrame / fps.
+     - inputProps = getInputProps().
+     - Compute all interpolations for UI elements.
+     - Render container div with scale transform.
+     - Inside: Canvas for background, UI layer div.
 
-// Pre-calc Rings
-const ringsData = [ ... ];
+- For UI animations:
+   - Video cards float: y offset = interpolate(time, [0, 2, 4], [-15, 15, -15])? Original GSAP: y: "-=15" over 4s, yoyo, repeat. So it goes from 0 to -15 to 0 over 4s? Actually "-=15" means relative to current. Starting at 0, goes to -15 over 4s, then back to 0 over 4s (since yoyo). So period 8s. But we have loop 12s. We'll make a 4s cycle (0->-15->0) and loop. So interpolate with inputRange [0, 2, 4] output [-15, 15, -15]? Wait: at t=0, y=0; t=2, y=-15; t=4, y=0. So output [0, -15, 0]. But GSAP ease sine.inOut. Use Easing.inOut(Easing.sin).
+   - Left card delay? stagger: 1. So left starts at 0, right starts at 1s? Actually stagger: 1 means each element starts 1s apart. So left at 0, right at 1s. We'll offset time for right by 1s.
+   - Subscribe zone: y: "+=10" over 3.5s, yoyo. So period 7s. Interpolate [0, 1.75, 3.5] -> [0, 10, 0].
+   - Light sweeps on video cards: CSS animation sweep 6s cubic-bezier(0.4,0,0.2,1) infinite. Left starts at 0, right delay 3s. We'll replicate with interpolate for left: left position from -150% to 200% over 1.2s (20% of 6s) then stay at 200% for rest. Actually keyframes: 0% left:-150%, 20% left:200%, 100% left:200%. So it moves quickly then stops. We'll do: for t in [0,6): if t<1.2 interpolate from -150 to 200, else 200. But seamless loop requires first and last same. At t=0, left=-150; at t=6, left=200 (not same). So we need to adjust to loop seamlessly. Since the animation is infinite, we can make it loop by having the sweep repeat every 6s, but at the loop boundary (12s) we need continuity. At t=0: -150, t=6: 200, t=12: -150? Not continuous. Better to make the sweep a continuous loop: move from -150 to 200 over 6s, then instantly back to -150? But CSS animation doesn't do that; it stays at 200% for 80% of time. That means at the end of 6s it's at 200%, then next cycle starts at -150% (jump). That's not seamless. However, the original CSS animation is infinite, so it jumps. For Remotion seamless loop, we must avoid jumps. We can modify to make it continuous: sweep across over 6s, then quickly reset? But we have 12s loop. We can do two sweeps in 12s: each 6s, but at 6s it jumps. To make seamless, we can have the sweep move from -150 to 200 over 6s, then from 200 to -150 over 0s? Not good. Alternatively, we can make the sweep a continuous back-and-forth? But original is one-way. Since the requirement says "Symmetrical Interpolation: First and last value in every interpolate() output MUST be identical for seamless looping." We must ensure that at t=0 and t=LOOP_DURATION, the value is same. So we need to design the sweep such that at t=0 and t=12, left position is same. We can make the sweep period 12s: move from -150 to 200 over 2.4s (20% of 12), stay at 200 for 9.6s, then at 12s jump back to -150? That's still a jump. To avoid jump, we can have it move back from 200 to -150 over the last 2.4s? But that changes animation. However, the original is not seamless either (it jumps). For microstock, seamless loop is required. So we must create a seamless version. Let's make the sweep move continuously across the card: from -150% to 200% over 6s, then instantly back to -150%? That's a jump. To make it seamless, we can have two sweeps overlapping? Or we can make it a ping-pong: sweep left to right over 6s, then right to left over 6s. That would be seamless at 12s. But original is one-way. The requirement: "The visual output must be a 1:1 mirror of the original HTML". But also "Absolute Seamless Looping". There's a conflict. Usually for microstock, they want seamless loops. We'll prioritize seamless looping and approximate the visual. We'll make the sweep a continuous motion: left: -150% to 200% over 6s, then 200% to -150% over 6s (reverse). That's a 12s cycle. For right card, delay 3s (half cycle). So at t=0, left at -150, right at 200? Actually delay 3s means right starts 3s later. If left goes -150->200 in 6s, at t=3 left is halfway. Right starts at -150 at t=3. That might look okay. We'll implement with interpolate using modulo.
 
-// Draw Function
-function drawBackground(ctx: CanvasRenderingContext2D, frame: number, fps: number, w: number, h: number) {
-  const t = frame / fps;
-  // Clear
-  // Camera Parallax
-  // Draw Floor Grid
-  // Draw Rings
-  // Draw Particles
-  // Draw Light Spots
-}
+   - Rings rotation:
+     - Outer: 15s linear 360deg. In 12s loop, we can do 360 * (12/15) = 288 deg per loop? But need seamless: at t=0 and t=12, rotation must be same modulo 360. So we can rotate at speed 360/15 = 24 deg/s. Over 12s -> 288 deg. Not multiple of 360. So at t=12, rotation = 288 deg, not 0. To make seamless, we need rotation at t=12 to be multiple of 360. So we can adjust speed: make it rotate 360 deg in 12s (30 deg/s). That's different from original 15s. But we can keep original speed and accept that at loop boundary it jumps? Requirement says first and last value identical. So we must adjust speeds to fit loop duration. We'll set loop duration to 12s and make all rotations complete integer cycles in 12s.
+     - Outer: 12s per 360deg (1 cycle).
+     - Middle: reverse, 12s per 360deg (1 cycle).
+     - Inner: alternate 10s ease-in-out. Alternate means 0->360->0 over 20s. In 12s, we can do 0->360 over 6s, then 360->0 over 6s (using ease-in-out). That's seamless at 12s.
+     - Pulse: 4s ease-in-out. 12s is multiple of 4 (3 cycles). Good.
 
-export const LuxuryFuturisticEndscreen = () => {
-  const { width, height, fps } = useVideoConfig();
-  const frame = useCurrentFrame();
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
-  const localFrame = frame % (fps * MASTER_LOOP_DURATION);
-  
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  if (canvasRef.current) {
-     const ctx = canvasRef.current.getContext('2d');
-     if (ctx) drawBackground(ctx, localFrame, fps, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-  }
+   - HUD lines: static.
 
-  // Input Props
-  const inputProps = (getInputProps() as any) || {};
-  const judul = inputProps.judul || 'Stock Video';
-  const keywordsList = (inputProps.keywords || 'motion, abstract, loop').split(',');
-
-  // UI Animations (interpolate)
-  // ...
-
-  return (
-    <div style={{ transform: `scale(${scaleFactor})`, transformOrigin: 'center center', width: ORIGINAL_WIDTH, height: ORIGINAL_HEIGHT, overflow: 'hidden' }}>
-       <canvas ref={canvasRef} width={ORIGINAL_WIDTH} height={ORIGINAL_HEIGHT} style={{ position: 'absolute', top: 0, left: 0, zIndex: 1, opacity: 0.8 }} />
-       <div className="ui-layer" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 10, pointerEvents: 'none' }}>
-          {/* HUD Lines */}
-          {/* Video Cards */}
-          {/* Subscribe Zone */}
-          {/* Text Overlay */}
-       </div>
-    </div>
-  );
-}
-
-export default LuxuryFuturisticEndscreen;
-```
-
-**Refining the Canvas Renderer**:
-Need a minimal 3D projection.
-`focalLength = 500` (approx).
-`camZ = 25`, `camY = 5`.
-`lookAt` offset.
-Projection: `const scale = focalLength / (focalLength + (pointZ - camZ));` (Assuming camera at 0,0,0 looking down -Z? Three.js default: Camera at (0,0,25) looking at (0,0,0). So World Z=0 is at distance 25.
-Let's set Camera at `camX, camY, camZ`.
-Point World: `px, py, pz`.
-Relative: `rx = px - camX`, `ry = py - camY`, `rz = pz - camZ`.
-Project: `sx = rx * (fl / rz) + cx`, `sy = ry * (fl / rz) + cy`. (Assuming looking down -Z, so rz negative for visible objects? Three.js camera looks down -Z. So objects at z=0 have rz = -25. fl/rz negative -> flip.
-Better: `rz = camZ - pz` (distance). `scale = fl / rz`.
-`screenX = (px - camX) * scale + centerX`.
-`screenY = (camY - py) * scale + centerY` (Y up).
-
-**Floor Grid**:
-Plane at y = -6. Size 200x200. Lines every 2 units (100 lines).
-Draw lines in perspective.
-
-**Rings**:
-Torus at y = -2, 1, 4. Radius 12, tube 0.02.
-Project as Circle (Ellipse). Major axis = Radius * scale. Minor axis = Radius * scale * cos(angleX). Ring is horizontal (rotX=PI/2), so it's a circle in XZ plane. Projected Y depends on camera Y.
-Actually, if ring is flat (horizontal), it projects as an ellipse.
-Center: (0, ringY, 0).
-Scale = fl / (camZ - 0) = fl / camZ.
-RadiusScreen = 12 * scale.
-YScreen = centerY + (camY - ringY) * scale.
-Draw Ellipse: `ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, 2PI)`.
-Rotation Z: Rotates the ellipse? No, a circle rotated Z is still a circle. The *texture* rotates. Since we draw wireframe, rotation Z does nothing visually for a circle.
-*Correction*: The rings in Three.js are `
+   - Camera parallax: original GSAP moves camera x: 2 over 12s yoyo, y: 4.5 to 5? Actually camera.position.y from 5 to 4.5? Wait: camera.position.set(0,5,25). GSAP to y:4.5 over 12s yoyo. So y oscillates 5 -> 4.5 -> 5 over 24s? Actually duration 12, yoyo, repeat -1: so 12s to go 5->4.5, 12s back. Period 24s. We'll compress to 12s period: 5->4.5->5 over 12s. Similarly x: 0->2->0 over 12s. LookTarget x: 0->2
