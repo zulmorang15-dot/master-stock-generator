@@ -42,6 +42,52 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_USERNAME = process.env.GITHUB_USERNAME;
 const GITHUB_REPO = process.env.GITHUB_REPO;
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+
+// DeepSeek AI Call Helper (langsung menggunakan API resmi DeepSeek)
+async function callDeepSeek(prompt, model = "deepseek-chat") {
+  try {
+    if (!DEEPSEEK_API_KEY) {
+      throw new Error("DEEPSEEK_API_KEY tidak ditemukan di .env");
+    }
+
+    console.log("📡 Mengirim request ke DeepSeek AI...");
+    console.log("🤖 Model:", model);
+
+    const response = await axios.post(
+      "https://api.deepseek.com/chat/completions",
+      {
+        model: model,
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+        stream: false
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 90000
+      }
+    );
+
+    if (!response.data.choices || !response.data.choices[0]) {
+      throw new Error("Respons DeepSeek tidak valid: " + JSON.stringify(response.data));
+    }
+
+    console.log("✅ Respon DeepSeek berhasil diterima!");
+    return response.data.choices[0].message.content;
+  } catch (error) {
+    console.error("❌ DeepSeek Error:", error.response?.data || error.message);
+    throw error;
+  }
+}
 
 // Inisialisasi Gemini AI
 let genAI = null;
@@ -245,7 +291,17 @@ app.post("/api/generate", async (req, res) => {
     "]";
 
   try {
-    const aiResponse = await callOpenRouter(prompt);
+    let aiResponse = "";
+    if (DEEPSEEK_API_KEY) {
+      try {
+        aiResponse = await callDeepSeek(prompt);
+      } catch (err) {
+        console.warn("⚠️ DeepSeek gagal untuk generate ide, mencoba fallback ke OpenRouter...");
+        aiResponse = await callOpenRouter(prompt);
+      }
+    } else {
+      aiResponse = await callOpenRouter(prompt);
+    }
     
     let jsonText = aiResponse.trim();
     if (jsonText.startsWith("`" + "`" + "`json")) {
@@ -256,13 +312,13 @@ app.post("/api/generate", async (req, res) => {
 
     jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
     const dataObjek = JSON.parse(jsonText);
-    console.log("✅ Sukses memproses data riset dari OpenRouter!");
+    console.log("✅ Sukses memproses data riset!");
     return res.json(dataObjek);
 
   } catch (error) {
     console.error("❌ Detail Eror Koneksi AI:");
     console.error(error.message);
-    return res.status(500).json({ error: "Koneksi ke OpenRouter terputus.", details: error.message });
+    return res.status(500).json({ error: "Koneksi ke AI terputus.", details: error.message });
   }
 });
 
@@ -1149,7 +1205,18 @@ Struktur objek wajib persis seperti ini:
 }`;
 
       let aiResponse = "";
-      if (genAI) {
+      if (DEEPSEEK_API_KEY) {
+        try {
+          aiResponse = await callDeepSeek(seoPrompt);
+        } catch (err) {
+          console.warn("⚠️ DeepSeek gagal untuk SEO, mencoba fallback...");
+          if (genAI) {
+            aiResponse = await callGemini(seoPrompt);
+          } else {
+            aiResponse = await callOpenRouter(seoPrompt, "gemini-2.0-flash");
+          }
+        }
+      } else if (genAI) {
         aiResponse = await callGemini(seoPrompt);
       } else {
         aiResponse = await callOpenRouter(seoPrompt, "gemini-2.0-flash");
@@ -1254,7 +1321,18 @@ ${file.content}
 OUTPUT: Start directly with the import line. No markdown. No explanation.`;
 
       let tsxResponse = "";
-      if (genAI) {
+      if (DEEPSEEK_API_KEY) {
+        try {
+          tsxResponse = await callDeepSeek(conversionPrompt);
+        } catch (err) {
+          console.warn("⚠️ DeepSeek gagal untuk TSX Conversion, mencoba fallback...");
+          if (genAI) {
+            tsxResponse = await callGemini(conversionPrompt);
+          } else {
+            tsxResponse = await callOpenRouter(conversionPrompt, "gemini-2.0-flash");
+          }
+        }
+      } else if (genAI) {
         tsxResponse = await callGemini(conversionPrompt);
       } else {
         tsxResponse = await callOpenRouter(conversionPrompt, "gemini-2.0-flash");
