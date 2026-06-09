@@ -7,12 +7,12 @@ const CYCLE_DURATION = 8;
 const CyberPunkNeonRingAnimation: React.FC = () => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
+  
+  const localFrame = frame % (fps * CYCLE_DURATION);
   const inputProps = (getInputProps() as any) || {};
   const judul = inputProps.judul || 'Cyber Tech';
-  const keywordsList = (inputProps.keywords || 'motion, abstract, loop').split(',');
-
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
-  const localFrame = frame % (fps * CYCLE_DURATION);
+  const keywordsList = (inputProps.keywords || 'cyberpunk, neon, rings, technology').split(',');
 
   const rotate1 = interpolate(
     localFrame,
@@ -28,23 +28,20 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
     { extrapolateRight: 'clamp' }
   );
 
-  const glowOpacity = interpolate(
-    Math.sin((localFrame / (fps * CYCLE_DURATION)) * Math.PI * 2),
-    [-1, 1],
-    [0.6, 1]
-  );
+  const ring1Rotation = `${rotate1}deg`;
+  const ring2Rotation = `${rotate2}deg`;
 
   return (
     <div style={{
       width,
       height,
       backgroundColor: '#030008',
+      backgroundImage: 'radial-gradient(circle at center, #0a001a 0%, #030008 100%)',
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      overflow: 'hidden',
       position: 'relative',
-      backgroundImage: `radial-gradient(circle at center, #0a001a 0%, #030008 100%)`,
+      overflow: 'hidden',
       fontFamily: 'sans-serif'
     }}>
       <div style={{
@@ -65,8 +62,8 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
           borderTopColor: '#ff007f',
           borderBottomColor: '#ff007f',
           borderRadius: '50%',
-          boxShadow: `0 0 15px rgba(255, 0, 127, ${glowOpacity})`,
-          transform: `rotate(${rotate1}deg)`,
+          boxShadow: '0 0 15px #ff007f',
+          transform: `rotate(${ring1Rotation})`,
         }} />
         
         <div style={{
@@ -77,8 +74,8 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
           borderLeftColor: '#00f0ff',
           borderRightColor: '#00f0ff',
           borderRadius: '50%',
-          boxShadow: `0 0 15px rgba(0, 240, 255, ${glowOpacity})`,
-          transform: `rotate(${rotate2}deg)`,
+          boxShadow: '0 0 15px #00f0ff',
+          transform: `rotate(${ring2Rotation})`,
         }} />
 
         <div style={{
@@ -95,40 +92,26 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
 
         <div style={{
           position: 'absolute',
-          bottom: 80,
-          left: 80,
+          bottom: 50,
+          left: 50,
           display: 'flex',
           gap: '10px',
           zIndex: 20
         }}>
-          {keywordsList.map((word, i) => (
+          {keywordsList.map((kw, i) => (
             <div key={i} style={{
-              padding: '6px 12px',
               backgroundColor: 'rgba(255, 255, 255, 0.1)',
               backdropFilter: 'blur(10px)',
-              borderRadius: '4px',
+              padding: '5px 15px',
+              borderRadius: '20px',
               color: '#00f0ff',
               fontSize: '14px',
               border: '1px solid rgba(0, 240, 255, 0.3)',
               textTransform: 'lowercase'
             }}>
-              {word.trim()}
+              {kw.trim()}
             </div>
           ))}
-        </div>
-
-        <div style={{
-          position: 'absolute',
-          bottom: 60,
-          left: 80,
-          color: '#ffffff',
-          fontSize: '24px',
-          fontWeight: 'bold',
-          opacity: 0.8,
-          textTransform: 'uppercase',
-          letterSpacing: '2px'
-        }}>
-          {judul}
         </div>
       </div>
     </div>
