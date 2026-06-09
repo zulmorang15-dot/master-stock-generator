@@ -2,113 +2,93 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
-const CYCLE_DURATION = 8;
 
-const CyberPunkNeonRingAnimation: React.FC = () => {
+const SpinBox = () => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
-  
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
-  const localFrame = frame % (fps * CYCLE_DURATION);
-  
   const inputProps = (getInputProps() as any) || {};
-  const judul = inputProps.judul || 'Cyber Tech';
-  const keywordsList = (inputProps.keywords || 'cyberpunk, neon, loop, abstract').split(',');
+  const judul = inputProps.judul || 'Stock Video';
+  const keywordsList = (inputProps.keywords || 'motion, abstract, loop').split(',');
 
-  const rotate1 = interpolate(
-    localFrame,
-    [0, fps * 6],
-    [0, 360],
-    { extrapolateRight: 'clamp' }
-  );
+  const cycleDuration = 2;
+  const localFrame = frame % (fps * cycleDuration);
 
-  const rotate2 = interpolate(
-    localFrame,
-    [0, fps * 8],
-    [360, 0],
-    { extrapolateRight: 'clamp' }
-  );
+  const rotation = interpolate(localFrame, [0, fps * cycleDuration], [0, 360], {
+    easing: Easing.linear,
+    extrapolate: 'clamp',
+  });
+
+  const opacity = interpolate(localFrame, [0, fps * cycleDuration], [1, 1], {
+    easing: Easing.linear,
+    extrapolate: 'clamp',
+  });
+
+  const titleOpacity = interpolate(localFrame, [0, fps * cycleDuration], [0, 1], {
+    easing: Easing.in(Easing.quad),
+    extrapolate: 'clamp',
+  });
 
   return (
-    <div style={{
-      width,
-      height,
-      backgroundColor: '#030008',
-      backgroundImage: 'radial-gradient(circle at center, #0a001a 0%, #030008 100%)',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      overflow: 'hidden',
-      position: 'relative',
-      fontFamily: 'sans-serif'
-    }}>
-      <div style={{
-        transform: `scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        position: 'relative',
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#000',
+        color: '#fff',
         display: 'flex',
         justifyContent: 'center',
-        alignItems: 'center'
-      }}>
-        <div style={{
+        alignItems: 'center',
+        transform: `scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+      }}
+    >
+      <div
+        style={{
+          width: 100,
+          height: 100,
+          backgroundColor: 'red',
+          transform: `rotate(${rotation}deg)`,
+          opacity: opacity,
+        }}
+      />
+      <div
+        style={{
           position: 'absolute',
-          width: 200,
-          height: 200,
-          border: '2px solid transparent',
-          borderTopColor: '#ff007f',
-          borderBottomColor: '#ff007f',
-          borderRadius: '50%',
-          boxShadow: '0 0 15px #ff007f',
-          transform: `rotate(${rotate1}deg)`,
-        }} />
-        
-        <div style={{
-          position: 'absolute',
-          width: 250,
-          height: 250,
-          border: '2px solid transparent',
-          borderLeftColor: '#00f0ff',
-          borderRightColor: '#00f0ff',
-          borderRadius: '50%',
-          boxShadow: '0 0 15px #00f0ff',
-          transform: `rotate(${rotate2}deg)`,
-        }} />
-
-        <div style={{
-          color: '#ffffff',
-          textTransform: 'uppercase',
-          letterSpacing: '5px',
-          fontWeight: 'bold',
-          textShadow: '0 0 10px #00f0ff',
-          zIndex: 10,
-          fontSize: '48px'
-        }}>
+          bottom: 20,
+          left: 20,
+          opacity: titleOpacity,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 24,
+            fontWeight: 'bold',
+            color: '#fff',
+            textShadow: '0px 0px 10px #fff',
+          }}
+        >
           {judul}
         </div>
-
-        <div style={{
-          position: 'absolute',
-          bottom: 60,
-          left: 60,
-          display: 'flex',
-          gap: '10px',
-          zIndex: 20
-        }}>
-          {keywordsList.map((kw, i) => (
-            <div key={i} style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)',
-              padding: '8px 16px',
-              borderRadius: '20px',
-              color: '#00f0ff',
-              fontSize: '14px',
-              border: '1px solid rgba(0, 240, 255, 0.3)',
-              textTransform: 'lowercase',
-              fontWeight: '500'
-            }}>
-              {kw.trim()}
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 10,
+          }}
+        >
+          {keywordsList.map((keyword, index) => (
+            <div
+              key={index}
+              style={{
+                padding: 10,
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: 10,
+                fontSize: 16,
+                color: '#fff',
+              }}
+            >
+              {keyword.trim()}
             </div>
           ))}
         </div>
@@ -117,4 +97,4 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
   );
 };
 
-export default CyberPunkNeonRingAnimation;
+export default SpinBox;
