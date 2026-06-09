@@ -1,0 +1,86 @@
+name: Render 4K ProRes MOV
+
+on:
+  workflow_dispatch:
+    inputs:
+      composition_id:
+        description: 'Remotion composition ID (e.g. my_animation_001)'
+        required: true
+        type: string
+      duration_frames:
+        description: 'Duration in frames (default: 150 = 5s at 30fps)'
+        required: false
+        default: '150'
+        type: string
+      judul:
+        description: 'Video title to embed as text overlay'
+        required: false
+        default: 'Stock Video'
+        type: string
+      keywords:
+        description: 'Comma-separated keywords for text overlay'
+        required: false
+        default: 'motion, abstract, loop'
+        type: string
+
+jobs:
+  render-4k:
+    name: Render 4K ProRes MOV
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Browser Dependencies (Chrome headless)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+            libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 \
+            libcairo2 libxshmfence1 libgl1-mesa-glx libgl1
+
+      - name: Install Project Dependencies
+        run: npm ci
+
+      - name: Install Optional AI-Generated Packages
+        run: npm install three gsap --no-save || true
+
+      - name: Create Output Directory
+        run: mkdir -p out
+
+      - name: Write Render Props File
+        run: |
+          cat > temp-props.json << 'PROPS_EOF'
+          {
+            "durationInFrames": ${{ github.event.inputs.duration_frames }},
+            "judul": "${{ github.event.inputs.judul }}",
+            "keywords": "${{ github.event.inputs.keywords }}"
+          }
+          PROPS_EOF
+          echo "=== Props being used ==="
+          cat temp-props.json
+
+      - name: Render 4K ProRes MOV
+        run: |
+          echo "=== Rendering 4K ProRes for composition: ${{ github.event.inputs.composition_id }} ==="
+          npx remotion render Composition \
+            "out/${{ github.event.inputs.composition_id }}-4k.mov" \
+            --props=temp-props.json \
+            --codec=prores4444 \
+            --log=verbose
+
+      - name: Upload 4K Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.composition_id }}-4k-video
+          path: out/${{ github.event.inputs.composition_id }}-4k.mov
+          retention-days: 7
+          if-no-files-found: error
