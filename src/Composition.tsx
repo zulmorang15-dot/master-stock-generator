@@ -2,50 +2,55 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
-const PARTICLE_COUNT = 120;
 
-// Pre-calculated static particle data (deterministic, outside component)
-const PARTICLES: { x: number; y: number; size: number; opacity: number; speed: number; drift: number }[] = [];
-for (let i = 0; i < PARTICLE_COUNT; i++) {
-  const seed1 = (i * 7919 + 12347) % 10000 / 10000;
-  const seed2 = (i * 6271 + 9001) % 10000 / 10000;
-  const seed3 = (i * 3571 + 5003) % 10000 / 10000;
-  const seed4 = (i * 4423 + 7177) % 10000 / 10000;
-  const seed5 = (i * 2311 + 3001) % 10000 / 10000;
-  PARTICLES.push({
-    x: seed1 * 1920,
-    y: seed2 * 1080,
-    size: seed3 * 3 + 1,
-    opacity: seed4 * 0.5 + 0.1,
-    speed: seed5 * 0.4 + 0.1,
-    drift: ((i * 1337 + 4321) % 10000 / 10000 - 0.5) * 20,
-  });
-}
+const CYCLE_DURATION = 12; // seconds, LCM of 3,4,6,12 — capped at 15s
 
-// Pre-calculated grid lines (deterministic)
-const GRID_LINES_H: number[] = [];
-const GRID_LINES_V: number[] = [];
-for (let i = 0; i <= 20; i++) {
-  GRID_LINES_H.push((i / 20) * 1080);
-  GRID_LINES_V.push((i / 20) * 1920);
-}
-
-// Pre-calculated ring data
-const RING_DATA = [
-  { baseY: 680, speedMult: 0.1, sinOffset: 0, scale: 1.0 },
-  { baseY: 620, speedMult: 0.15, sinOffset: 1, scale: 0.85 },
-  { baseY: 560, speedMult: 0.2, sinOffset: 2, scale: 0.70 },
+// Pre-calculated static trail data (30 trails) — NO Math.random() inside component
+const TRAIL_DATA: { x: number; y: number; z: number; isCyan: boolean }[] = [
+  { x: -1100, y: -480, z: -2400, isCyan: true },
+  { x: 900, y: 300, z: -1800, isCyan: false },
+  { x: -500, y: 550, z: -800, isCyan: true },
+  { x: 1200, y: -200, z: -2200, isCyan: true },
+  { x: -800, y: -300, z: -1200, isCyan: false },
+  { x: 300, y: 480, z: -2800, isCyan: true },
+  { x: -1200, y: 100, z: -600, isCyan: false },
+  { x: 700, y: -550, z: -2000, isCyan: true },
+  { x: -200, y: 200, z: -3000, isCyan: false },
+  { x: 1000, y: 400, z: -1400, isCyan: true },
+  { x: -600, y: -100, z: -2600, isCyan: true },
+  { x: 400, y: -400, z: -400, isCyan: false },
+  { x: -1000, y: 550, z: -1600, isCyan: true },
+  { x: 800, y: -300, z: -2400, isCyan: false },
+  { x: -300, y: 0, z: -1000, isCyan: true },
+  { x: 1100, y: 200, z: -2800, isCyan: false },
+  { x: -900, y: -400, z: -200, isCyan: true },
+  { x: 500, y: 300, z: -3000, isCyan: true },
+  { x: -100, y: -550, z: -1800, isCyan: false },
+  { x: 1200, y: 100, z: -800, isCyan: true },
+  { x: -700, y: 400, z: -2200, isCyan: false },
+  { x: 200, y: -200, z: -600, isCyan: true },
+  { x: -1100, y: 300, z: -2600, isCyan: false },
+  { x: 600, y: -100, z: -1200, isCyan: true },
+  { x: -400, y: 550, z: -2000, isCyan: false },
+  { x: 1000, y: -500, z: -400, isCyan: true },
+  { x: -800, y: 200, z: -1600, isCyan: false },
+  { x: 300, y: -350, z: -2400, isCyan: true },
+  { x: -200, y: 450, z: -1000, isCyan: false },
+  { x: 900, y: -250, z: -2800, isCyan: true },
 ];
 
-// Deterministic sin approximation using frame
-function frameSin(frameAngle: number): number {
-  const normalized = ((frameAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-  const x = normalized / (2 * Math.PI);
-  // Taylor-like approximation is fine; use direct trig with frame which is deterministic
-  return Math.sin(normalized);
-}
+// Pre-calculated particle ring points for center hologram
+const PARTICLE_COUNT = 80;
+const PARTICLES: { angle: number; radius: number }[] = Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
+  angle: (i / PARTICLE_COUNT) * Math.PI * 2,
+  radius: 220 + Math.sin(i * 0.8) * 18,
+}));
 
-const LuxuryFuturisticEndscreen = () => {
+// Grid lines for background cyberpunk grid
+const GRID_LINES_H = 10;
+const GRID_LINES_V = 18;
+
+const CinematicSciFiEsportsEndscreen: React.FC = () => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
 
@@ -55,355 +60,271 @@ const LuxuryFuturisticEndscreen = () => {
 
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
 
-  // ─── CYCLE DURATIONS ─────────────────────────────────────────────────────────
-  // ring-outer: 15s, ring-middle: 20s, ring-inner: 10s, pulse: 4s, sweep: 6s
-  // card float: 8s cycle (4s yoyo), subzone float: 7s cycle
-  // LCM(15,20,10,4,6,8,7) capped at 15s
-  const cycleDuration = 12; // 12s master cycle
-  const cycleFrames = fps * cycleDuration;
-  const localFrame = frame % cycleFrames;
+  const totalFrames = fps * CYCLE_DURATION;
+  const localFrame = frame % totalFrames;
   const t = localFrame / fps; // time in seconds within cycle
 
-  // ─── RING OUTER: 360deg in 15s ───────────────────────────────────────────────
-  const ringOuterAngle = (t / 15) * 360;
+  // ---- RING 1 rotation (20s cycle, seamless) ----
+  const ring1Cycle = 20;
+  const ring1Frame = localFrame % (fps * ring1Cycle);
+  const ring1Rot = interpolate(ring1Frame, [0, fps * ring1Cycle], [0, 360], { extrapolateRight: 'clamp' });
 
-  // ─── RING MIDDLE: reverse 360deg in 20s ──────────────────────────────────────
-  const ringMiddleAngle = -((t / 20) * 360);
+  // ring1 tilt wobble (sinusoidal, 12s cycle)
+  const ring1TiltRad = Math.sin((t / CYCLE_DURATION) * Math.PI * 2) * 0.3;
+  const ring1TiltDeg = ring1TiltRad * (180 / Math.PI);
 
-  // ─── RING INNER: oscillate (10s ease-in-out alternate) ───────────────────────
-  // Map to 0->360 over 10s symmetrically looped over 12s cycle
-  const ringInnerLocal = localFrame % (fps * 10);
-  const ringInnerAngle = interpolate(
-    ringInnerLocal,
-    [0, fps * 5, fps * 10],
-    [0, 360, 0],
+  // ---- RING 2 rotation (15s cycle, counter, seamless) ----
+  const ring2Cycle = 15;
+  const ring2Frame = localFrame % (fps * ring2Cycle);
+  const ring2Rot = interpolate(ring2Frame, [0, fps * ring2Cycle], [0, -360], { extrapolateRight: 'clamp' });
+
+  // ring2 tilt wobble
+  const ring2TiltRad = Math.cos((t / CYCLE_DURATION) * Math.PI * 2 * 0.8) * 0.2;
+  const ring2TiltDeg = ring2TiltRad * (180 / Math.PI);
+
+  // ---- RING 3 slow rotation (60s mapped to 12s) ----
+  const ring3Rot = interpolate(localFrame, [0, totalFrames], [0, (360 * CYCLE_DURATION) / 60], { extrapolateRight: 'clamp' });
+
+  // ---- CORE PULSE (1.5s cycle, seamless) ----
+  const corePulseFrames = fps * 3; // 3s full yoyo (1.5 in, 1.5 out)
+  const corePulseLocal = localFrame % corePulseFrames;
+  const coreScale = interpolate(
+    corePulseLocal,
+    [0, corePulseFrames / 2, corePulseFrames],
+    [1, 1.08, 1],
+    { easing: Easing.inOut(Easing.sin) }
+  );
+  const coreGlow = interpolate(
+    corePulseLocal,
+    [0, corePulseFrames / 2, corePulseFrames],
+    [0, 0.8, 0],
     { easing: Easing.inOut(Easing.sin) }
   );
 
-  // ─── PULSE: scale + glow, 4s ease-in-out symmetric loop ──────────────────────
-  const pulseLocal = localFrame % (fps * 4);
-  const pulseScale = interpolate(
-    pulseLocal,
-    [0, fps * 2, fps * 4],
-    [1, 1.02, 1],
+  // ---- SCANLINE LEFT (3s cycle seamless) ----
+  const scanCycleFrames = fps * 3;
+  const scanLeftLocal = localFrame % scanCycleFrames;
+  const scanLeftTop = interpolate(scanLeftLocal, [0, scanCycleFrames], [-50, 350], { extrapolateRight: 'clamp' });
+
+  // ---- SCANLINE RIGHT (3s cycle, 1.5s offset seamless) ----
+  const scanRightOffset = fps * 1.5;
+  const scanRightLocal = (localFrame + scanRightOffset) % scanCycleFrames;
+  const scanRightTop = interpolate(scanRightLocal, [0, scanCycleFrames], [-50, 350], { extrapolateRight: 'clamp' });
+
+  // ---- VIDEO SLOT PULSE (1.5s cycle) ----
+  const slotPulseFrames = fps * 3;
+  const slotPulseLocal = localFrame % slotPulseFrames;
+  const slotGlowAlpha = interpolate(
+    slotPulseLocal,
+    [0, slotPulseFrames / 2, slotPulseFrames],
+    [0.15, 0.35, 0.15],
     { easing: Easing.inOut(Easing.sin) }
   );
-  const pulseGlowOpacity = interpolate(
-    pulseLocal,
-    [0, fps * 2, fps * 4],
-    [0.4, 0.7, 0.4],
+  const slotBorderAlpha = interpolate(
+    slotPulseLocal,
+    [0, slotPulseFrames / 2, slotPulseFrames],
+    [1.0, 0.6, 1.0],
     { easing: Easing.inOut(Easing.sin) }
   );
-  const pulseInnerGlow = interpolate(
-    pulseLocal,
-    [0, fps * 2, fps * 4],
-    [0.2, 0.4, 0.2],
+  const borderCyan = `rgba(0, ${Math.round(255 * slotBorderAlpha)}, ${Math.round(255 * slotBorderAlpha)}, 1)`;
+
+  // ---- HUD TOP ACCENT SLIDE (4s yoyo cycle = 8s total) ----
+  const hudTopCycleFrames = fps * 8;
+  const hudTopLocal = localFrame % hudTopCycleFrames;
+  const hudTopAccentLeft = interpolate(
+    hudTopLocal,
+    [0, hudTopCycleFrames / 2, hudTopCycleFrames],
+    [0, 1100, 0],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+
+  // ---- HUD BOTTOM ACCENT SLIDE (4s yoyo = 8s total) ----
+  const hudBotCycleFrames = fps * 8;
+  const hudBotLocal = localFrame % hudBotCycleFrames;
+  // "right" goes from 0 to 700 and back — we use right property as offset from right edge
+  const hudBotAccentRight = interpolate(
+    hudBotLocal,
+    [0, hudBotCycleFrames / 2, hudBotCycleFrames],
+    [0, 700, 0],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+
+  // ---- ENERGY TRAILS Z position ----
+  // Each trail moves from its start Z to camera (1200) in a cycle
+  // Trail speed: 60 units/frame at 30fps => 1800/s. Full range ~3700 units.
+  // Cycle = 3700/1800 ≈ 2.06s. We'll use 12s total cycle and mod each trail individually.
+  const trailSpeedPerSecond = 1800; // units/sec
+  const trailTotalRange = 3700; // from -2500 to 1200
+  const trailCycleSeconds = trailTotalRange / trailSpeedPerSecond; // ~2.056s
+
+  // ---- OCTAHEDRA CHUNK animations ----
+  // chunk1: rotation loops, position sines
+  // rotation: 0.01 rad/frame at 30fps = 0.3 rad/s x, 0.02*30=0.6 rad/s y
+  // cycle for rotation: 2*PI/0.3 ≈ 20.9s x, 2*PI/0.6 ≈ 10.5s y
+  // use t directly mod 2PI for seamless
+  const chunk1RotX = ((t * 0.3) % (Math.PI * 2)) * (180 / Math.PI);
+  const chunk1RotY = ((t * 0.6) % (Math.PI * 2)) * (180 / Math.PI);
+  const chunk1Y_norm = Math.sin((t / CYCLE_DURATION) * Math.PI * 2) * 50; // sine over full cycle
+
+  const chunk2RotX = ((-t * 0.6) % (Math.PI * 2)) * (180 / Math.PI);
+  const chunk2RotY = ((-t * 0.3) % (Math.PI * 2)) * (180 / Math.PI);
+  const chunk2Y_norm = Math.cos((t / CYCLE_DURATION) * Math.PI * 2) * 50;
+
+  // ---- CAMERA DRIFT ----
+  // camera.position.x = sin(t*0.4)*60, camera.position.y = cos(t*0.3)*40
+  const camDriftX = Math.sin((t / CYCLE_DURATION) * Math.PI * 2 * 0.4 * CYCLE_DURATION) * 60;
+  const camDriftY = Math.cos((t / CYCLE_DURATION) * Math.PI * 2 * 0.3 * CYCLE_DURATION) * 40;
+  // We'll translate the 3D scene layer slightly to simulate camera drift
+  const camDriftXPx = (camDriftX / 800) * 120; // perspective approximation
+  const camDriftYPx = (camDriftY / 800) * 80;
+
+  // ---- GRID MOTION (forward) ----
+  // gridHelperBottom.position.z = (time * 400) % 120
+  // We simulate this as a repeating perspective shift background
+  const gridOffsetRaw = (t * 400) % 120;
+  const gridOffsetPct = (gridOffsetRaw / 120) * 100;
+
+  // ---- TEXT FADE IN ----
+  const textFadeFrames = fps * 1.5;
+  const textOpacity = interpolate(frame, [0, textFadeFrames], [0, 1], {
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.quad),
+  });
+
+  // ---- SUB-RING PULSE for inner glow ----
+  const subRingGlow = interpolate(
+    slotPulseLocal,
+    [0, slotPulseFrames / 2, slotPulseFrames],
+    [0.5, 0.9, 0.5],
     { easing: Easing.inOut(Easing.sin) }
   );
-
-  // ─── LIGHT SWEEP LEFT CARD: 6s cycle ─────────────────────────────────────────
-  // 0% left:-150%, 20% left:200%, 100% left:200%
-  // Sweep travels from -150% to 200% in first 20% of 6s (1.2s), then stays
-  const sweepLocal = localFrame % (fps * 6);
-  const sweepLeftPos = interpolate(
-    sweepLocal,
-    [0, fps * 1.2, fps * 6],
-    [-150, 200, 200],
-    {
-      easing: Easing.bezier(0.4, 0, 0.2, 1),
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    }
-  );
-
-  // Right card delayed by 3s — offset by 3s in the 6s cycle
-  const sweepRightLocal = (localFrame + fps * 3) % (fps * 6);
-  const sweepRightPos = interpolate(
-    sweepRightLocal,
-    [0, fps * 1.2, fps * 6],
-    [-150, 200, 200],
-    {
-      easing: Easing.bezier(0.4, 0, 0.2, 1),
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    }
-  );
-
-  // ─── CARD FLOAT: yoyo 4s → 8s symmetric cycle ────────────────────────────────
-  const cardFloatLocal = localFrame % (fps * 8);
-  const cardLeftFloat = interpolate(
-    cardFloatLocal,
-    [0, fps * 4, fps * 8],
-    [0, -15, 0],
-    { easing: Easing.inOut(Easing.sin) }
-  );
-  // Right card staggered by 1s
-  const cardRightFloatLocal = (localFrame + fps * 1) % (fps * 8);
-  const cardRightFloat = interpolate(
-    cardRightFloatLocal,
-    [0, fps * 4, fps * 8],
-    [0, -15, 0],
-    { easing: Easing.inOut(Easing.sin) }
-  );
-
-  // ─── SUBZONE FLOAT: yoyo 3.5s → 7s symmetric cycle ───────────────────────────
-  const subzoneLocal = localFrame % (fps * 7);
-  const subzoneFloat = interpolate(
-    subzoneLocal,
-    [0, fps * 3.5, fps * 7],
-    [0, 10, 0],
-    { easing: Easing.inOut(Easing.sin) }
-  );
-
-  // ─── HUD LINE PULSE ───────────────────────────────────────────────────────────
-  const hudLineLocal = localFrame % (fps * 6);
-  const hudLineOpacity = interpolate(
-    hudLineLocal,
-    [0, fps * 3, fps * 6],
-    [0.5, 0.8, 0.5],
-    { easing: Easing.inOut(Easing.sin) }
-  );
-
-  // ─── TITLE FADE-IN ───────────────────────────────────────────────────────────
-  const titleOpacity = interpolate(
-    frame,
-    [0, fps * 1.5],
-    [0, 1],
-    { extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) }
-  );
-  const titleY = interpolate(
-    frame,
-    [0, fps * 1.5],
-    [20, 0],
-    { extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) }
-  );
-
-  // ─── KEYWORDS FADE-IN (staggered) ────────────────────────────────────────────
-  const kwOpacity = interpolate(
-    frame,
-    [fps * 1.0, fps * 2.5],
-    [0, 1],
-    { extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) }
-  );
-
-  // ─── AMBIENT BACKGROUND PULSE (camera light movement approximation) ───────────
-  const bgPulseLocal = localFrame % (fps * 12);
-  const bgLightX = interpolate(
-    bgPulseLocal,
-    [0, fps * 6, fps * 12],
-    [0, 1, 0],
-    { easing: Easing.inOut(Easing.sin) }
-  );
-
-  // ─── 3D RINGS (CSS perspective simulation) ────────────────────────────────────
-  // Holographic ring vertical float (sin-based)
-  const ring3dSin0 = frameSin((t * 1.0 + RING_DATA[0].sinOffset) * (Math.PI / 3));
-  const ring3dSin1 = frameSin((t * 1.0 + RING_DATA[1].sinOffset) * (Math.PI / 3));
-  const ring3dSin2 = frameSin((t * 1.0 + RING_DATA[2].sinOffset) * (Math.PI / 3));
-
-  // ─── GRID OPACITY PULSE ──────────────────────────────────────────────────────
-  const gridLocal = localFrame % (fps * 8);
-  const gridOpacity = interpolate(
-    gridLocal,
-    [0, fps * 4, fps * 8],
-    [0.08, 0.15, 0.08],
-    { easing: Easing.inOut(Easing.sin) }
-  );
-
-  // ─── PARTICLE ANIMATION ──────────────────────────────────────────────────────
-  const particleTime = t; // seconds, deterministic
 
   return (
     <div
       style={{
-        width,
-        height,
-        background: '#02050a',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        overflow: 'hidden',
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
         position: 'relative',
+        background: '#010103',
+        overflow: 'hidden',
+        fontFamily: "'Segoe UI', Roboto, Helvetica, sans-serif",
+        transform: `scale(${scaleFactor})`,
+        transformOrigin: 'center center',
       }}
     >
-      {/* MAIN SCALED WRAPPER */}
+      {/* ===== LAYER 0: CYBERPUNK GRID BACKGROUND ===== */}
       <div
         style={{
-          width: ORIGINAL_WIDTH,
-          height: ORIGINAL_HEIGHT,
           position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-          transformOrigin: 'center center',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 0,
           overflow: 'hidden',
-          background: `radial-gradient(circle at ${50 + bgLightX * 10}% 50%, #050b1a 0%, #020408 100%)`,
+          transform: `translate(${camDriftXPx * 0.3}px, ${camDriftYPx * 0.3}px)`,
         }}
       >
-
-        {/* ═══ BACKGROUND LAYER: Simulated 3D Environment ══════════════════════ */}
-
-        {/* Perspective floor with gradient */}
+        {/* Bottom perspective grid */}
         <div
           style={{
             position: 'absolute',
             bottom: 0,
-            left: 0,
-            width: '100%',
-            height: '55%',
-            background: `linear-gradient(180deg, transparent 0%, rgba(0,4,20,0.8) 40%, #020408 100%)`,
-            zIndex: 2,
-          }}
-        />
-
-        {/* Grid floor — perspective simulation */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: '-20%',
-            width: '140%',
-            height: '50%',
-            zIndex: 1,
-            opacity: gridOpacity,
-            transform: 'perspective(600px) rotateX(70deg)',
-            transformOrigin: 'bottom center',
+            left: '-10%',
+            width: '120%',
+            height: '52%',
             overflow: 'hidden',
           }}
         >
-          {/* Horizontal grid lines */}
-          {Array.from({ length: 15 }, (_, i) => (
-            <div
-              key={`h${i}`}
-              style={{
-                position: 'absolute',
-                left: 0,
-                width: '100%',
-                height: 1,
-                top: `${(i / 14) * 100}%`,
-                background: i === 0 ? 'rgba(0,240,255,0.6)' : 'rgba(0,68,136,0.8)',
-              }}
-            />
-          ))}
-          {/* Vertical grid lines */}
-          {Array.from({ length: 20 }, (_, i) => (
-            <div
-              key={`v${i}`}
-              style={{
-                position: 'absolute',
-                top: 0,
-                height: '100%',
-                width: 1,
-                left: `${(i / 19) * 100}%`,
-                background: i === 0 || i === 19 ? 'rgba(0,240,255,0.6)' : 'rgba(0,68,136,0.8)',
-              }}
-            />
-          ))}
+          {/* Horizontal lines */}
+          {Array.from({ length: GRID_LINES_H }, (_, i) => {
+            const progress = i / (GRID_LINES_H - 1);
+            const yPct = progress * 100;
+            const perspectiveWidth = 20 + progress * 80;
+            const opacity = 0.1 + progress * 0.4;
+            return (
+              <div
+                key={`gh-${i}`}
+                style={{
+                  position: 'absolute',
+                  bottom: `${yPct}%`,
+                  left: `${(100 - perspectiveWidth) / 2}%`,
+                  width: `${perspectiveWidth}%`,
+                  height: '1px',
+                  background: `rgba(0, 170, 255, ${opacity})`,
+                  boxShadow: `0 0 4px rgba(0, 170, 255, ${opacity * 0.5})`,
+                  transform: `translateY(${gridOffsetPct * (1 - progress) * 0.5}%)`,
+                }}
+              />
+            );
+          })}
+          {/* Vertical lines (perspective) */}
+          {Array.from({ length: GRID_LINES_V }, (_, i) => {
+            const t_v = i / (GRID_LINES_V - 1);
+            const xBottom = t_v * 120 - 10;
+            const xTop = 35 + t_v * 30;
+            const opacity = 0.08 + Math.abs(t_v - 0.5) * 0.15;
+            return (
+              <svg
+                key={`gv-${i}`}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  overflow: 'visible',
+                  pointerEvents: 'none',
+                }}
+              >
+                <line
+                  x1={`${xBottom}%`}
+                  y1="100%"
+                  x2={`${xTop}%`}
+                  y2="0%"
+                  stroke={`rgba(0, 51, 153, ${opacity})`}
+                  strokeWidth="1"
+                />
+              </svg>
+            );
+          })}
         </div>
 
-        {/* ═══ HOLOGRAPHIC 3D RINGS (CSS perspective) ══════════════════════════ */}
-        {[0, 1, 2].map((idx) => {
-          const ringData = RING_DATA[idx];
-          const ringRadius = 220 - idx * 40;
-          const sinVal = [ring3dSin0, ring3dSin1, ring3dSin2][idx];
-          const yPos = ORIGINAL_HEIGHT * 0.45 + sinVal * 15;
-          const ringRotZ = idx === 0
-            ? (t * ringData.speedMult * 360) % 360
-            : idx === 1
-              ? -(t * ringData.speedMult * 360) % 360
-              : (t * ringData.speedMult * 360) % 360;
-
-          return (
-            <div
-              key={`3dring${idx}`}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: yPos,
-                width: ringRadius * 2.5,
-                height: ringRadius * 0.5,
-                marginLeft: -(ringRadius * 2.5) / 2,
-                marginTop: -(ringRadius * 0.5) / 2,
-                borderRadius: '50%',
-                border: `2px solid rgba(0,240,255,${0.3 - idx * 0.05})`,
-                boxShadow: `0 0 30px rgba(0,240,255,0.15), 0 0 60px rgba(0,240,255,0.08)`,
-                transform: `rotateX(80deg) rotateZ(${ringRotZ}deg)`,
-                transformOrigin: 'center center',
-                zIndex: 3,
-                opacity: 0.6 - idx * 0.1,
-              }}
-            />
-          );
-        })}
-
-        {/* ═══ AMBIENT PARTICLES ═══════════════════════════════════════════════ */}
+        {/* Top perspective grid (mirrored) */}
         <div
           style={{
             position: 'absolute',
             top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 4,
+            left: '-10%',
+            width: '120%',
+            height: '52%',
             overflow: 'hidden',
+            transform: 'scaleY(-1)',
           }}
         >
-          {PARTICLES.map((p, i) => {
-            // Deterministic float: each particle moves at its own speed
-            const cycleSeconds = 15; // particle reset cycle
-            const particleLocalT = particleTime % cycleSeconds;
-            const traveled = (p.speed * particleLocalT * 80);
-            const rawY = p.y - traveled;
-            const wrappedY = ((rawY % ORIGINAL_HEIGHT) + ORIGINAL_HEIGHT) % ORIGINAL_HEIGHT;
-            const driftX = p.x + Math.sin(particleTime * 0.5 + i * 0.3) * p.drift;
-            const wrappedX = ((driftX % ORIGINAL_WIDTH) + ORIGINAL_WIDTH) % ORIGINAL_WIDTH;
-
+          {Array.from({ length: GRID_LINES_H }, (_, i) => {
+            const progress = i / (GRID_LINES_H - 1);
+            const yPct = progress * 100;
+            const perspectiveWidth = 20 + progress * 80;
+            const opacity = 0.08 + progress * 0.3;
             return (
               <div
-                key={`p${i}`}
+                key={`gth-${i}`}
                 style={{
                   position: 'absolute',
-                  left: wrappedX,
-                  top: wrappedY,
-                  width: p.size,
-                  height: p.size,
-                  borderRadius: '50%',
-                  background: `radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(0,240,255,0.7) 40%, transparent 100%)`,
-                  opacity: p.opacity,
-                  boxShadow: `0 0 ${p.size * 2}px rgba(0,240,255,0.6)`,
+                  bottom: `${yPct}%`,
+                  left: `${(100 - perspectiveWidth) / 2}%`,
+                  width: `${perspectiveWidth}%`,
+                  height: '1px',
+                  background: `rgba(0, 170, 255, ${opacity})`,
+                  transform: `translateY(${gridOffsetPct * (1 - progress) * 0.5}%)`,
                 }}
               />
             );
           })}
         </div>
 
-        {/* ═══ AMBIENT LIGHT BLOBS (floor lighting simulation) ════════════════ */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: `${10 + bgLightX * 30}%`,
-            width: 400,
-            height: 300,
-            background: 'radial-gradient(circle, rgba(0,240,255,0.12) 0%, transparent 70%)',
-            zIndex: 5,
-            filter: 'blur(40px)',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            right: `${10 + bgLightX * 25}%`,
-            width: 400,
-            height: 300,
-            background: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%)',
-            zIndex: 5,
-            filter: 'blur(40px)',
-          }}
-        />
-
-        {/* ═══ UI LAYER ════════════════════════════════════════════════════════ */}
+        {/* Ambient fog overlay */}
         <div
           style={{
             position: 'absolute',
@@ -411,249 +332,314 @@ const LuxuryFuturisticEndscreen = () => {
             left: 0,
             width: '100%',
             height: '100%',
-            zIndex: 10,
+            background: 'radial-gradient(ellipse at 50% 50%, rgba(1,1,5,0) 30%, rgba(1,1,3,0.85) 100%)',
+            pointerEvents: 'none',
+          }}
+        />
+      </div>
+
+      {/* ===== LAYER 1: ENERGY TRAILS ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 1,
+          overflow: 'hidden',
+          pointerEvents: 'none',
+          transform: `translate(${camDriftXPx * 0.6}px, ${camDriftYPx * 0.6}px)`,
+        }}
+      >
+        {TRAIL_DATA.map((trail, i) => {
+          // Each trail starts at its Z and moves toward camera
+          // Cycle based on individual speed phase offset
+          const phaseOffset = (i / TRAIL_DATA.length) * trailCycleSeconds;
+          const trailT = ((t + phaseOffset) % trailCycleSeconds) / trailCycleSeconds;
+          // Z goes from -2500 to 1200
+          const trailZ = -2500 + trailT * trailTotalRange;
+          // Perspective projection: focal=800
+          const focal = 800;
+          const zClipped = Math.max(trailZ, -4999);
+          const perspective = focal / (focal - zClipped * 0.001 * 100);
+          // Skip if behind camera
+          if (perspective <= 0) return null;
+          const pScale = Math.max(0.02, Math.min(3.0, focal / (focal + Math.abs(zClipped) * 0.3)));
+          const screenX = 960 + trail.x * pScale;
+          const screenY = 540 + trail.y * pScale;
+          const trailLen = Math.max(20, 400 * pScale * 0.8);
+          const trailW = Math.max(1, 8 * pScale);
+          const trailOpacity = Math.min(0.9, pScale * 0.7);
+          const color = trail.isCyan ? '#00ffff' : '#0044ff';
+          const glowColor = trail.isCyan ? 'rgba(0,255,255,' : 'rgba(0,68,255,';
+
+          return (
+            <div
+              key={`trail-${i}`}
+              style={{
+                position: 'absolute',
+                left: screenX - trailW / 2,
+                top: screenY - trailLen / 2,
+                width: trailW,
+                height: trailLen,
+                background: `linear-gradient(to bottom, transparent, ${color}, transparent)`,
+                boxShadow: `0 0 ${trailW * 3}px ${glowColor}0.6)`,
+                opacity: trailOpacity,
+                borderRadius: 2,
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* ===== LAYER 2: CENTER HOLOGRAPHIC RINGS (3D sim) ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 2,
+          pointerEvents: 'none',
+          overflow: 'hidden',
+          transform: `translate(${camDriftXPx}px, ${camDriftYPx}px)`,
+        }}
+      >
+        {/* Outer massive ring (torus wireframe sim) */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 760,
+            height: 760,
+            marginLeft: -380,
+            marginTop: -380,
+            borderRadius: '50%',
+            border: '15px solid rgba(0,255,255,0.8)',
+            boxShadow: '0 0 60px rgba(0,255,255,0.5), inset 0 0 60px rgba(0,255,255,0.2)',
+            transform: `rotate(${ring1Rot}deg) rotateX(${ring1TiltDeg}deg)`,
+          }}
+        />
+        {/* Outer ring inner accent */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 730,
+            height: 730,
+            marginLeft: -365,
+            marginTop: -365,
+            borderRadius: '50%',
+            border: '3px dashed rgba(0,255,255,0.4)',
+            transform: `rotate(${-ring1Rot * 0.7}deg)`,
+          }}
+        />
+
+        {/* Inner segmented gear ring */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 640,
+            height: 640,
+            marginLeft: -320,
+            marginTop: -320,
+            borderRadius: '50%',
+            border: '40px solid rgba(0,51,255,0.85)',
+            boxShadow: '0 0 50px rgba(0,51,255,0.6), inset 0 0 40px rgba(0,51,255,0.3)',
+            transform: `rotate(${ring2Rot}deg) rotateY(${ring2TiltDeg}deg)`,
+          }}
+        />
+        {/* Gear segments overlay */}
+        {Array.from({ length: 12 }, (_, i) => {
+          const angle = (i / 12) * 360 + ring2Rot;
+          const rad = (angle * Math.PI) / 180;
+          const r = 320;
+          const cx = 960 + Math.cos(rad) * r;
+          const cy = 540 + Math.sin(rad) * r;
+          return (
+            <div
+              key={`gear-${i}`}
+              style={{
+                position: 'absolute',
+                left: cx - 8,
+                top: cy - 8,
+                width: 16,
+                height: 16,
+                background: 'rgba(0,51,255,0.9)',
+                boxShadow: '0 0 12px rgba(0,51,255,0.8)',
+                borderRadius: 2,
+                transform: `rotate(${angle}deg)`,
+              }}
+            />
+          );
+        })}
+
+        {/* Particle ring (ring3) */}
+        {PARTICLES.map((p, i) => {
+          const totalRing3Rot = (ring3Rot * Math.PI) / 180;
+          const angle = p.angle + totalRing3Rot;
+          const r = p.radius * (900 / 450);
+          const cx = 960 + Math.cos(angle) * r;
+          const cy = 540 + Math.sin(angle) * r * 0.3;
+          const pSize = 3 + Math.sin(p.angle * 3) * 1.5;
+          const pOpacity = 0.4 + Math.sin(p.angle * 2 + totalRing3Rot) * 0.3;
+          return (
+            <div
+              key={`particle-${i}`}
+              style={{
+                position: 'absolute',
+                left: cx - pSize / 2,
+                top: cy - pSize / 2,
+                width: pSize,
+                height: pSize,
+                borderRadius: '50%',
+                background: '#00ffff',
+                boxShadow: '0 0 6px rgba(0,255,255,0.8)',
+                opacity: Math.max(0, Math.min(1, pOpacity)),
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* ===== LAYER 3: SIDE OCTAHEDRA ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 3,
+          pointerEvents: 'none',
+          overflow: 'hidden',
+          transform: `translate(${camDriftXPx * 0.8}px, ${camDriftYPx * 0.8}px)`,
+        }}
+      >
+        {/* Chunk 1 — left side */}
+        <div
+          style={{
+            position: 'absolute',
+            left: 160,
+            top: 540 - 200 - chunk1Y_norm + 200,
+            width: 160,
+            height: 160,
+            transform: `rotateX(${chunk1RotX}deg) rotateY(${chunk1RotY}deg)`,
+            transformStyle: 'preserve-3d',
           }}
         >
-
-          {/* ── HUD LINE TOP ── */}
+          {/* Octahedron sim with diamond shape */}
           <div
             style={{
               position: 'absolute',
-              top: 120,
+              top: '50%',
               left: '50%',
-              transform: 'translateX(-50%)',
-              width: 600,
-              height: 1,
-              background: 'linear-gradient(90deg, transparent, rgba(0,240,255,0.5), transparent)',
-              opacity: hudLineOpacity,
+              width: 0,
+              height: 0,
+              borderLeft: '80px solid transparent',
+              borderRight: '80px solid transparent',
+              borderBottom: '80px solid rgba(0,255,255,0.7)',
+              marginLeft: -80,
+              marginTop: -80,
+              filter: 'drop-shadow(0 0 20px rgba(0,255,255,0.6))',
             }}
           />
-
-          {/* ── HUD LINE BOTTOM ── */}
           <div
             style={{
               position: 'absolute',
-              bottom: 120,
+              top: '50%',
               left: '50%',
-              transform: 'translateX(-50%)',
-              width: 600,
-              height: 1,
-              background: 'linear-gradient(90deg, transparent, rgba(0,240,255,0.5), transparent)',
-              opacity: hudLineOpacity,
+              width: 0,
+              height: 0,
+              borderLeft: '80px solid transparent',
+              borderRight: '80px solid transparent',
+              borderTop: '80px solid rgba(0,255,255,0.5)',
+              marginLeft: -80,
+              marginTop: 0,
+              filter: 'drop-shadow(0 0 20px rgba(0,255,255,0.4))',
             }}
           />
-
-          {/* ── VIDEO CARD LEFT ── */}
           <div
             style={{
               position: 'absolute',
-              width: 600,
-              height: 337,
-              top: '50%',
-              left: 220,
-              transform: `translateY(calc(-50% + ${cardLeftFloat}px))`,
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(0,170,255,0.05) 100%)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(0,200,255,0.2)',
-              borderRadius: 12,
-              boxShadow: `0 20px 50px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 0 20px rgba(0,150,255,0.1), 0 0 30px rgba(0,150,255,0.15)`,
-              overflow: 'hidden',
+              top: '20%',
+              left: '20%',
+              width: '60%',
+              height: '60%',
+              border: '2px solid rgba(0,255,255,0.3)',
+              borderRadius: '50%',
+              boxShadow: '0 0 15px rgba(0,255,255,0.3)',
             }}
-          >
-            {/* Light sweep */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: `${sweepLeftPos}%`,
-                width: '50%',
-                height: '100%',
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%)',
-                transform: 'skewX(-25deg)',
-              }}
-            />
-            {/* HUD corners */}
-            <div style={{ position: 'absolute', top: 10, left: 10, width: 20, height: 20, borderTop: '2px solid #00f0ff', borderLeft: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
-            <div style={{ position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderTop: '2px solid #00f0ff', borderRight: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
-            <div style={{ position: 'absolute', bottom: 10, left: 10, width: 20, height: 20, borderBottom: '2px solid #00f0ff', borderLeft: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
-            <div style={{ position: 'absolute', bottom: 10, right: 10, width: 20, height: 20, borderBottom: '2px solid #00f0ff', borderRight: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
+          />
+        </div>
 
-            {/* Card inner content hint */}
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <div
-                style={{
-                  width: 60,
-                  height: 60,
-                  borderRadius: '50%',
-                  border: '2px solid rgba(0,240,255,0.4)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 0 20px rgba(0,240,255,0.2)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 0,
-                    height: 0,
-                    borderTop: '12px solid transparent',
-                    borderBottom: '12px solid transparent',
-                    borderLeft: '20px solid rgba(0,240,255,0.6)',
-                    marginLeft: 4,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* ── VIDEO CARD RIGHT ── */}
-          <div
-            style={{
-              position: 'absolute',
-              width: 600,
-              height: 337,
-              top: '50%',
-              right: 220,
-              transform: `translateY(calc(-50% + ${cardRightFloat}px))`,
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(0,170,255,0.05) 100%)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(0,200,255,0.2)',
-              borderRadius: 12,
-              boxShadow: `0 20px 50px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.1), inset 0 0 20px rgba(0,150,255,0.1), 0 0 30px rgba(0,150,255,0.15)`,
-              overflow: 'hidden',
-            }}
-          >
-            {/* Light sweep */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: `${sweepRightPos}%`,
-                width: '50%',
-                height: '100%',
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%)',
-                transform: 'skewX(-25deg)',
-              }}
-            />
-            {/* HUD corners */}
-            <div style={{ position: 'absolute', top: 10, left: 10, width: 20, height: 20, borderTop: '2px solid #00f0ff', borderLeft: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
-            <div style={{ position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderTop: '2px solid #00f0ff', borderRight: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
-            <div style={{ position: 'absolute', bottom: 10, left: 10, width: 20, height: 20, borderBottom: '2px solid #00f0ff', borderLeft: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
-            <div style={{ position: 'absolute', bottom: 10, right: 10, width: 20, height: 20, borderBottom: '2px solid #00f0ff', borderRight: '2px solid #00f0ff', borderRadius: 4, opacity: 0.6, boxShadow: '0 0 10px #00f0ff' }} />
-
-            {/* Card inner content hint */}
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <div
-                style={{
-                  width: 60,
-                  height: 60,
-                  borderRadius: '50%',
-                  border: '2px solid rgba(0,240,255,0.4)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 0 20px rgba(0,240,255,0.2)',
-                }}
-              >
-                <div
-                  style={{
-                    width: 0,
-                    height: 0,
-                    borderTop: '12px solid transparent',
-                    borderBottom: '12px solid transparent',
-                    borderLeft: '20px solid rgba(0,240,255,0.6)',
-                    marginLeft: 4,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* ── SUBSCRIBE ZONE (CENTER) ── */}
+        {/* Chunk 2 — right side */}
+        <div
+          style={{
+            position: 'absolute',
+            right: 160,
+            top: 540 + 200 - chunk2Y_norm - 80,
+            width: 160,
+            height: 160,
+            transform: `rotateX(${chunk2RotX}deg) rotateY(${chunk2RotY}deg)`,
+            transformStyle: 'preserve-3d',
+          }}
+        >
           <div
             style={{
               position: 'absolute',
               top: '50%',
               left: '50%',
-              transform: `translate(-50%, calc(-50% + ${subzoneFloat}px))`,
-              width: 240,
-              height: 240,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
+              width: 0,
+              height: 0,
+              borderLeft: '80px solid transparent',
+              borderRight: '80px solid transparent',
+              borderBottom: '80px solid rgba(0,255,255,0.7)',
+              marginLeft: -80,
+              marginTop: -80,
+              filter: 'drop-shadow(0 0 20px rgba(0,255,255,0.6))',
             }}
-          >
-            {/* Ring Outer */}
-            <div
-              style={{
-                position: 'absolute',
-                width: 220,
-                height: 220,
-                borderRadius: '50%',
-                borderTop: '2px solid #00f0ff',
-                borderBottom: '2px solid #ffffff',
-                borderLeft: '2px solid transparent',
-                borderRight: '2px solid transparent',
-                boxShadow: '0 0 40px rgba(0,240,255,0.2)',
-                transform: `rotate(${ringOuterAngle}deg)`,
-              }}
-            />
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              width: 0,
+              height: 0,
+              borderLeft: '80px solid transparent',
+              borderRight: '80px solid transparent',
+              borderTop: '80px solid rgba(0,255,255,0.5)',
+              marginLeft: -80,
+              marginTop: 0,
+              filter: 'drop-shadow(0 0 20px rgba(0,255,255,0.4))',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: '20%',
+              left: '20%',
+              width: '60%',
+              height: '60%',
+              border: '2px solid rgba(0,255,255,0.3)',
+              borderRadius: '50%',
+              boxShadow: '0 0 15px rgba(0,255,255,0.3)',
+            }}
+          />
+        </div>
+      </div>
 
-            {/* Ring Middle (dashed simulation with border) */}
-            <div
-              style={{
-                position: 'absolute',
-                width: 190,
-                height: 190,
-                borderRadius: '50%',
-                border: '1px dashed rgba(255,255,255,0.4)',
-                transform: `rotate(${ringMiddleAngle}deg)`,
-              }}
-            />
-
-            {/* Ring Inner */}
-            <div
-              style={{
-                position: 'absolute',
-                width: 160,
-                height: 160,
-                borderRadius: '50%',
-                borderLeft: '2px solid rgba(0,200,255,0.8)',
-                borderRight: '2px solid rgba(0,200,255,0.8)',
-                borderTop: '2px solid transparent',
-                borderBottom: '2px solid transparent',
-                transform: `rotate(${ringInnerAngle}deg)`,
-              }}
-            />
-
-            {/* Sub Center */}
-            <div
-              style={{
-                width: 140,
-                height: 140,
-                background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(0,150,255,0.05) 60%, transparent 100%)',
-                borderRadius: '50%',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                border: '2px solid rgba(255,255,255,0.5)',
-                boxShadow: `0 0 ${pulseGlowOpacity * 60}px rgba(0,240,255,${pulseGlowOpacity}), inset 0 0 ${pulseInnerGlow * 60}px rgba(255,255,255,${pulseInnerGlow})`,
-                transform: `scale(${pulseScale})`,
-                display:
+      {/* ===== LAYER 4: UI OVERLAY ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: ORIGINAL_WIDTH,
