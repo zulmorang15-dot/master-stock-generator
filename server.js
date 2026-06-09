@@ -947,22 +947,18 @@ function unzipFile(zipPath, destDir) {
 async function checkGithubRenderStatusInternal(id, renderType) {
   const trackingKey = `${id}_${renderType}`;
   
-  const finalFilename = renderType === "preview" ? `${id}-preview.mp4` : `${id}-4k.mov`;
-  const legacyFilename = renderType === "preview" ? `${id}.mp4` : `${id}_4k.mov`;
-  const finalPath = renderType === "preview" 
-    ? path.join(__dirname, "public", "previews", finalFilename)
-    : path.join(__dirname, "out", finalFilename);
-  const legacyPath = renderType === "preview"
-    ? path.join(__dirname, "public", "previews", legacyFilename)
-    : path.join(__dirname, "out", legacyFilename);
-    
-  if (fs.existsSync(finalPath)) {
-    const fileUrl = renderType === "preview" ? `/previews/${finalFilename}` : `/out/${finalFilename}`;
-    return { status: "success", url: fileUrl, localPath: finalPath };
-  }
-  if (fs.existsSync(legacyPath)) {
-    const fileUrl = renderType === "preview" ? `/previews/${legacyFilename}` : `/out/${legacyFilename}`;
-    return { status: "success", url: fileUrl, localPath: legacyPath };
+  // Jika database lokal sudah menyimpan URL http/https eksternal, langsung return itu
+  const dbPath = path.join(__dirname, "saved-items.json");
+  if (fs.existsSync(dbPath)) {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    const items = JSON.parse(data);
+    const item = items.find(i => i.id === id);
+    if (item) {
+      const savedUrl = renderType === "preview" ? item.previewUrl : item.outputPath4k;
+      if (savedUrl && (savedUrl.startsWith("http://") || savedUrl.startsWith("https://"))) {
+        return { status: "success", url: savedUrl };
+      }
+    }
   }
 
   const runInfo = gitRuns[trackingKey];
@@ -1003,7 +999,7 @@ async function checkGithubRenderStatusInternal(id, renderType) {
     return { status: "failed", error: `Workflow selesai dengan kesimpulan: ${matchedRun.conclusion}` };
   }
 
-  // Download artifact
+  // Download cloud link artifact
   console.log(`⬇️ Workflow sukses! Mendapatkan link artifact untuk ${id}...`);
   const artifactsUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/runs/${matchedRun.id}/artifacts`;
   const artifactsRes = await axios.get(artifactsUrl, {
@@ -1014,7 +1010,7 @@ async function checkGithubRenderStatusInternal(id, renderType) {
   });
 
   const artifacts = artifactsRes.data.artifacts || [];
-  const targetArtifactName = `${id}-${renderType}-video`;
+  const targetArtifactName = `${id}-${renderType}-cloud-link`;
   const matchedArtifact = artifacts.find(a => a.name === targetArtifactName);
 
   if (!matchedArtifact) {
@@ -1022,11 +1018,11 @@ async function checkGithubRenderStatusInternal(id, renderType) {
   }
 
   // Download artifact ZIP
-  const zipFilename = `temp-artifact-${id}-${renderType}.zip`;
+  const zipFilename = `temp-link-${id}-${renderType}.zip`;
   const tempZipPath = path.join(__dirname, zipFilename);
   const downloadUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/artifacts/${matchedArtifact.id}/zip`;
   
-  console.log(`Downloading zip artifact from: ${downloadUrl}`);
+  console.log(`Downloading zip link artifact from: ${downloadUrl}`);
   const downloadRes = await axios({
     method: "get",
     url: downloadUrl,
@@ -1045,10 +1041,10 @@ async function checkGithubRenderStatusInternal(id, renderType) {
     writer.on("error", reject);
   });
 
-  console.log(`✅ Artifact ZIP terdownload. Ekstraksi file...`);
+  console.log(`✅ Link ZIP terdownload. Ekstraksi file...`);
 
   // Ekstrak ZIP
-  const tempExtractDir = path.join(__dirname, `temp_extracted_${id}_${renderType}`);
+  const tempExtractDir = path.join(__dirname, `temp_link_${id}_${renderType}`);
   if (fs.existsSync(tempExtractDir)) {
     fs.rmSync(tempExtractDir, { recursive: true, force: true });
   }
@@ -1056,26 +1052,22 @@ async function checkGithubRenderStatusInternal(id, renderType) {
 
   unzipFile(tempZipPath, tempExtractDir);
 
-  // Cari file video hasil render di dalam folder ekstraksi
-  const files = fs.readdirSync(tempExtractDir);
-  const videoFile = files.find(f => f.endsWith(".mp4") || f.endsWith(".mov"));
-
-  if (!videoFile) {
+  // Baca file cloud-link.txt
+  const linkFilePath = path.join(tempExtractDir, "cloud-link.txt");
+  if (!fs.existsSync(linkFilePath)) {
     fs.rmSync(tempExtractDir, { recursive: true, force: true });
     fs.unlinkSync(tempZipPath);
-    throw new Error("Tidak ada file video di dalam zip artifact.");
+    throw new Error("File cloud-link.txt tidak ditemukan dalam ZIP.");
   }
 
-  const sourceFilePath = path.join(tempExtractDir, videoFile);
-  fs.renameSync(sourceFilePath, finalPath);
+  const cloudLink = fs.readFileSync(linkFilePath, "utf8").trim();
 
   // Bersihkan file sementara
   fs.rmSync(tempExtractDir, { recursive: true, force: true });
   fs.unlinkSync(tempZipPath);
 
-  console.log(`🎉 Sukses mengunduh dan mengekstrak ${renderType} video untuk ${id}!`);
-  const fileUrl = renderType === "preview" ? `/previews/${finalFilename}` : `/out/${finalFilename}`;
-  return { status: "success", url: fileUrl, localPath: finalPath };
+  console.log(`🎉 Sukses mendapatkan cloud link ${renderType} untuk ${id}: ${cloudLink}`);
+  return { status: "success", url: cloudLink };
 }
 
 // Helper: Polling background thread to wait for github rendering

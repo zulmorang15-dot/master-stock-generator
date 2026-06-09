@@ -78,6 +78,24 @@ jobs:
             --scale=0.5 \
             --log=verbose
 
+      - name: Upload to BashUpload Cloud
+        id: upload_cloud
+        run: |
+          echo "=== Uploading video to BashUpload Cloud ==="
+          FILENAME="${{ github.event.inputs.composition_id }}-preview.mp4"
+          curl -s https://bashupload.com/$FILENAME --upload-file out/$FILENAME > bashupload_res.txt
+          cat bashupload_res.txt
+          LINK=$(cat bashupload_res.txt | grep -o 'https://bashupload.com/[^ ]*')
+          echo "Cloud Link: $LINK"
+          echo "$LINK" > cloud-link.txt
+
+      - name: Upload Link Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.composition_id }}-preview-cloud-link
+          path: cloud-link.txt
+          retention-days: 7
+
       - name: Upload Preview Artifact
         uses: actions/upload-artifact@v4
         with:

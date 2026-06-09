@@ -740,7 +740,10 @@
 
   function renderPreviewCell(item) {
     if (item.previewUrl) {
-      return `<video class="preview-video" src="/api/preview-file/${item.id}" controls muted loop playsinline></video>`;
+      const videoSrc = (item.previewUrl.startsWith("http://") || item.previewUrl.startsWith("https://"))
+        ? item.previewUrl
+        : `/api/preview-file/${item.id}`;
+      return `<video class="preview-video" src="${videoSrc}" controls muted loop playsinline></video>`;
     }
     if (item.statusConvertTsx === 'processing-tsx') {
       return `<span class="status-badge badge-converting"><span class="spin">⚙</span> Converting TSX...</span>`;
@@ -764,12 +767,20 @@
       ? `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${is4kRendering ? 'disabled' : ''}>${is4kRendering ? '<span class="spin">☁</span> Rendering...' : '🚀 Generate 4K'}</button>`
       : `<button class="btn-action btn-4k" disabled style="opacity:0.35">🚀 Generate 4K</button>`;
 
+    let previewHref = `/api/preview-file/${item.id}`;
+    if (item.previewUrl && (item.previewUrl.startsWith("http://") || item.previewUrl.startsWith("https://"))) {
+      previewHref = item.previewUrl;
+    }
     const btnDl = hasPreview
-      ? `<a class="btn-action btn-dl" href="/api/preview-file/${item.id}" download="${item.id}-preview.mp4">⬇ Download Preview</a>`
+      ? `<a class="btn-action btn-dl" href="${previewHref}" target="_blank" download="${item.id}-preview.mp4">⬇ Download Preview</a>`
       : '';
 
+    let url4k = `/api/4k-file/${item.id}`;
+    if (has4k && (has4k.startsWith("http://") || has4k.startsWith("https://"))) {
+      url4k = has4k;
+    }
     const btnDl4k = has4k
-      ? `<a class="btn-action btn-dl" href="/api/4k-file/${item.id}" download="${item.id}-4k.mov">⬇ Download 4K</a>`
+      ? `<a class="btn-action btn-dl" href="${url4k}" target="_blank" download="${item.id}-4k.mov">⬇ Download 4K</a>`
       : '';
 
     const btnDel = `<button class="btn-action btn-del" onclick="deleteItem('${item.id}')">🗑 Hapus</button>`;
