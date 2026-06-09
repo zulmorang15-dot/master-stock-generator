@@ -7,12 +7,13 @@ const CYCLE_DURATION = 8;
 const CyberPunkNeonRingAnimation: React.FC = () => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
   
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
   const localFrame = frame % (fps * CYCLE_DURATION);
+  
   const inputProps = (getInputProps() as any) || {};
   const judul = inputProps.judul || 'Cyber Tech';
-  const keywordsList = (inputProps.keywords || 'cyberpunk, neon, rings, technology').split(',');
+  const keywordsList = (inputProps.keywords || 'cyberpunk, neon, loop, abstract').split(',');
 
   const rotate1 = interpolate(
     localFrame,
@@ -28,9 +29,6 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
     { extrapolateRight: 'clamp' }
   );
 
-  const ring1Rotation = `${rotate1}deg`;
-  const ring2Rotation = `${rotate2}deg`;
-
   return (
     <div style={{
       width,
@@ -40,8 +38,8 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      position: 'relative',
       overflow: 'hidden',
+      position: 'relative',
       fontFamily: 'sans-serif'
     }}>
       <div style={{
@@ -63,7 +61,7 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
           borderBottomColor: '#ff007f',
           borderRadius: '50%',
           boxShadow: '0 0 15px #ff007f',
-          transform: `rotate(${ring1Rotation})`,
+          transform: `rotate(${rotate1}deg)`,
         }} />
         
         <div style={{
@@ -75,7 +73,7 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
           borderRightColor: '#00f0ff',
           borderRadius: '50%',
           boxShadow: '0 0 15px #00f0ff',
-          transform: `rotate(${ring2Rotation})`,
+          transform: `rotate(${rotate2}deg)`,
         }} />
 
         <div style={{
@@ -92,8 +90,8 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
 
         <div style={{
           position: 'absolute',
-          bottom: 50,
-          left: 50,
+          bottom: 60,
+          left: 60,
           display: 'flex',
           gap: '10px',
           zIndex: 20
@@ -102,12 +100,13 @@ const CyberPunkNeonRingAnimation: React.FC = () => {
             <div key={i} style={{
               backgroundColor: 'rgba(255, 255, 255, 0.1)',
               backdropFilter: 'blur(10px)',
-              padding: '5px 15px',
+              padding: '8px 16px',
               borderRadius: '20px',
               color: '#00f0ff',
               fontSize: '14px',
               border: '1px solid rgba(0, 240, 255, 0.3)',
-              textTransform: 'lowercase'
+              textTransform: 'lowercase',
+              fontWeight: '500'
             }}>
               {kw.trim()}
             </div>
