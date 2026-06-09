@@ -1,73 +1,98 @@
-// ============================================================
-// GENERATED FILE — DO NOT EDIT MANUALLY
-// This file is overwritten every time you click "Convert HTML → TSX"
-// in the dashboard. Any manual edits WILL be lost.
-// ============================================================
-import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import { useCurrentFrame, useVideoConfig, interpolate, Easing } from 'remotion';
+import { useEffect, useState } from 'react';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-// Pre-calculated static particle data (deterministic, never uses Math.random inside render)
-const PARTICLE_COUNT = 80;
-const PARTICLES = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
-  const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
-  const radius = 150 + (i % 5) * 40;
-  const speed = 0.3 + (i % 3) * 0.15;
-  const size = 2 + (i % 4);
-  const hue = Math.round((i / PARTICLE_COUNT) * 360);
-  const direction = i % 2 === 0 ? 1 : -1;
-  return { angle, radius, speed, size, hue, direction };
-});
+const colorPalette = [
+  { r: 0, g: 245, b: 255 },
+  { r: 255, g: 0, b: 127 },
+  { r: 112, g: 0, b: 255 },
+];
 
-const RING_COUNT = 5;
-const RINGS = Array.from({ length: RING_COUNT }, (_, i) => ({
-  radius: 80 + i * 55,
-  speed: 0.4 + i * 0.1,
-  opacity: 0.15 + i * 0.05,
-  direction: i % 2 === 0 ? 1 : -1,
-}));
+const particleCount = 1500;
+const particlePositions = new Float32Array(particleCount * 3);
+const particleColors = new Float32Array(particleCount * 3);
 
-const DefaultPlaceholder = () => {
-  const { width, height } = useVideoConfig();
+for (let i = 0; i < particleCount; i++) {
+  const u = Math.random();
+  const v = Math.random();
+  const theta = u * 2.0 * Math.PI;
+  const phi = Math.acos(2.0 * v - 1.0);
+  const r = 4.5;
+
+  const x = r * Math.sin(phi) * Math.cos(theta);
+  const y = r * Math.sin(phi) * Math.sin(theta);
+  const z = r * Math.cos(phi);
+
+  particlePositions[i * 3] = x;
+  particlePositions[i * 3 + 1] = y;
+  particlePositions[i * 3 + 2] = z;
+
+  const baseColor = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+  particleColors[i * 3] = baseColor.r / 255;
+  particleColors[i * 3 + 1] = baseColor.g / 255;
+  particleColors[i * 3 + 2] = baseColor.b / 255;
+}
+
+const bgParticleCount = 800;
+const bgPositions = new Float32Array(bgParticleCount * 3);
+const bgColors = new Float32Array(bgParticleCount * 3);
+
+for (let i = 0; i < bgParticleCount; i++) {
+  bgPositions[i * 3] = (Math.random() - 0.5) * 40;
+  bgPositions[i * 3 + 1] = (Math.random() - 0.5) * 25;
+  bgPositions[i * 3 + 2] = (Math.random() - 0.5) * 20 - 10;
+
+  const bgColor = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+  bgColors[i * 3] = bgColor.r / 255 * 0.6;
+  bgColors[i * 3 + 1] = bgColor.g / 255 * 0.6;
+  bgColors[i * 3 + 2] = bgColor.b / 255 * 0.6;
+}
+
+const FuturisticDigitalSphere = () => {
   const frame = useCurrentFrame();
+  const { width, height } = useVideoConfig();
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
+  const judul = getInputProps().judul;
+  const keywords = getInputProps().keywords;
 
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.9;
-  const fps = 30;
-  const cycleDuration = fps * 10; // 10-second seamless loop
-  const localFrame = frame % cycleDuration;
-
-  // Global pulse
-  const pulse = interpolate(
-    localFrame,
-    [0, cycleDuration / 2, cycleDuration],
-    [1, 1.05, 1],
-    { easing: Easing.inOut(Easing.sine), extrapolate: 'clamp' }
-  );
-
-  // Fade in at start
-  const globalOpacity = interpolate(frame, [0, 20], [0, 1], {
-    extrapolate: 'clamp',
+  const pulse = interpolate(frame, [0, 10, 20], [1, 1.03, 1], {
+    easing: Easing.inOut(Easing.quad),
   });
 
-  // Central core glow breathe
-  const coreGlow = interpolate(
-    localFrame,
-    [0, cycleDuration / 2, cycleDuration],
-    [0.6, 1, 0.6],
-    { easing: Easing.inOut(Easing.sine), extrapolate: 'clamp' }
-  );
+  const wireOpacity = interpolate(frame, [0, 10, 20], [0.2, 0.3, 0.2], {
+    easing: Easing.inOut(Easing.quad),
+  });
+
+  const bgRotation = interpolate(frame, [0, 10, 20], [0, -0.02, 0], {
+    easing: Easing.inOut(Easing.quad),
+  });
+
+  const particlePositionsUpdated = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    particlePositionsUpdated[i * 3] = particlePositions[i * 3];
+    particlePositionsUpdated[i * 3 + 1] = particlePositions[i * 3 + 1];
+    particlePositionsUpdated[i * 3 + 2] = particlePositions[i * 3 + 2];
+  }
+
+  const bgPositionsUpdated = new Float32Array(bgParticleCount * 3);
+  for (let i = 0; i < bgParticleCount; i++) {
+    bgPositionsUpdated[i * 3] = bgPositions[i * 3];
+    bgPositionsUpdated[i * 3 + 1] = bgPositions[i * 3 + 1];
+    bgPositionsUpdated[i * 3 + 2] = bgPositions[i * 3 + 2] + Math.sin(frame * 0.005 + bgPositions[i * 3] * 0.5) * 0.005;
+  }
 
   return (
     <div
       style={{
         width: '100%',
         height: '100%',
+        backgroundColor: '#020208',
         display: 'flex',
-        alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#040818',
-        opacity: globalOpacity,
+        alignItems: 'center',
+        transform: `scale(${scaleFactor})`,
       }}
     >
       <div
@@ -75,156 +100,148 @@ const DefaultPlaceholder = () => {
           position: 'relative',
           width: ORIGINAL_WIDTH,
           height: ORIGINAL_HEIGHT,
-          transform: `scale(${scaleFactor})`,
-          transformOrigin: 'center center',
+          boxSizing: 'border-box',
           overflow: 'hidden',
         }}
       >
-        {/* Background radial gradient */}
-        <div
+        <canvas
           style={{
-            position: 'absolute',
-            inset: 0,
-            background:
-              'radial-gradient(ellipse at 50% 50%, #0d1b4b 0%, #040818 70%)',
+            width: '100%',
+            height: '100%',
+            display: 'block',
           }}
         />
-
-        {/* Orbital rings */}
-        {RINGS.map((ring, i) => {
-          const rotation = interpolate(
-            localFrame,
-            [0, cycleDuration],
-            [0, 360 * ring.direction],
-            { extrapolate: 'clamp' }
-          );
-          return (
-            <div
-              key={`ring-${i}`}
-              style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                width: ring.radius * 2,
-                height: ring.radius * 2,
-                marginLeft: -ring.radius,
-                marginTop: -ring.radius,
-                borderRadius: '50%',
-                border: `1px solid rgba(0, 200, 255, ${ring.opacity})`,
-                transform: `rotate(${rotation}deg)`,
-                boxShadow: `0 0 8px rgba(0, 200, 255, ${ring.opacity * 0.5})`,
-              }}
-            />
-          );
-        })}
-
-        {/* Orbiting particles */}
-        {PARTICLES.map((p, i) => {
-          const currentAngle = interpolate(
-            localFrame,
-            [0, cycleDuration],
-            [p.angle, p.angle + Math.PI * 2 * p.speed * p.direction],
-            { extrapolate: 'clamp' }
-          );
-          const px = ORIGINAL_WIDTH / 2 + Math.cos(currentAngle) * p.radius - p.size / 2;
-          const py = ORIGINAL_HEIGHT / 2 + Math.sin(currentAngle) * p.radius - p.size / 2;
-          const particleOpacity = interpolate(
-            localFrame,
-            [0, cycleDuration / 2, cycleDuration],
-            [0.4, 0.9, 0.4],
-            { easing: Easing.inOut(Easing.sine), extrapolate: 'clamp' }
-          );
-          return (
-            <div
-              key={`particle-${i}`}
-              style={{
-                position: 'absolute',
-                left: px,
-                top: py,
-                width: p.size,
-                height: p.size,
-                borderRadius: '50%',
-                backgroundColor: `hsl(${p.hue}, 100%, 70%)`,
-                opacity: particleOpacity,
-                boxShadow: `0 0 ${p.size * 3}px hsl(${p.hue}, 100%, 60%)`,
-              }}
-            />
-          );
-        })}
-
-        {/* Central glowing core */}
         <div
           style={{
             position: 'absolute',
-            top: '50%',
-            left: '50%',
-            width: 120,
-            height: 120,
-            marginLeft: -60,
-            marginTop: -60,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, #00eeff 0%, #0044ff 50%, transparent 100%)',
-            transform: `scale(${pulse * coreGlow})`,
-            boxShadow: `0 0 60px rgba(0, 200, 255, ${coreGlow * 0.8}), 0 0 120px rgba(0, 100, 255, ${coreGlow * 0.4})`,
-          }}
-        />
-
-        {/* Inner core dot */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            width: 20,
-            height: 20,
-            marginLeft: -10,
-            marginTop: -10,
-            borderRadius: '50%',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 0 30px #ffffff, 0 0 60px #00eeff',
-          }}
-        />
-
-        {/* Placeholder label */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 60,
+            top: 0,
             left: 0,
-            right: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 12,
+            width: '100%',
+            height: '100%',
           }}
         >
           <div
             style={{
-              fontFamily: 'system-ui, sans-serif',
-              fontSize: 28,
-              fontWeight: 700,
-              color: 'rgba(255,255,255,0.9)',
-              letterSpacing: 6,
-              textTransform: 'uppercase',
-              textShadow: '0 0 20px rgba(0, 200, 255, 0.8)',
+              position: 'relative',
+              width: '100%',
+              height: '100%',
+              transform: `rotateY(${frame * 0.15}deg) rotateX(${frame * 0.08}deg) scale(${pulse})`,
             }}
           >
-            AWAITING COMPOSITION
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '100%',
+                height: '100%',
+              }}
+            >
+              {Array.from({ length: particleCount }, (_, i) => (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    top: `${particlePositionsUpdated[i * 3 + 1]}px`,
+                    left: `${particlePositionsUpdated[i * 3]}px`,
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: `rgba(${particleColors[i * 3] * 255}, ${particleColors[i * 3 + 1] * 255}, ${particleColors[i * 3 + 2] * 255}, 1)`,
+                  }}
+                />
+              ))}
+            </div>
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '100%',
+                height: '100%',
+                opacity: wireOpacity,
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: '100%',
+                  height: '100%',
+                  border: '1px solid #00f5ff',
+                  borderRadius: '50%',
+                }}
+              />
+            </div>
           </div>
           <div
             style={{
-              fontFamily: 'system-ui, sans-serif',
-              fontSize: 16,
-              color: 'rgba(100, 200, 255, 0.6)',
-              letterSpacing: 2,
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              transform: `rotateZ(${bgRotation}deg)`,
             }}
           >
-            Upload HTML → Convert → Render
+            {Array.from({ length: bgParticleCount }, (_, i) => (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  top: `${bgPositionsUpdated[i * 3 + 1]}px`,
+                  left: `${bgPositionsUpdated[i * 3]}px`,
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  backgroundColor: `rgba(${bgColors[i * 3] * 255}, ${bgColors[i * 3 + 1] * 255}, ${bgColors[i * 3 + 2] * 255}, 1)`,
+                }}
+              />
+            ))}
           </div>
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '20px',
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: '#ffffff',
+          }}
+        >
+          {judul}
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '60px',
+            left: '20px',
+            fontSize: '18px',
+            color: '#ffffff',
+          }}
+        >
+          {keywords.split(',').map((keyword) => (
+            <span
+              key={keyword}
+              style={{
+                padding: '10px',
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: '10px',
+                marginRight: '10px',
+              }}
+            >
+              {keyword.trim()}
+            </span>
+          ))}
         </div>
       </div>
     </div>
   );
 };
 
-export default DefaultPlaceholder;
+export default FuturisticDigitalSphere;
