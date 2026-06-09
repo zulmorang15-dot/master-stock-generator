@@ -6,6 +6,7 @@ const cheerio = require("cheerio");
 const fs = require("fs");
 const { execSync } = require("child_process");
 const { GoogleGenAI } = require("@google/genai");
+const syntxBot = require('./syntx-bot');
 
 const path = require("path");
 
@@ -43,6 +44,8 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_USERNAME = process.env.GITHUB_USERNAME;
 const GITHUB_REPO = process.env.GITHUB_REPO;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 
 // DeepSeek AI Call Helper (langsung menggunakan API resmi DeepSeek)
 async function callDeepSeek(prompt, model = "deepseek-chat") {
@@ -89,6 +92,54 @@ async function callDeepSeek(prompt, model = "deepseek-chat") {
   }
 }
 
+// Nvidia AI Call Helper
+async function callNvidia(prompt, model = "nvidia/nemotron-3-ultra-550b-a55b") {
+  try {
+    if (!NVIDIA_API_KEY) {
+      throw new Error("NVIDIA_API_KEY tidak ditemukan di .env");
+    }
+
+    console.log(`📡 Mengirim request ke Nvidia AI (model: ${model})...`);
+    
+    const response = await axios.post(
+      "https://integrate.api.nvidia.com/v1/chat/completions",
+      {
+        model: model,
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+        extra_body: {
+          chat_template_kwargs: {
+            enable_thinking: true
+          }
+        }
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${NVIDIA_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 90000 // 90 seconds timeout for thinking
+      }
+    );
+
+    if (!response.data.choices || !response.data.choices[0]) {
+      throw new Error("Respons Nvidia tidak valid: " + JSON.stringify(response.data));
+    }
+
+    console.log("✅ Respon Nvidia AI berhasil diterima!");
+    return response.data.choices[0].message.content;
+  } catch (error) {
+    console.error("❌ Nvidia Error:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
 // Inisialisasi Gemini AI
 let genAI = null;
 if (GEMINI_API_KEY) {
@@ -96,6 +147,204 @@ if (GEMINI_API_KEY) {
   console.log("🤖 Gemini AI SDK berhasil diinisialisasi!");
 } else {
   console.warn("⚠️ GEMINI_API_KEY tidak ditemukan, Gemini AI tidak akan tersedia.");
+}
+
+// Groq AI Call Helper (fallback cepat saat Gemini limit)
+async function callGroq(prompt, model = "llama-3.3-70b-versatile") {
+  try {
+    if (!GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY tidak ditemukan di .env");
+    }
+
+    console.log(`📡 Mengirim request ke Groq AI (model: ${model})...`);
+    console.log("🔑 API Key Groq ada:", GROQ_API_KEY.substring(0, 20) + "...");
+
+    const response = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: model,
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 8192,
+        top_p: 1
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${GROQ_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 90000
+      }
+    );
+
+    if (!response.data.choices || !response.data.choices[0]) {
+      throw new Error("Respons Groq tidak valid: " + JSON.stringify(response.data));
+    }
+
+    console.log("✅ Respon Groq AI berhasil diterima!");
+    return response.data.choices[0].message.content;
+  } catch (error) {
+    console.error("❌ Groq Error:", error.response?.data || error.message);
+    
+    // Auto-fallback to llama-3.1-8b-instant if rate limit is hit
+    const isRateLimit = error.response?.status === 429 || 
+                        error.response?.data?.error?.code === 'rate_limit_exceeded';
+    if (isRateLimit && model === "llama-3.3-70b-versatile") {
+      console.warn("⚠️ Groq TPM limit hit. Retrying automatically with llama-3.1-8b-instant...");
+      return await callGroq(prompt, "llama-3.1-8b-instant");
+    }
+    throw error;
+  }
+}
+
+// Helper: deteksi apakah error adalah rate limit / quota exceeded
+function isRateLimitError(err) {
+  const status = err?.response?.status;
+  const msg = (err?.message || '').toLowerCase();
+  const data = JSON.stringify(err?.response?.data || '').toLowerCase();
+  return status === 429 ||
+    status === 413 ||
+    msg.includes('rate limit') ||
+    msg.includes('quota') ||
+    msg.includes('429') ||
+    msg.includes('limit exceeded') ||
+    data.includes('rate_limit') ||
+    data.includes('quota') ||
+    data.includes('429');
+}
+
+// Smart AI Call dengan auto-fallback: Groq -> Syntx.ai (Claude) -> Gemini -> DeepSeek -> Nvidia -> OpenRouter
+// Syntx.ai dinaikan ke posisi ke-2 karena gratis tak terbatas dan handal
+async function callAIWithFallback(prompt, options = {}) {
+  const { preferModel, validator } = options;
+
+  // Helper: cek apakah respons valid dengan validator jika ada
+  const isValid = (text) => {
+    if (!text || !text.trim()) return false;
+    if (validator) return validator(text);
+    return true;
+  };
+
+  const errors = [];
+
+  // Jika preferModel adalah specific provider, langsung route ke sana
+  if (preferModel === 'groq') {
+    try {
+      const result = await callGroq(prompt);
+      if (isValid(result)) return result;
+    } catch (err) { errors.push({ provider: 'groq', error: err.message }); }
+  } else if (preferModel === 'syntx-claude') {
+    try {
+      const result = await syntxBot.callSyntx(prompt, 'claude-opus-4-8');
+      if (isValid(result)) return result;
+    } catch (err) { errors.push({ provider: 'syntx-claude', error: err.message }); }
+  } else if (preferModel === 'syntx-gemini') {
+    try {
+      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash');
+      if (isValid(result)) return result;
+    } catch (err) { errors.push({ provider: 'syntx-gemini', error: err.message }); }
+  } else if (preferModel === 'gemini') {
+    try {
+      if (genAI) {
+        const result = await callGemini(prompt);
+        if (isValid(result)) return result;
+      }
+    } catch (err) { errors.push({ provider: 'gemini', error: err.message }); }
+  } else if (preferModel === 'openrouter') {
+    try {
+      const result = await callOpenRouter(prompt);
+      if (isValid(result)) return result;
+    } catch (err) { errors.push({ provider: 'openrouter', error: err.message }); }
+  }
+
+  // Auto-fallback mode (default) — coba semua secara berurutan
+  // 1. Coba Groq dulu (paling cepat jika tidak kena limit)
+  if (preferModel !== 'groq') {
+    try {
+      if (GROQ_API_KEY) {
+        console.log("📡 [1/6] Mencoba Groq AI (llama-3.3-70b)...");
+        const result = await callGroq(prompt, "llama-3.3-70b-versatile");
+        if (isValid(result)) return result;
+        console.warn("⚠️ Groq: respons tidak valid (mungkin terpotong), lanjut fallback...");
+      }
+    } catch (err) {
+      const isLimit = isRateLimitError(err);
+      console.warn(`⚠️ Groq gagal${isLimit ? ' (RATE LIMIT)' : ''}:`, err.message?.substring(0, 100));
+      errors.push({ provider: "groq", error: err.message });
+    }
+  }
+
+  // 2. Syntx.ai Claude Opus 4.8 – GRATIS & UNLIMITED, model terbaik
+  if (preferModel !== 'syntx-claude') {
+    try {
+      console.log("📡 [2/6] Mencoba Syntx.ai Claude Opus 4.8 (gratis, tanpa limit)...");
+      const result = await syntxBot.callSyntx(prompt, 'claude-opus-4-8');
+      if (isValid(result)) return result;
+      console.warn("⚠️ Syntx Claude: respons tidak valid, lanjut fallback...");
+    } catch (err) {
+      console.warn("⚠️ Syntx.ai Claude gagal:", err.message?.substring(0, 100));
+      errors.push({ provider: "syntx-claude", error: err.message });
+    }
+  }
+
+  // 3. Coba Gemini (jika ada)
+  if (preferModel !== 'gemini') {
+    try {
+      if (genAI) {
+        console.log("📡 [3/6] Mencoba Gemini AI...");
+        const result = await callGemini(prompt);
+        if (isValid(result)) return result;
+        console.warn("⚠️ Gemini: respons tidak valid, lanjut fallback...");
+      }
+    } catch (err) {
+      const isLimit = isRateLimitError(err);
+      console.warn(`⚠️ Gemini gagal${isLimit ? ' (QUOTA)' : ''}:`, err.message?.substring(0, 100));
+      errors.push({ provider: "gemini", error: err.message });
+    }
+  }
+
+  // 4. Coba Syntx Gemini 3.5 Flash sebagai fallback
+  if (preferModel !== 'syntx-gemini') {
+    try {
+      console.log("📡 [4/6] Mencoba Syntx.ai Gemini 3.5 Flash...");
+      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash');
+      if (isValid(result)) return result;
+      console.warn("⚠️ Syntx Gemini: respons tidak valid, lanjut fallback...");
+    } catch (err) {
+      console.warn("⚠️ Syntx.ai Gemini gagal:", err.message?.substring(0, 100));
+      errors.push({ provider: "syntx-gemini", error: err.message });
+    }
+  }
+
+  // 5. Coba DeepSeek
+  try {
+    if (DEEPSEEK_API_KEY) {
+      console.log("📡 [5/6] Mencoba DeepSeek AI...");
+      const result = await callDeepSeek(prompt);
+      if (isValid(result)) return result;
+    }
+  } catch (err) {
+    console.warn("⚠️ DeepSeek gagal:", err.message?.substring(0, 100));
+    errors.push({ provider: "deepseek", error: err.message });
+  }
+
+  // 6. Coba OpenRouter (fallback terakhir)
+  try {
+    console.log("📡 [6/6] Mencoba OpenRouter sebagai fallback terakhir...");
+    const result = await callOpenRouter(prompt, "default");
+    if (isValid(result)) return result;
+  } catch (err) {
+    console.warn("⚠️ OpenRouter gagal:", err.message?.substring(0, 100));
+    errors.push({ provider: "openrouter", error: err.message });
+  }
+
+  // Semua gagal
+  throw new Error(`Semua provider AI gagal: ${JSON.stringify(errors)}`);
 }
 
 // Daftar model OpenRouter yang tersedia (fallback jika satu model error)
@@ -106,40 +355,42 @@ const OPENROUTER_MODELS = {
   "gemini-1.5-flash": "google/gemini-1.5-flash",
   "gemini-1.5-pro": "google/gemini-1.5-pro",
   "gemini-2.5-pro": "google/gemini-2.5-pro-exp-03-25",
-  
+  "gemini-2.5-flash-free": "google/gemini-2.5-flash:free",
+
   // OpenAI Models
   "gpt-4o": "openai/gpt-4o",
   "gpt-4o-mini": "openai/gpt-4o-mini",
   "gpt-3.5-turbo": "openai/gpt-3.5-turbo",
-  
+
   // Meta / Llama
   "llama-3.3-70b": "meta-llama/llama-3.3-70b-instruct",
   "llama-3.1-8b": "meta-llama/llama-3.1-8b-instruct",
-  
+
   // Mistral
   "mistral-7b": "mistralai/mistral-7b-instruct",
   "mixtral-8x7b": "mistralai/mixtral-8x7b-instruct",
-  
+
   // DeepSeek
   "deepseek-v3": "deepseek/deepseek-chat",
   "deepseek-r1": "deepseek/deepseek-r1",
-  
+
   // Qwen
   "qwen-2.5-72b": "qwen/qwen-2.5-72b-instruct",
-  
+
   // Default
-  "default": "openai/gpt-4o-mini" // Model default yang paling stabil
+  "default": "meta-llama/llama-3.3-70b-instruct:free" // Model default yang gratis & unlimited
 };
 
 // OpenRouter API Call Helper dengan auto-fallback model
 async function callOpenRouter(prompt, modelKey = "default") {
-  // Daftar model untuk fallback jika model utama gagal
+  // Daftar model untuk fallback jika model utama gagal (utamakan model gratis)
   const fallbackModels = [
     modelKey,                                    // Model yang diminta
-    "gpt-4o-mini",                               // Fallback 1: GPT-4o-mini (stabil)
-    "gemini-2.0-flash",                          // Fallback 2: Gemini via OpenRouter
-    "llama-3.3-70b",                             // Fallback 3: Llama
-    "deepseek-v3",                               // Fallback 4: DeepSeek
+    "meta-llama/llama-3.3-70b-instruct:free",    // Fallback 1: Llama 3.3 70B Free
+    "meta-llama/llama-3.2-3b-instruct:free",     // Fallback 2: Llama 3.2 3B Free
+    "qwen/qwen3-coder:free",                     // Fallback 3: Qwen 3 Coder Free
+    "nousresearch/hermes-3-llama-3.1-405b:free", // Fallback 4: Hermes 3 405B Free
+    "nvidia/nemotron-3-ultra-550b-a55b:free"     // Fallback 5: Nvidia Nemotron Free
   ];
 
   let lastError = null;
@@ -147,7 +398,7 @@ async function callOpenRouter(prompt, modelKey = "default") {
   for (const fbModel of fallbackModels) {
     try {
       const modelName = OPENROUTER_MODELS[fbModel] || fbModel;
-      
+
       if (!OPENROUTER_API_KEY) {
         throw new Error("OPENROUTER_API_KEY tidak ditemukan di .env");
       }
@@ -239,7 +490,7 @@ async function scrapAdobeStock(keyword) {
   try {
     const searchUrl = "https://stock.adobe.com/id/search/video?k=" + encodeURIComponent(keyword);
     console.log("🔍 Mengorek data Adobe Stock untuk: " + keyword);
-    
+
     const { data } = await axios.get(searchUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -264,7 +515,7 @@ async function scrapAdobeStock(keyword) {
 // JALUR 1: AMBIL DATA & OPTIMALISASI ATM VIA OPENROUTER
 app.post("/api/generate", async (req, res) => {
   const { keyword } = req.body;
-  
+
   const dataScrap = await scrapAdobeStock(keyword);
   console.log("🤖 Menyodorkan data kompetitor ke OpenRouter AI...");
 
@@ -291,18 +542,9 @@ app.post("/api/generate", async (req, res) => {
     "]";
 
   try {
-    let aiResponse = "";
-    if (DEEPSEEK_API_KEY) {
-      try {
-        aiResponse = await callDeepSeek(prompt);
-      } catch (err) {
-        console.warn("⚠️ DeepSeek gagal untuk generate ide, mencoba fallback ke OpenRouter...");
-        aiResponse = await callOpenRouter(prompt);
-      }
-    } else {
-      aiResponse = await callOpenRouter(prompt);
-    }
-    
+    console.log("📡 Menggunakan AI dengan fallback untuk generate ide...");
+    const aiResponse = await callAIWithFallback(prompt);
+
     let jsonText = aiResponse.trim();
     if (jsonText.startsWith("`" + "`" + "`json")) {
       jsonText = jsonText.split("`" + "`" + "`json")[1].split("`" + "`" + "`")[0].trim();
@@ -325,7 +567,7 @@ app.post("/api/generate", async (req, res) => {
 // JALUR 1B: GENERATE IDE VIA GEMINI LANGSUNG (tanpa OpenRouter)
 app.post("/api/generate-gemini", async (req, res) => {
   const { keyword } = req.body;
-  
+
   if (!keyword) {
     return res.status(400).json({ error: "Keyword diperlukan" });
   }
@@ -355,8 +597,9 @@ app.post("/api/generate-gemini", async (req, res) => {
     "]";
 
   try {
-    const aiResponse = await callGemini(prompt);
-    
+    console.log("📡 Menggunakan AI dengan fallback untuk generate ide...");
+    const aiResponse = await callAIWithFallback(prompt);
+
     let jsonText = aiResponse.trim();
     if (jsonText.includes("```json")) {
       jsonText = jsonText.split("```json")[1].split("```")[0].trim();
@@ -399,11 +642,11 @@ app.post("/api/render", async (req, res) => {
       url,
       {
         event_type: "target-render-cloud",
-        client_payload: { 
-          item: { 
+        client_payload: {
+          item: {
             id: item.id,
             durationInFrames: Number(item.durationInFrames) || 150
-          } 
+          }
         }
       },
       {
@@ -462,7 +705,7 @@ app.post("/api/generate-html-preview-gemini", async (req, res) => {
     
     Make the output extremely aesthetic, complex, and professional. The user should be completely wowed by the design.`;
 
-    const aiResponse = await callGemini(prompt);
+    const aiResponse = await callAIWithFallback(prompt);
 
     let htmlText = aiResponse.trim();
     if (htmlText.includes("```html")) {
@@ -516,16 +759,9 @@ app.post("/api/generate-html-preview", async (req, res) => {
     
     Make the output extremely aesthetic, complex, and professional. The user should be completely wowed by the design.`;
 
-    let htmlText = "";
-    if (genAI) {
-      console.log("📡 Menggunakan Gemini SDK langsung...");
-      const aiResponse = await callGemini(prompt);
-      htmlText = aiResponse.trim();
-    } else {
-      console.log("📡 Gemini SDK tidak aktif, menggunakan OpenRouter...");
-      const aiResponse = await callOpenRouter(prompt);
-      htmlText = aiResponse.trim();
-    }
+    console.log("📡 Menggunakan AI dengan fallback untuk generate HTML...");
+    const aiResponse = await callAIWithFallback(prompt);
+    let htmlText = aiResponse.trim();
 
     if (htmlText.includes("```html")) {
       htmlText = htmlText.split("```html")[1].split("```")[0].trim();
@@ -615,7 +851,7 @@ ${item.htmlPreview || ""}
 
 OUTPUT: Start directly with the import line. No markdown. No explanation.`;
 
-    const aiResponse = await callGemini(conversionPrompt);
+    const aiResponse = await callAIWithFallback(conversionPrompt);
 
     let tsxCode = aiResponse.trim();
     if (tsxCode.includes("```typescript") || tsxCode.includes("```tsx")) {
@@ -711,7 +947,7 @@ ${item.htmlPreview || ""}
 
 OUTPUT: Start directly with the import line. No markdown. No explanation.`;
 
-    const aiResponse = await callOpenRouter(conversionPrompt);
+    const aiResponse = await callAIWithFallback(conversionPrompt);
 
     let tsxCode = aiResponse.trim();
     if (tsxCode.startsWith("```typescript") || tsxCode.startsWith("```tsx")) {
@@ -756,11 +992,11 @@ app.post("/api/render-converted", async (req, res) => {
       url,
       {
         event_type: "target-render-cloud",
-        client_payload: { 
-          item: { 
+        client_payload: {
+          item: {
             id: item.id,
             durationInFrames: Number(item.durationInFrames) || 150
-          } 
+          }
         }
       },
       {
@@ -792,26 +1028,26 @@ app.get("/api/saved-items", (req, res) => {
   }
 });
 
-  // GET: Export all keywords to CSV for download
-  app.get("/api/export-keywords", (req, res) => {
-    try {
-      const dbPath = path.join(__dirname, "saved-items.json");
-      const data = fs.readFileSync(dbPath, "utf-8");
-      const items = JSON.parse(data);
-      let csv = "id,keywords\n";
-      items.forEach((item) => {
-        const escapedId = (item.id || "").replace(/"/g, '""');
-        const escapedKeywords = (item.keywords || "").replace(/"/g, '""');
-        csv += `"${escapedId}","${escapedKeywords}"\n`;
-      });
-      res.setHeader("Content-Type", "text/csv");
-      res.setHeader("Content-Disposition", "attachment; filename=keywords.csv");
-      res.send(csv);
-    } catch (error) {
-      console.error("❌ Failed to export keywords:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
+// GET: Export all keywords to CSV for download
+app.get("/api/export-keywords", (req, res) => {
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    const data = fs.readFileSync(dbPath, "utf-8");
+    const items = JSON.parse(data);
+    let csv = "id,keywords\n";
+    items.forEach((item) => {
+      const escapedId = (item.id || "").replace(/"/g, '""');
+      const escapedKeywords = (item.keywords || "").replace(/"/g, '""');
+      csv += `"${escapedId}","${escapedKeywords}"\n`;
+    });
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=keywords.csv");
+    res.send(csv);
+  } catch (error) {
+    console.error("❌ Failed to export keywords:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // POST: Simpan atau update baris
 app.post("/api/save-item", (req, res) => {
@@ -823,14 +1059,14 @@ app.post("/api/save-item", (req, res) => {
     const dbPath = path.join(__dirname, "saved-items.json");
     const data = fs.readFileSync(dbPath, "utf-8");
     let items = JSON.parse(data);
-    
+
     const index = items.findIndex(i => i.id === item.id);
     if (index !== -1) {
       items[index] = { ...items[index], ...item };
     } else {
       items.push(item);
     }
-    
+
     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
     res.json({ success: true, item });
   } catch (error) {
@@ -845,14 +1081,14 @@ app.delete("/api/delete-item/:id", (req, res) => {
     const dbPath = path.join(__dirname, "saved-items.json");
     const data = fs.readFileSync(dbPath, "utf-8");
     let items = JSON.parse(data);
-    
+
     const beforeCount = items.length;
     items = items.filter(i => i.id !== id);
-    
+
     if (items.length === beforeCount) {
       return res.status(404).json({ error: `Item "${id}" tidak ditemukan` });
     }
-    
+
     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
     console.log(`🗑 Item "${id}" berhasil dihapus dari database`);
     res.json({ success: true });
@@ -868,32 +1104,32 @@ app.post("/api/render-preview", async (req, res) => {
   if (!item || !item.id || !item.promptCode) {
     return res.status(400).json({ error: "Item atau promptCode tidak lengkap" });
   }
-  
+
   console.log(`🎥 Merender preview rendah lokal untuk: ${item.id}`);
   const tempPropsFile = `temp-props-preview-${item.id}.json`;
-  
+
   try {
     // 1. Tulis file src/Composition.tsx
     fs.writeFileSync("src/Composition.tsx", item.promptCode);
-    
+
     // 2. Tulis props sementara
     const props = {
       durationInFrames: Number(item.durationInFrames) || 150
     };
     fs.writeFileSync(tempPropsFile, JSON.stringify(props));
-    
+
     // 3. Jalankan render lokal
     const previewFile = path.join("public", "previews", `${item.id}.mp4`);
     const cmd = `npx remotion render Composition "${previewFile}" --scale=0.5 --props="${tempPropsFile}"`;
     console.log(`Running CLI: ${cmd}`);
-    
+
     execSync(cmd, { stdio: "inherit" });
-    
+
     // Hapus props sementara
     if (fs.existsSync(tempPropsFile)) {
       fs.unlinkSync(tempPropsFile);
     }
-    
+
     console.log(`✅ Sukses merender preview: ${item.id}`);
     const previewUrl = `/previews/${item.id}.mp4`;
     res.json({ success: true, previewUrl });
@@ -912,32 +1148,56 @@ app.post("/api/render-4k", async (req, res) => {
   if (!item || !item.id || !item.promptCode) {
     return res.status(400).json({ error: "Item atau promptCode tidak lengkap" });
   }
-  
+
   console.log(`🎥 Merender 4K ProRes untuk: ${item.id}`);
   const tempPropsFile = `temp-props-4k-${item.id}.json`;
-  
+
   try {
     // 1. Tulis file src/Composition.tsx
     fs.writeFileSync("src/Composition.tsx", item.promptCode);
-    
+
     // 2. Tulis props sementara
     const props = {
       durationInFrames: Number(item.durationInFrames) || 150
     };
     fs.writeFileSync(tempPropsFile, JSON.stringify(props));
-    
+
     // 3. Jalankan render 4K ProRes
     const outputFile = path.join("out", `${item.id}_4k.mov`);
     const cmd = `npx remotion render Composition "${outputFile}" --codec=prores --props="${tempPropsFile}"`;
     console.log(`Running CLI: ${cmd}`);
-    
+
     execSync(cmd, { stdio: "inherit" });
-    
+
     // Hapus props sementara
     if (fs.existsSync(tempPropsFile)) {
       fs.unlinkSync(tempPropsFile);
     }
-    
+
+    // 4. Sematkan metadata via FFmpeg jika tersedia secara lokal
+    let hasFFmpeg = false;
+    try {
+      execSync("ffmpeg -version", { stdio: "ignore" });
+      hasFFmpeg = true;
+    } catch (e) {
+      console.warn("⚠️ FFmpeg tidak ditemukan secara lokal. Metadata tidak akan disematkan secara lokal.");
+    }
+
+    if (hasFFmpeg) {
+      try {
+        console.log(`🏷 Menyematkan metadata via FFmpeg untuk: ${item.id}`);
+        const tempOutputFile = path.join("out", `temp_${item.id}_4k.mov`);
+        const title = item.judul || "Stock Video";
+        const comment = item.keywords || "motion, abstract, loop";
+        const ffmpegCmd = `ffmpeg -y -i "${outputFile}" -metadata title="${title.replace(/"/g, '\\"')}" -metadata comment="${comment.replace(/"/g, '\\"')}" -codec copy "${tempOutputFile}"`;
+        execSync(ffmpegCmd, { stdio: "inherit" });
+        fs.renameSync(tempOutputFile, outputFile);
+        console.log("✅ Metadata berhasil disematkan!");
+      } catch (err) {
+        console.error("❌ Gagal menyematkan metadata secara lokal:", err.message);
+      }
+    }
+
     console.log(`✅ Sukses merender 4K ProRes: ${item.id}`);
     res.json({ success: true, outputPath: outputFile });
   } catch (error) {
@@ -973,18 +1233,18 @@ function saveOrUpdateItem(item) {
 function addLog(jobId, message, type = 'info') {
   const time = new Date().toLocaleTimeString('id-ID');
   const logEntry = { message, type, time };
-  
+
   if (!batchJobs[jobId]) {
     batchJobs[jobId] = { logs: [], clients: [], status: 'running' };
   }
-  
+
   batchJobs[jobId].logs.push(logEntry);
-  
+
   // Stream to all connected clients
   batchJobs[jobId].clients.forEach(client => {
     client.write(`data: ${JSON.stringify(logEntry)}\n\n`);
   });
-  
+
   console.log(`[Batch Job ${jobId}] [${type}] ${message}`);
 }
 
@@ -1002,7 +1262,7 @@ function unzipFile(zipPath, destDir) {
 // Helper: Internal function to check GitHub actions run status and download artifacts
 async function checkGithubRenderStatusInternal(id, renderType) {
   const trackingKey = `${id}_${renderType}`;
-  
+
   // Jika database lokal sudah menyimpan URL http/https eksternal, langsung return itu
   const dbPath = path.join(__dirname, "saved-items.json");
   if (fs.existsSync(dbPath)) {
@@ -1033,7 +1293,7 @@ async function checkGithubRenderStatusInternal(id, renderType) {
 
   const runs = response.data.workflow_runs || [];
   const triggeredAt = runInfo.triggeredAt ? new Date(runInfo.triggeredAt - 30000) : new Date(0); // 30s buffer
-  
+
   let matchedRun = null;
   if (runInfo.runId) {
     matchedRun = runs.find(run => run.id === runInfo.runId);
@@ -1077,7 +1337,7 @@ async function checkGithubRenderStatusInternal(id, renderType) {
   const zipFilename = `temp-link-${id}-${renderType}.zip`;
   const tempZipPath = path.join(__dirname, zipFilename);
   const downloadUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/artifacts/${matchedArtifact.id}/zip`;
-  
+
   console.log(`Downloading zip link artifact from: ${downloadUrl}`);
   const downloadRes = await axios({
     method: "get",
@@ -1131,22 +1391,22 @@ async function waitForRender(id, renderType, jobId) {
   addLog(jobId, `Menunggu proses rendering video preview di GitHub Actions...`, 'info');
   const startTime = Date.now();
   const timeoutMs = 20 * 60 * 1000; // 20 menit timeout
-  
+
   while (Date.now() - startTime < timeoutMs) {
     const finalFilename = renderType === "preview" ? `${id}-preview.mp4` : `${id}-4k.mov`;
     const legacyFilename = renderType === "preview" ? `${id}.mp4` : `${id}_4k.mov`;
-    const finalPath = renderType === "preview" 
+    const finalPath = renderType === "preview"
       ? path.join(__dirname, "public", "previews", finalFilename)
       : path.join(__dirname, "out", finalFilename);
     const legacyPath = renderType === "preview"
       ? path.join(__dirname, "public", "previews", legacyFilename)
       : path.join(__dirname, "out", legacyFilename);
-      
+
     if (fs.existsSync(finalPath) || fs.existsSync(legacyPath)) {
       addLog(jobId, `Video preview untuk ${id} berhasil ditemukan secara lokal!`, 'success');
       return true;
     }
-    
+
     try {
       const statusResult = await checkGithubRenderStatusInternal(id, renderType);
       if (statusResult.status === 'success') {
@@ -1160,34 +1420,115 @@ async function waitForRender(id, renderType, jobId) {
     } catch (err) {
       addLog(jobId, `Informasi status render: ${err.message}`, 'info');
     }
-    
+
     // Tunggu 15 detik sebelum mengecek ulang
     await new Promise(resolve => setTimeout(resolve, 15000));
   }
   throw new Error("Timeout rendering video di GitHub Actions.");
 }
 
+// Helper: Sanitasi keywords & title agar sesuai dengan aturan kepatuhan Shutterstock & Adobe Stock
+function sanitizeKeywordsAndTitle(seoData) {
+  if (!seoData) return seoData;
+
+  const brandsMap = {
+    'iphone': 'smartphone',
+    'ipad': 'tablet',
+    'android': 'mobile OS',
+    'google': 'search engine',
+    'adobe': 'creative software',
+    'microsoft': 'software giant',
+    'nike': 'sportswear',
+    'apple': 'tech company',
+    'windows': 'OS',
+    'facebook': 'social media',
+    'instagram': 'social network',
+    'twitter': 'social platform',
+    'tiktok': 'video sharing app'
+  };
+
+  const prohibitedTech = [
+    'css', 'keyframes', 'requestanimationframe', 'html', 'canvas', 'svg', 'easing'
+  ];
+
+  // Sanitasi Judul
+  if (seoData.judul) {
+    let title = seoData.judul;
+    for (const [brand, replacement] of Object.entries(brandsMap)) {
+      const regex = new RegExp(`\\b${brand}\\b`, 'gi');
+      title = title.replace(regex, replacement);
+    }
+    prohibitedTech.forEach(tech => {
+      const regex = new RegExp(`\\b${tech}\\b`, 'gi');
+      title = title.replace(regex, '');
+    });
+    seoData.judul = title.replace(/\s+/g, ' ').trim();
+  }
+
+  // Sanitasi Keywords
+  if (seoData.keywords) {
+    const rawKeywords = seoData.keywords.split(',');
+    const cleanKeywords = [];
+    const seen = new Set();
+
+    for (let kw of rawKeywords) {
+      kw = kw.trim();
+      if (!kw) continue;
+      
+      let cleanKw = kw.toLowerCase();
+
+      // Replace brands
+      for (const [brand, replacement] of Object.entries(brandsMap)) {
+        if (cleanKw === brand || cleanKw.includes(brand)) {
+          cleanKw = cleanKw.replace(new RegExp(brand, 'g'), replacement);
+        }
+      }
+
+      // Check if keyword contains prohibited tech words
+      let isProhibited = false;
+      for (const tech of prohibitedTech) {
+        if (cleanKw === tech || cleanKw.includes(tech)) {
+          isProhibited = true;
+          break;
+        }
+      }
+
+      if (isProhibited) continue;
+
+      cleanKw = cleanKw.trim();
+      if (!seen.has(cleanKw)) {
+        seen.add(cleanKw);
+        cleanKeywords.push(kw);
+      }
+    }
+
+    seoData.keywords = cleanKeywords.slice(0, 50).join(', ');
+  }
+
+  return seoData;
+}
+
 // Helper: Jalankan job batch di background secara sekuensial
-async function runBatchJob(jobId, files, loop, transparent) {
+async function runBatchJob(jobId, files, loop, transparent, aiModel = 'auto', animationDuration = 10) {
   addLog(jobId, `Mulai memproses batch dengan ${files.length} file...`, 'info');
-  
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     const stepNum = i + 1;
     const totalFiles = files.length;
-    
+
     addLog(jobId, `[${stepNum}/${totalFiles}] Membaca file: ${file.name}`, 'info');
-    
+
     try {
       // 1. Sanitasi ID (Mencegah command injection)
       const baseName = path.basename(file.name, '.html');
       const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-      
+
       addLog(jobId, `Menggunakan ID tersanitasi: ${sanitizedId}`, 'info');
 
       // 2. Generate SEO Metadata
       addLog(jobId, `Menghasilkan metadata SEO via AI untuk ${sanitizedId}...`, 'info');
-      
+
       const seoPrompt = `Kamu adalah pakar Creative Director SEO Microstock USA.
 Analisis file HTML berikut dan buat metadata SEO yang luar biasa kreatif, visualnya mewah, dan bernilai jual tinggi untuk dipasarkan di Adobe Stock.
 
@@ -1198,28 +1539,18 @@ Keluarkan hasil dalam format JSON murni berbentuk objek tanpa teks pengantar/pen
 DILARANG menggunakan karakter double quote (") di dalam nilai string. Gunakan single quote (') jika perlu.
 Struktur objek wajib persis seperti ini:
 {
-  "judul": "Rekomendasi judul video SEO bahasa Inggris (maksimal 12 kata). DILARANG menggunakan kata teknis pemrograman seperti CSS, keyframes, requestAnimationFrame, HTML, canvas, SVG, easing, DLL. Gunakan istilah komersial video seperti: smooth animation, fluid movement, modern UI UX elements overlay, app interface template, abstract particles, seamless loop, data visualization, animated infographics, interactive design concept.",
-  "keywords": "35-50 kata kunci bahasa Inggris dipisah koma. DILARANG menggunakan istilah teknis pemrograman (CSS transition, keyframes, requestAnimationFrame, SVG, canvas, loop). WAJIB menerjemahkan ke istilah komersial video stock dan disusun berdasarkan Teknik 3 Pilar dengan 7-10 keyword pertama adalah yang paling krusial. Pilar 1 (What/Isi: mouse click, subscribe button, loading bar, progress indicator, dll), Pilar 2 (Visual/Style: minimalist, flat design, modern UI, isolated, 4k. Jika video transparan, keyword 'alpha channel' and 'transparent background' WAJIB ditaruh di 10 keyword pertama), Pilar 3 (Kegunaan/Context: website promo, social media asset, app presentation, marketing material).",
+  "judul": "Rekomendasi judul video SEO bahasa Inggris (maksimal 12 kata). DILARANG menggunakan kata teknis pemrograman seperti CSS, keyframes, requestAnimationFrame, HTML, canvas, SVG, easing, DLL. DILARANG menggunakan nama brand (Apple, Nike, Android, Google, Microsoft, dll). Gunakan istilah komersial video seperti: smooth animation, fluid movement, modern UI UX elements overlay, app interface template, abstract particles, seamless loop, data visualization, animated infographics, interactive design concept.",
+  "keywords": "35-50 kata kunci bahasa Inggris dipisah koma. DILARANG menggunakan istilah teknis pemrograman (CSS transition, keyframes, requestAnimationFrame, SVG, canvas, loop) dan DILARANG menggunakan nama brand (Apple, Nike, Android, Google, Microsoft, dll). WAJIB menerjemahkan ke istilah komersial video stock dan disusun berdasarkan Teknik 3 Pilar dengan 7-10 keyword pertama adalah yang paling krusial. Pilar 1 (What/Isi: mouse click, subscribe button, loading bar, progress indicator, dll), Pilar 2 (Visual/Style: minimalist, flat design, modern UI, isolated, 4k. Jika video transparan, keyword 'alpha channel' and 'transparent background' WAJIB ditaruh di 10 keyword pertama), Pilar 3 (Kegunaan/Context: website promo, social media asset, app presentation, marketing material).",
   "deskripsi": "Deskripsi detail visual bahasa Inggris untuk Adobe Stock (minimal 15 kata). Terjemahkan istilah kode ke visual: jangan sebut keyframes/easing/canvas, tapi gunakan smooth animation, fluid movement, dll.",
   "kategori": "Kategori Adobe Stock (Technology/Abstract/Business)"
 }`;
 
       let aiResponse = "";
-      if (DEEPSEEK_API_KEY) {
-        try {
-          aiResponse = await callDeepSeek(seoPrompt);
-        } catch (err) {
-          console.warn("⚠️ DeepSeek gagal untuk SEO, mencoba fallback...");
-          if (genAI) {
-            aiResponse = await callGemini(seoPrompt);
-          } else {
-            aiResponse = await callOpenRouter(seoPrompt, "gemini-2.0-flash");
-          }
-        }
-      } else if (genAI) {
-        aiResponse = await callGemini(seoPrompt);
-      } else {
-        aiResponse = await callOpenRouter(seoPrompt, "gemini-2.0-flash");
+      try {
+        // Gunakan callAIWithFallback yang sudah memiliki chain Groq -> Gemini -> DeepSeek -> OpenRouter
+        aiResponse = await callAIWithFallback(seoPrompt, { preferModel: aiModel });
+      } catch (err) {
+        throw new Error(`Semua provider AI gagal untuk SEO metadata: ${err.message}`);
       }
 
       let jsonText = aiResponse.trim();
@@ -1228,10 +1559,13 @@ Struktur objek wajib persis seperti ini:
       } else if (jsonText.includes("```")) {
         jsonText = jsonText.split("```")[1].split("```")[0].trim();
       }
-      
+
       jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-      const seoData = JSON.parse(jsonText);
+      let seoData = JSON.parse(jsonText);
+      seoData = sanitizeKeywordsAndTitle(seoData);
       addLog(jobId, `Metadata SEO berhasil didapat. Judul: "${seoData.judul}"`, 'success');
+
+      const durationFrames = (Number(animationDuration) || 10) * 30;
 
       // 3. Simpan state awal ke database
       const itemData = {
@@ -1241,7 +1575,7 @@ Struktur objek wajib persis seperti ini:
         keywords: seoData.keywords,
         deskripsi: seoData.deskripsi,
         kategori: seoData.kategori,
-        durationInFrames: 150,
+        durationInFrames: durationFrames,
         htmlPreview: file.content,
         loop: !!loop,
         transparent: !!transparent,
@@ -1251,12 +1585,12 @@ Struktur objek wajib persis seperti ini:
         outputPath4k: '',
         createdAt: new Date().toISOString()
       };
-      
+
       saveOrUpdateItem(itemData);
-      
+
       // 4. Konversi HTML ke TSX
       addLog(jobId, `Mengonversi HTML ke kode Remotion TSX...`, 'info');
-      
+
       const conversionPrompt = `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
 You need to understand that Remotion renders videos frame-by-frame offline (using Puppeteer/Chrome). Therefore, any real-time browser features (like CSS @keyframes, transition, Date.now(), setInterval, or Math.random()) will cause severe synchronization bugs and frame-tearing in the final .mp4 export.
 
@@ -1296,9 +1630,9 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 - const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
 - Apply transform: scale(\${scaleFactor}) and transformOrigin: 'center center' to the main wrapper div.
 
-**5. Absolute Seamless Looping & Duration Cap (CRITICAL):**
-- Duration Cap: Between 5 and 15 seconds MAX.
-- Use LCM of all animation cycles. Cap at 15s max.
+**5. Absolute Seamless Looping & Duration (CRITICAL):**
+- The animation MUST loop seamlessly and exactly match a duration of ${animationDuration} seconds (${durationFrames} frames at 30fps).
+- Set the component's duration/cycles to fit this ${animationDuration}-second window.
 - Apply const localFrame = frame % (fps * cycleDuration) for each element to loop perfectly.
 - Symmetrical Interpolation: First and last value in every interpolate() output MUST be identical for seamless looping.
 
@@ -1313,6 +1647,7 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 **7. Output Structure:**
 - Provide ONLY the raw .tsx file content — no markdown fences, no explanation text.
 - The main component MUST have \`export default ComponentName;\` as the LAST line.
+- Add a comment \`// END_OF_FILE\` at the very last line of the file.
 
 HERE IS THE HTML TO CONVERT:
 
@@ -1321,21 +1656,47 @@ ${file.content}
 OUTPUT: Start directly with the import line. No markdown. No explanation.`;
 
       let tsxResponse = "";
-      if (DEEPSEEK_API_KEY) {
-        try {
-          tsxResponse = await callDeepSeek(conversionPrompt);
-        } catch (err) {
-          console.warn("⚠️ DeepSeek gagal untuk TSX Conversion, mencoba fallback...");
-          if (genAI) {
-            tsxResponse = await callGemini(conversionPrompt);
-          } else {
-            tsxResponse = await callOpenRouter(conversionPrompt, "gemini-2.0-flash");
-          }
+      let tsxAttempts = 0;
+      const MAX_TSX_ATTEMPTS = 3;
+
+      // Validator kuat: cek export default, END_OF_FILE marker, dan bracket balance
+      const tsxValidator = (text) => {
+        if (!text || !text.trim()) return false;
+        const trimmed = text.trim();
+        // Wajib ada export default
+        if (!trimmed.includes('export default')) return false;
+        // Lebih baik kalau ada // END_OF_FILE (artinya AI tidak terpotong)
+        // Cek bracket balance ({} dan <>)
+        let curly = 0;
+        let angle = 0;
+        for (const ch of trimmed) {
+          if (ch === '{') curly++;
+          else if (ch === '}') curly--;
+          else if (ch === '<') angle++;
+          else if (ch === '>') angle--;
         }
-      } else if (genAI) {
-        tsxResponse = await callGemini(conversionPrompt);
-      } else {
-        tsxResponse = await callOpenRouter(conversionPrompt, "gemini-2.0-flash");
+        // Harus balanced atau sangat dekat balanced (toleransi 1)
+        if (Math.abs(curly) > 2 || Math.abs(angle) > 5) return false;
+        return true;
+      };
+
+      while (tsxAttempts < MAX_TSX_ATTEMPTS) {
+        tsxAttempts++;
+        addLog(jobId, `Mencoba generate TSX (percobaan ke-${tsxAttempts})...`, 'info');
+        try {
+          // Gunakan callAIWithFallback yang sudah memiliki chain Groq -> Gemini -> DeepSeek -> OpenRouter
+          tsxResponse = await callAIWithFallback(conversionPrompt, { 
+            preferModel: aiModel,
+            validator: tsxValidator
+          });
+          break; // sukses, keluar loop
+        } catch (err) {
+          addLog(jobId, `Percobaan ${tsxAttempts} gagal: ${err.message?.substring(0,100)}`, 'warning');
+          if (tsxAttempts >= MAX_TSX_ATTEMPTS) {
+            throw new Error(`Semua ${MAX_TSX_ATTEMPTS} percobaan AI gagal untuk TSX Conversion: ${err.message}`);
+          }
+          await new Promise(r => setTimeout(r, 2000)); // tunggu 2 detik sebelum retry
+        }
       }
 
       let tsxCode = tsxResponse.trim();
@@ -1348,7 +1709,12 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
 
       itemData.promptCode = tsxCode;
       saveOrUpdateItem(itemData);
-      addLog(jobId, `Konversi HTML ke TSX sukses!`, 'success');
+
+      // Validasi lokal sebelum push ke GitHub
+      if (!tsxValidator(tsxCode)) {
+        throw new Error('TSX yang dihasilkan tidak valid (bracket tidak balance atau tidak ada export default). Batalkan push.');
+      }
+      addLog(jobId, `Konversi HTML ke TSX sukses (TSX tervalidasi)!`, 'success');
 
       // 5. Tulis src/Composition.tsx lokal
       addLog(jobId, `Menulis file src/Composition.tsx...`, 'info');
@@ -1371,7 +1737,7 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
       addLog(jobId, `Memicu GitHub Actions cloud rendering...`, 'info');
       const workflowFile = "render-preview.yml";
       const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
-      
+
       await axios.post(
         workflowDispatchUrl,
         {
@@ -1399,7 +1765,7 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
         triggeredAt: Date.now(),
         workflowFile: workflowFile
       };
-      
+
       itemData.statusConvertTsx = 'processing-preview';
       saveOrUpdateItem(itemData);
       addLog(jobId, `Workflow dispatch berhasil dikirim ke GitHub.`, 'success');
@@ -1418,7 +1784,7 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
 
     } catch (err) {
       addLog(jobId, `Gagal memproses ${file.name}: ${err.message}`, 'error');
-      
+
       // Simpan status failed
       const baseName = path.basename(file.name, '.html');
       const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
@@ -1439,7 +1805,7 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
 
   addLog(jobId, `Semua file dalam batch selesai diproses.`, 'success');
   batchJobs[jobId].status = 'completed';
-  
+
   // Kirim event selesai ke SSE clients
   batchJobs[jobId].clients.forEach(client => {
     client.write(`data: ${JSON.stringify({ type: 'done', message: 'Semua proses selesai' })}\n\n`);
@@ -1456,21 +1822,21 @@ app.post("/api/trigger-github-render", async (req, res) => {
   }
 
   console.log(`🚀 Triggering GitHub Action rendering (${renderType}) for: ${item.id}`);
-  
+
   try {
     // 1. Git Add & Commit & Push Composition.tsx to GitHub
     console.log("📤 Menyingkronkan kode hasil konversi ke GitHub...");
     execSync("git add src/Composition.tsx", { stdio: "inherit" });
-    
+
     // Commit only if there are changes to avoid error
     try {
       execSync(`git commit -m "Render ${renderType} untuk ${item.id}"`, { stdio: "inherit" });
     } catch (e) {
       console.log("ℹ️ No new changes to commit.");
     }
-    
+
     execSync("git push origin main", { stdio: "inherit" });
-    
+
     // 2. Dapatkan commit SHA saat ini
     const sha = execSync("git rev-parse HEAD").toString().trim();
     console.log(`📌 Git Commit SHA: ${sha}`);
@@ -1478,7 +1844,7 @@ app.post("/api/trigger-github-render", async (req, res) => {
     // 3. Trigger via workflow_dispatch (new separate YML per render type)
     const workflowFile = renderType === "preview" ? "render-preview.yml" : "render-4k.yml";
     const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
-    
+
     await axios.post(
       workflowDispatchUrl,
       {
@@ -1519,9 +1885,8 @@ app.post("/api/trigger-github-render", async (req, res) => {
   }
 });
 
-// POST: Mulai pemrosesan batch HTML
 app.post("/api/process-html-batch", (req, res) => {
-  const { files, loop, transparent } = req.body;
+  const { files, loop, transparent, aiModel, animationDuration } = req.body;
   if (!files || !Array.isArray(files) || files.length === 0) {
     return res.status(400).json({ error: "Data batch file tidak valid atau kosong" });
   }
@@ -1537,7 +1902,7 @@ app.post("/api/process-html-batch", (req, res) => {
   res.json({ jobId });
 
   // Jalankan background job secara asinkron
-  runBatchJob(jobId, files, loop, transparent).catch(err => {
+  runBatchJob(jobId, files, loop, transparent, aiModel, animationDuration).catch(err => {
     console.error(`Eror fatal saat menjalankan batch ${jobId}:`, err);
   });
 });
@@ -1723,6 +2088,52 @@ app.get("/api/check-render-status/:id/:renderType", async (req, res) => {
   }
 });
 
+// GET: Cek status session syntx.ai
+app.get("/api/syntx-status", (req, res) => {
+  const state = syntxBot.getSessionState();
+  const isActive = !!state.token && state.expiresAt && Date.now() < state.expiresAt;
+  res.json({
+    isActive,
+    email: state.email,
+    expiresAt: state.expiresAt ? new Date(state.expiresAt).toISOString() : null,
+    hasToken: !!state.token
+  });
+});
+
+// POST: Trigger manual login ke syntx.ai (berguna untuk pre-warm session)
+app.post("/api/syntx-login", async (req, res) => {
+  try {
+    console.log("🔐 Manual trigger: Login ke syntx.ai...");
+    await syntxBot.loginAndGetToken();
+    const state = syntxBot.getSessionState();
+    res.json({
+      success: true,
+      email: state.email,
+      expiresAt: state.expiresAt ? new Date(state.expiresAt).toISOString() : null,
+      message: "Login syntx.ai berhasil! Token tersimpan di session."
+    });
+  } catch (err) {
+    console.error("❌ Gagal login syntx.ai:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST: Test kirim prompt langsung ke syntx.ai
+app.post("/api/syntx-test", async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt) {
+    return res.status(400).json({ error: "Param 'prompt' diperlukan" });
+  }
+  try {
+    console.log("🧪 Test prompt ke syntx.ai...");
+    const result = await syntxBot.callSyntx(prompt);
+    res.json({ success: true, result });
+  } catch (err) {
+    console.error("❌ Gagal test syntx.ai:", err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.listen(5000, () => {
   console.log("Server Jembatan Kode Bebas aktif di port 5000");
-});
+});
