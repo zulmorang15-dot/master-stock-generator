@@ -89,6 +89,26 @@ jobs:
           ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata description="${{ github.event.inputs.judul }}" -metadata comment="${{ github.event.inputs.keywords }}" -metadata keywords="${{ github.event.inputs.keywords }}" -codec copy out/temp_$FILENAME
           mv out/temp_$FILENAME out/$FILENAME
 
+      - name: Install ExifTool
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y exiftool
+
+      - name: Embed XMP/IPTC/QuickTime Metadata via ExifTool
+        run: |
+          echo "=== Embedding stock metadata via ExifTool ==="
+          FILENAME="${{ github.event.inputs.composition_id }}-4k.mov"
+          # Normalize keywords format to guarantee consistent spacing and split them cleanly into lists
+          KEYWORDS_NORMALIZED=$(echo "${{ github.event.inputs.keywords }}" | sed 's/, */, /g')
+          exiftool -overwrite_original -sep ", " \
+            -Title="${{ github.event.inputs.judul }}" \
+            -Description="${{ github.event.inputs.judul }}" \
+            -Keywords="$KEYWORDS_NORMALIZED" \
+            -XMP-dc:Title="${{ github.event.inputs.judul }}" \
+            -XMP-dc:Description="${{ github.event.inputs.judul }}" \
+            -XMP-dc:Subject="$KEYWORDS_NORMALIZED" \
+            out/$FILENAME
+
       - name: Upload to x0.at Cloud
         id: upload_cloud
         run: |

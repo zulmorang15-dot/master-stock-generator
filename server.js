@@ -923,68 +923,13 @@ app.post("/api/convert-html-to-tsx-gemini", async (req, res) => {
   }
 
   try {
-    const conversionPrompt = `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
-You need to understand that Remotion renders videos frame-by-frame offline (using Puppeteer/Chrome). Therefore, any real-time browser features (like CSS @keyframes, transition, Date.now(), setInterval, or Math.random()) will cause severe synchronization bugs and frame-tearing in the final .mp4 export.
-
-**OBJECTIVE:**
-Convert the provided HTML/CSS/JS code into a single, production-grade Remotion component (.tsx). The visual output must be a 1:1 mirror of the original HTML, but entirely re-engineered for frame-locked rendering.
-
-**0. MANDATORY IMPORT RULE (ABSOLUTE — NEVER VIOLATE):**
-The FIRST LINE of the output file MUST ALWAYS be exactly this (copy-paste, no changes):
-import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
-- Do NOT import from any local files (e.g. './input', './utils', './config', etc.) — these files do not exist.
-- Do NOT import from 'three', 'gsap', or any external library.
-- Do NOT import React — it is auto-injected by the JSX transform.
-- NEVER add any import other than the single remotion import line above.
-
-**BANNED FUNCTIONS (WILL CAUSE RUNTIME CRASH — NEVER USE):**
-- EasingEaseOut, EasingEaseIn, EasingEaseInOut — these do not exist in Remotion. Use Easing.out(Easing.quad), Easing.in(Easing.quad), Easing.inOut(Easing.quad).
-- Valid Easing values: Easing.linear, Easing.ease, Easing.quad, Easing.cubic, Easing.sin, Easing.circle, Easing.exp, Easing.elastic(), Easing.back(), Easing.bounce, Easing.bezier(), Easing.in(), Easing.out(), Easing.inOut()
-- Date.now(), performance.now(), new Date() — BANNED, breaks deterministic frame rendering.
-- Math.random() inside component render — BANNED. Pre-calculate outside the component into a static const array.
-- setInterval(), setTimeout(), requestAnimationFrame() — BANNED.
-- Any CSS @keyframes, CSS transition, CSS animation property — BANNED.
-
-**1. Dynamic Identification:**
-- Identify the main subject from the HTML and use it as the PascalCase component name (e.g., GlowingButton).
-
-**2. Visual Parity & Animation (CRITICAL):**
-- Motion Mirroring: Analyze the original CSS @keyframes. Map every percentage (0%, 50%, 100%) exactly into the inputRange of Remotion's interpolate() function.
-- Easing Match: Translate CSS easing (e.g., ease-in-out) to the exact equivalent Remotion Easing API.
-- Frame-Locked: ALL motion, opacity, and scale changes MUST be strictly driven by useCurrentFrame().
-
-**3. Deterministic Rendering:**
-- Never use Math.random() inside the component render. Pre-calculate random elements (particles, positions, delays) in a static const array OUTSIDE the component function.
-
-**4. 4K Auto-Fit Landscape Scaling (CRITICAL):**
-- Define: const ORIGINAL_WIDTH = [width from HTML]; const ORIGINAL_HEIGHT = [height from HTML];
-- Inside the component: const { width, height, fps } = useVideoConfig();
-- const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
-- Apply transform: scale(\${scaleFactor}) and transformOrigin: 'center center' to the main wrapper div.
-
-**5. Absolute Seamless Looping & Duration Cap (CRITICAL):**
-- Duration Cap: Between 5 and 15 seconds MAX.
-- Use LCM of all animation cycles. Cap at 15s max.
-- Apply const localFrame = frame % (fps * cycleDuration) for each element to loop perfectly.
-- Symmetrical Interpolation: First and last value in every interpolate() output MUST be identical for seamless looping.
-
-**6. Dynamic Text Overlay — Safe getInputProps (CRITICAL):**
-- Use this EXACT pattern at the top of the component body (safe with fallback):
-  const inputProps = (getInputProps() as any) || {};
-  const judul = inputProps.judul || 'Stock Video';
-  const keywordsList = (inputProps.keywords || 'motion, abstract, loop').split(',');
-- Render judul as an elegant glowing title at the bottom-left with a smooth fade-in animation.
-- Render keywordsList as small glassmorphic badge tags below the title.
-
-**7. Output Structure:**
-- Provide ONLY the raw .tsx file content — no markdown fences, no explanation text.
-- The main component MUST have \`export default ComponentName;\` as the LAST line.
-
-HERE IS THE HTML TO CONVERT:
-
-${item.htmlPreview || ""}
-
-OUTPUT: Start directly with the import line. No markdown. No explanation.`;
+    const promptsData = loadPromptsConfig();
+    const animationDuration = item.animationDuration || 10;
+    const durationFrames = item.durationInFrames || 300;
+    const conversionPrompt = promptsData.conversionPrompt
+      .replace(/{{ANIMATION_DURATION}}/g, String(animationDuration))
+      .replace(/{{DURATION_FRAMES}}/g, String(durationFrames))
+      .replace(/{{HTML_CONTENT}}/g, item.htmlPreview || "");
 
     const aiResponse = await callAIWithFallback(conversionPrompt);
 
@@ -1019,68 +964,13 @@ app.post("/api/convert-html-to-tsx", async (req, res) => {
   }
 
   try {
-    const conversionPrompt = `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
-You need to understand that Remotion renders videos frame-by-frame offline (using Puppeteer/Chrome). Therefore, any real-time browser features (like CSS @keyframes, transition, Date.now(), setInterval, or Math.random()) will cause severe synchronization bugs and frame-tearing in the final .mp4 export.
-
-**OBJECTIVE:**
-Convert the provided HTML/CSS/JS code into a single, production-grade Remotion component (.tsx). The visual output must be a 1:1 mirror of the original HTML, but entirely re-engineered for frame-locked rendering.
-
-**0. MANDATORY IMPORT RULE (ABSOLUTE — NEVER VIOLATE):**
-The FIRST LINE of the output file MUST ALWAYS be exactly this (copy-paste, no changes):
-import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
-- Do NOT import from any local files (e.g. './input', './utils', './config', etc.) — these files do not exist.
-- Do NOT import from 'three', 'gsap', or any external library.
-- Do NOT import React — it is auto-injected by the JSX transform.
-- NEVER add any import other than the single remotion import line above.
-
-**BANNED FUNCTIONS (WILL CAUSE RUNTIME CRASH — NEVER USE):**
-- EasingEaseOut, EasingEaseIn, EasingEaseInOut — these do not exist in Remotion. Use Easing.out(Easing.quad), Easing.in(Easing.quad), Easing.inOut(Easing.quad).
-- Valid Easing values: Easing.linear, Easing.ease, Easing.quad, Easing.cubic, Easing.sin, Easing.circle, Easing.exp, Easing.elastic(), Easing.back(), Easing.bounce, Easing.bezier(), Easing.in(), Easing.out(), Easing.inOut()
-- Date.now(), performance.now(), new Date() — BANNED, breaks deterministic frame rendering.
-- Math.random() inside component render — BANNED. Pre-calculate outside the component into a static const array.
-- setInterval(), setTimeout(), requestAnimationFrame() — BANNED.
-- Any CSS @keyframes, CSS transition, CSS animation property — BANNED.
-
-**1. Dynamic Identification:**
-- Identify the main subject from the HTML and use it as the PascalCase component name (e.g., GlowingButton).
-
-**2. Visual Parity & Animation (CRITICAL):**
-- Motion Mirroring: Analyze the original CSS @keyframes. Map every percentage (0%, 50%, 100%) exactly into the inputRange of Remotion's interpolate() function.
-- Easing Match: Translate CSS easing (e.g., ease-in-out) to the exact equivalent Remotion Easing API.
-- Frame-Locked: ALL motion, opacity, and scale changes MUST be strictly driven by useCurrentFrame().
-
-**3. Deterministic Rendering:**
-- Never use Math.random() inside the component render. Pre-calculate random elements (particles, positions, delays) in a static const array OUTSIDE the component function.
-
-**4. 4K Auto-Fit Landscape Scaling (CRITICAL):**
-- Define: const ORIGINAL_WIDTH = [width from HTML]; const ORIGINAL_HEIGHT = [height from HTML];
-- Inside the component: const { width, height, fps } = useVideoConfig();
-- const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
-- Apply transform: scale(\${scaleFactor}) and transformOrigin: 'center center' to the main wrapper div.
-
-**5. Absolute Seamless Looping & Duration Cap (CRITICAL):**
-- Duration Cap: Between 5 and 15 seconds MAX.
-- Use LCM of all animation cycles. Cap at 15s max.
-- Apply const localFrame = frame % (fps * cycleDuration) for each element to loop perfectly.
-- Symmetrical Interpolation: First and last value in every interpolate() output MUST be identical for seamless looping.
-
-**6. Dynamic Text Overlay — Safe getInputProps (CRITICAL):**
-- Use this EXACT pattern at the top of the component body (safe with fallback):
-  const inputProps = (getInputProps() as any) || {};
-  const judul = inputProps.judul || 'Stock Video';
-  const keywordsList = (inputProps.keywords || 'motion, abstract, loop').split(',');
-- Render judul as an elegant glowing title at the bottom-left with a smooth fade-in animation.
-- Render keywordsList as small glassmorphic badge tags below the title.
-
-**7. Output Structure:**
-- Provide ONLY the raw .tsx file content — no markdown fences, no explanation text.
-- The main component MUST have \`export default ComponentName;\` as the LAST line.
-
-HERE IS THE HTML TO CONVERT:
-
-${item.htmlPreview || ""}
-
-OUTPUT: Start directly with the import line. No markdown. No explanation.`;
+    const promptsData = loadPromptsConfig();
+    const animationDuration = item.animationDuration || 10;
+    const durationFrames = item.durationInFrames || 300;
+    const conversionPrompt = promptsData.conversionPrompt
+      .replace(/{{ANIMATION_DURATION}}/g, String(animationDuration))
+      .replace(/{{DURATION_FRAMES}}/g, String(durationFrames))
+      .replace(/{{HTML_CONTENT}}/g, item.htmlPreview || "");
 
     const aiResponse = await callAIWithFallback(conversionPrompt);
 
@@ -2783,24 +2673,28 @@ app.get("/api/download-4k-zip/:id", async (req, res) => {
       return res.status(404).json({ error: `Artifact "${targetArtifactName}" tidak ditemukan di GitHub. Pastikan render 4K sudah selesai.` });
     }
 
-    // Stream file zip langsung ke response
+    // Dapatkan URL redirect langsung dari GitHub Action artifact zip
     const downloadUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/artifacts/${matchedArtifact.id}/zip`;
     
-    res.setHeader("Content-Disposition", `attachment; filename="${targetArtifactName}.zip"`);
-    res.setHeader("Content-Type", "application/zip");
-
-    console.log(`⬇️ Streaming artifact zip untuk ${id} dari GitHub...`);
+    console.log(`⬇️ Mengambil URL redirect artifact zip untuk ${id} dari GitHub...`);
     const downloadRes = await axios({
       method: "get",
       url: downloadUrl,
-      responseType: "stream",
+      maxRedirects: 0,
+      validateStatus: (status) => status >= 200 && status < 400,
       headers: {
         Authorization: "token " + GITHUB_TOKEN,
         Accept: "application/vnd.github.v3+json"
       }
     });
 
-    downloadRes.data.pipe(res);
+    const redirectUrl = downloadRes.headers.location;
+    if (redirectUrl) {
+      console.log(`➡️ Redirecting client langsung ke URL S3: ${redirectUrl.substring(0, 50)}...`);
+      return res.redirect(redirectUrl);
+    } else {
+      throw new Error("Gagal mendapatkan lokasi redirect artifact dari GitHub");
+    }
   } catch (error) {
     console.error(`❌ Gagal mendownload 4k zip untuk ${id}:`, error.message);
     res.status(500).json({ error: error.message });
