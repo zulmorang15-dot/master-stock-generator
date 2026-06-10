@@ -25,9 +25,35 @@
       --text-dim: #64748b;
       --text-mid: #94a3b8;
       --purple: #a855f7;
+      --blue: #3b82f6;
       --radius: 14px;
       --radius-sm: 8px;
     }
+    /* ── LIGHT MODE ─────────────────────────────── */
+    body.light-mode {
+      --bg: #f0f4f8;
+      --bg2: #ffffff;
+      --bg3: #e8eef5;
+      --border: rgba(56,100,160,0.18);
+      --border-hover: rgba(56,100,160,0.45);
+      --cyan: #0284c7;
+      --cyan-dim: rgba(2,132,199,0.12);
+      --green: #059669;
+      --green-dim: rgba(5,150,105,0.12);
+      --red: #dc2626;
+      --red-dim: rgba(220,38,38,0.1);
+      --amber: #d97706;
+      --text: #1e293b;
+      --text-dim: #64748b;
+      --text-mid: #475569;
+      --purple: #7c3aed;
+      --blue: #2563eb;
+    }
+    body.light-mode .log-panel,
+    body.light-mode .log-body { background: #f8fafc; border-color: rgba(2,132,199,0.2); }
+    body.light-mode .code-editor-textarea { background: #f8fafc; color: #047857; border-color: rgba(2,132,199,0.25); }
+    body.light-mode .mini-log-box { background: rgba(0,0,0,0.04); }
+    body.light-mode .header { background: linear-gradient(180deg, rgba(2,132,199,0.06) 0%, transparent 100%); }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Inter', sans-serif;
@@ -492,15 +518,17 @@
     .mini-log-box {
       font-family: 'JetBrains Mono', monospace;
       font-size: 10.5px;
-      line-height: 1.45;
+      line-height: 1.5;
       color: var(--text-mid);
-      max-height: 100px;
+      max-height: 180px;
+      min-height: 60px;
       overflow-y: auto;
       background: rgba(0,0,0,0.3);
       border: 1px solid rgba(56,189,248,0.06);
       padding: 8px 10px;
       border-radius: 6px;
       margin-top: 8px;
+      word-break: break-all;
     }
     .mini-log-line { display: flex; gap: 6px; margin-bottom: 3px; align-items: flex-start; }
     .mini-log-time { color: var(--text-dim); flex-shrink: 0; font-size: 9.5px; }
@@ -546,6 +574,141 @@
 
     /* ── SCROLL ─────────────────────────────────── */
     html { scroll-behavior: smooth; }
+    /* ── DARK/LIGHT TOGGLE ──────────────────────── */
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .theme-label { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      cursor: pointer;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      left: 2px; top: 2px;
+      background: var(--text-dim);
+      border-radius: 50%;
+      transition: all 0.3s ease;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--cyan-dim); border-color: var(--cyan); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: var(--cyan); }
+    /* ── BATCH RENDER ───────────────────────────── */
+    .batch-bar {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      background: rgba(124,58,237,0.08);
+      border: 1px solid rgba(124,58,237,0.25);
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      animation: slideIn 0.2s ease;
+    }
+    .batch-bar.visible { display: flex; }
+    .batch-count {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--purple);
+      flex: 1;
+    }
+    .btn-batch-4k {
+      padding: 8px 18px;
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-4k:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,0.4); }
+    .btn-batch-4k:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-batch-clear {
+      padding: 8px 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-clear:hover { border-color: var(--red); color: var(--red); }
+    .row-checkbox { accent-color: var(--purple); width: 16px; height: 16px; cursor: pointer; }
+    .btn-export-csv {
+      padding: 8px 14px;
+      background: var(--green-dim);
+      border: 1px solid rgba(16,185,129,0.35);
+      color: var(--green);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-export-csv:hover { background: rgba(16,185,129,0.25); }
+    .btn-batch-mode {
+      padding: 8px 14px;
+      background: rgba(124,58,237,0.1);
+      border: 1px solid rgba(124,58,237,0.3);
+      color: var(--purple);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .btn-batch-mode:hover { background: rgba(124,58,237,0.2); }
+    .btn-batch-mode.active { background: rgba(124,58,237,0.2); border-color: var(--purple); }
+
+    /* ── MODAL VIDEO ────────────────────────────── */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 2000;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      background-color: rgba(7, 11, 20, 0.95);
+      backdrop-filter: blur(8px);
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.25s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .close-modal {
+      position: absolute;
+      top: 24px; right: 32px;
+      color: var(--text-dim);
+      font-size: 36px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .close-modal:hover { color: var(--red); }
   </style>
 </head>
 <body>
@@ -555,6 +718,21 @@
   <div>
     <div class="header-title">Remotion Stock Generator</div>
     <div class="header-sub">Upload HTML animasi → AI convert → Render 4K di GitHub Actions</div>
+  </div>
+  <div class="theme-toggle" style="display:flex; align-items:center; gap:16px;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span class="theme-label" id="themeLabel">🌙 Dark</span>
+      <label class="toggle-switch" title="Toggle Dark/Light Mode">
+        <input type="checkbox" id="themeToggle" onchange="toggleTheme(this.checked)" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <button class="btn-refresh" id="btnEditPrompt" onclick="togglePromptEditor()" style="display:flex; align-items:center; gap:6px; border-color:var(--purple); color:var(--purple); padding:6px 12px;">
+      📝 Edit Prompt
+    </button>
+    <button class="btn-refresh" id="btnApiKeys" onclick="toggleApiKeysPanel()" style="display:flex; align-items:center; gap:6px; border-color:var(--blue); color:var(--blue); padding:6px 12px; margin-left: 8px;">
+      🔑 API Keys
+    </button>
   </div>
 </header>
 
@@ -605,17 +783,6 @@
         </div>
       </div>
       <div class="option-group">
-        <span class="option-label">🤖 Model AI</span>
-        <select class="select-input" id="aiModelSelect">
-          <option value="auto">Auto-Fallback (Default)</option>
-          <option value="groq">⚡ Groq (Llama 3.3)</option>
-          <option value="syntx-claude">🎯 Syntx Claude (Sonnet 3.5)</option>
-          <option value="syntx-gemini">🌐 Syntx Gemini (2.5 Flash)</option>
-          <option value="gemini">🧠 Gemini API (2.0 Flash)</option>
-          <option value="openrouter">🔀 OpenRouter (Llama 3.3 Free)</option>
-        </select>
-      </div>
-      <div class="option-group">
         <span class="option-label">⏱️ Durasi</span>
         <select class="select-input" id="animationDurationSelect">
           <option value="5">5 Detik</option>
@@ -651,9 +818,118 @@
   <div>
     <div class="results-header">
       <div class="results-title">📂 Hasil & Antrian Render</div>
-      <button class="btn-refresh" onclick="loadResults()">🔄 Refresh</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button class="btn-batch-mode" id="btnBatchMode" onclick="toggleBatchMode()">☑ Batch Render</button>
+        <a class="btn-export-csv" href="/api/export-keywords" download="keywords.csv" title="Unduh semua keyword ke CSV">⬇ Export CSV</a>
+        <button class="btn-refresh" onclick="loadResults()">🔄 Refresh</button>
+      </div>
     </div>
-    <div class="table-wrap" id="resultsContainer">
+    <!-- ═══════════ PROMPT EDITOR PANEL ═══════════ -->
+    <div class="input-card" id="promptEditorPanel" style="display:none; border-color: var(--purple); background: rgba(168,85,247,0.03); margin-bottom: 20px;">
+      <h3 style="font-size:16px; font-weight:700; color:var(--purple); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+        📝 Edit System Prompts AI
+      </h3>
+      <p style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">
+        Anda dapat menyesuaikan prompt instruksi AI di bawah ini. Gunakan placeholder <code>{{HTML_CONTENT}}</code>, <code>{{ANIMATION_DURATION}}</code>, dan <code>{{DURATION_FRAMES}}</code> untuk membiarkan sistem menyisipkan konten secara dinamis.
+      </p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Prompt 1: Generate Judul & Keyword (SEO)</label>
+          <textarea class="code-editor-textarea" id="promptSeoText" style="height:320px; font-size:12px; color:#c084fc; border-color:rgba(168,85,247,0.2);" placeholder="Masukkan prompt SEO..."></textarea>
+        </div>
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Prompt 2: Konversi HTML ke TSX Remotion</label>
+          <textarea class="code-editor-textarea" id="promptConversionText" style="height:320px; font-size:12px; color:#c084fc; border-color:rgba(168,85,247,0.2);" placeholder="Masukkan prompt konversi..."></textarea>
+        </div>
+      </div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-batch-clear" onclick="togglePromptEditor()">Batal</button>
+        <button class="btn-batch-4k" onclick="savePrompts()">💾 Simpan Prompt</button>
+      </div>
+    </div>
+    <!-- ═══════════ API KEYS PANEL ═══════════ -->
+    <div class="input-card" id="apiKeysPanel" style="display:none; border-color: var(--blue); background: rgba(59,130,246,0.03); margin-bottom: 20px;">
+      <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+        🔑 Pengaturan API Keys AI & Layanan Pembantu
+      </h3>
+      <p style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">
+        Isi API Key untuk AI pribadi Anda dan RapidAPI Key (untuk email Gmailnator Syntx) di bawah ini. Kunci disimpan di file <code>.env</code> Anda.
+      </p>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px; flex-wrap:wrap;">
+        <!-- Groq Key -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Groq API Key</label>
+          <input type="password" class="input-text-field" id="keyGroq" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="gsk_..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('groq')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_groq" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <!-- Gemini Key -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Gemini AI API Key</label>
+          <input type="password" class="input-text-field" id="keyGemini" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="AQ.Ab8RN..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('gemini')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_gemini" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <!-- OpenRouter Key -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">OpenRouter API Key</label>
+          <input type="password" class="input-text-field" id="keyOpenrouter" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="sk-or-v1-..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('openrouter')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_openrouter" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <!-- RapidAPI Key (Gmailnator) -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">RapidAPI Key (Gmailnator)</label>
+          <input type="password" class="input-text-field" id="keyRapidapi" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="Masukkan key RapidAPI..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('gmailnator')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_gmailnator" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <!-- Syntx Base Email -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Syntx Base Email (Gmail)</label>
+          <input type="text" class="input-text-field" id="syntxBaseEmail" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="l.imh.en.c.e@gmail.com" />
+        </div>
+        <!-- Syntx Email Index -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Syntx Email Index (Dot-Variant)</label>
+          <input type="number" class="input-text-field" id="syntxEmailIndex" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="0" min="0" />
+        </div>
+        <!-- GitHub Token -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub PAT Token (Workflow scope)</label>
+          <input type="password" class="input-text-field" id="githubToken" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="ghp_..." />
+        </div>
+        <!-- GitHub Username -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub Username</label>
+          <input type="text" class="input-text-field" id="githubUsername" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="zulmorang15-dot" />
+        </div>
+        <!-- GitHub Repository -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub Repository</label>
+          <input type="text" class="input-text-field" id="githubRepo" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="master-stock-generator" />
+        </div>
+      </div>
+      <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-batch-clear" onclick="toggleApiKeysPanel()">Batal</button>
+        <button class="btn-batch-4k" onclick="saveApiKeys()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border:none; color:#fff;">💾 Simpan API Keys</button>
+      </div>
+    </div>
+    <!-- Batch Action Bar -->
+    <div class="batch-bar" id="batchBar">
+      <span class="batch-count" id="batchCount">0 item dipilih</span>
+      <button class="btn-batch-clear" onclick="clearBatchSelection()">✕ Batal Pilih</button>
+      <button class="btn-batch-4k" id="btnBatch4k" onclick="triggerBatch4K()" disabled>🚀 Generate 4K Terpilih</button>
+    </div>
+    <div id="resultsContainer">
       <div class="empty-state">
         <div class="empty-icon">🎞</div>
         <div class="empty-text">Belum ada hasil</div>
@@ -673,6 +949,25 @@
   let transparentBg = false;
   let isGenerating = false;
   let pollTimers = {};
+  let batchModeActive = false;
+  let batchSelected = new Set();
+  let activeSeoGenerations = {};
+
+  // ─── DARK/LIGHT MODE ────────────────────────
+  function toggleTheme(isLight) {
+    document.body.classList.toggle('light-mode', isLight);
+    document.getElementById('themeLabel').textContent = isLight ? '☀️ Light' : '🌙 Dark';
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  }
+  // Restore saved theme
+  (function() {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light') {
+      document.body.classList.add('light-mode');
+      document.getElementById('themeLabel').textContent = '☀️ Light';
+      document.getElementById('themeToggle').checked = true;
+    }
+  })();
 
   // ═══════════════════════════════════════════
   // FILE HANDLING
@@ -782,7 +1077,7 @@
   // GENERATE
   // ═══════════════════════════════════════════
   async function startGenerate() {
-    const aiModel = document.getElementById('aiModelSelect').value;
+    const aiModel = 'auto'; // Model AI dipilih per-item di tabel
     const animationDuration = Number(document.getElementById('animationDurationSelect').value);
     
     isGenerating = true;
@@ -864,6 +1159,11 @@
   function startTaskLogStream(itemId) {
     if (taskStreams[itemId]) return; // stream sudah berjalan
 
+    const logBox = document.getElementById(`logbox_${itemId}`);
+    if (logBox) {
+      logBox.innerHTML = '';
+    }
+
     const source = new EventSource(`/api/task-logs/${itemId}`);
     taskStreams[itemId] = source;
 
@@ -933,7 +1233,7 @@
   }
 
   async function retryTask(id) {
-    const aiModel = document.getElementById('aiModelSelect').value;
+    const aiModel = document.getElementById(`seo_model_${id}`)?.value || 'auto';
     const animationDuration = Number(document.getElementById('animationDurationSelect').value);
     if (!confirm(`Retry proses generate untuk "${id}"?\n\nAkan memulai ulang dari awal dengan AI yang sama.`)) return;
     try {
@@ -976,15 +1276,75 @@
       // Auto-poll atau start SSE stream untuk item yang masih diproses
       items.forEach(item => {
         const status = item.statusConvertTsx || 'queued';
-        if (status === 'processing-preview' || status === 'processing-tsx' || status === 'queued') {
+        const isRunning = status === 'processing-preview' || status === 'processing-tsx' || status === 'queued' || item.statusRender4k === 'processing';
+        if (isRunning) {
           startTaskLogStream(item.id);
-        }
-        if (item.statusRender4k === 'processing') {
-          startPolling(item.id, '4k');
         }
       });
     } catch(err) {
       console.error('Gagal load results:', err);
+    }
+  }
+
+  // ─── BATCH MODE ──────────────────────────────
+  function toggleBatchMode() {
+    batchModeActive = !batchModeActive;
+    const btn = document.getElementById('btnBatchMode');
+    btn.classList.toggle('active', batchModeActive);
+    btn.textContent = batchModeActive ? '☑ Mode Aktif' : '☑ Batch Render';
+    if (!batchModeActive) clearBatchSelection();
+    loadResults(); // Re-render table with/without checkboxes
+  }
+
+  function clearBatchSelection() {
+    batchSelected.clear();
+    updateBatchBar();
+    // Uncheck all checkboxes
+    document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+  }
+
+  function toggleBatchItem(id, checked) {
+    if (checked) batchSelected.add(id);
+    else batchSelected.delete(id);
+    updateBatchBar();
+  }
+
+  function updateBatchBar() {
+    const bar = document.getElementById('batchBar');
+    const countEl = document.getElementById('batchCount');
+    const btn4k = document.getElementById('btnBatch4k');
+    const count = batchSelected.size;
+    bar.classList.toggle('visible', count > 0 && batchModeActive);
+    countEl.textContent = `${count} item dipilih`;
+    btn4k.disabled = count === 0;
+  }
+
+  async function triggerBatch4K() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Generate 4K ProRes untuk ${ids.length} item?\n\nProses ini akan git push dan trigger GitHub Actions secara sekuensial.\n\nItem yang dipilih:\n${ids.join('\n')}`)) return;
+    const btn = document.getElementById('btnBatch4k');
+    btn.disabled = true;
+    btn.textContent = '⏳ Memproses...';
+    try {
+      const resp = await fetch('/api/batch-trigger-4k', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+      const data = await resp.json();
+      const success = data.results?.filter(r => r.success).length || 0;
+      const failed = data.results?.filter(r => !r.success).length || 0;
+      showToast(`🚀 ${success} render 4K dipicu${failed > 0 ? `, ${failed} gagal` : ''}. Pantau di GitHub Actions.`, success > 0 ? 'success' : 'error');
+      // Hubungkan log stream untuk setiap item yang berhasil dipicu
+      data.results?.forEach(r => { if (r.success) startTaskLogStream(r.id); });
+      clearBatchSelection();
+      loadResults();
+    } catch(err) {
+      showToast('❌ Batch 4K gagal: ' + err.message, 'error');
+    } finally {
+      btn.textContent = '🚀 Generate 4K Terpilih';
+      updateBatchBar();
     }
   }
 
@@ -1003,13 +1363,12 @@
         <table>
           <thead>
             <tr>
+              ${batchModeActive ? '<th style="width:36px">Pilih</th>' : ''}
               <th style="width:44px">No</th>
-              <th style="width:140px">File HTML</th>
-              <th style="width:220px">Rekomendasi Judul</th>
-              <th>Rekomendasi Keywords</th>
-              <th style="width:260px">Log & Status Proses</th>
               <th style="width:180px">Preview Video</th>
-              <th style="width:145px">Aksi</th>
+              <th style="width:320px">Log & Status Proses</th>
+              <th>Rekomendasi Keywords</th>
+              <th style="width:170px">Aksi & AI</th>
             </tr>
           </thead>
           <tbody>
@@ -1034,19 +1393,36 @@
   function renderLogCell(item) {
     let statusBadge = '';
     const status = item.statusConvertTsx || 'queued';
+    const isSeoRunning = !!activeSeoGenerations[item.id];
     
-    if (status === 'queued') {
-      statusBadge = `<span class="status-badge badge-queued">⏳ Antrean</span>`;
+    if (isSeoRunning) {
+      statusBadge = `<span class="status-badge badge-converting"><span class="spin">⏳</span> AI SEO...</span>`;
+    } else if (status === 'queued') {
+      statusBadge = `<span class="status-badge badge-queued"><span class="spin">⏳</span> Antrean TSX</span>`;
     } else if (status === 'processing-tsx') {
       statusBadge = `<span class="status-badge badge-converting"><span class="spin">⚙</span> Konversi TSX</span>`;
     } else if (status === 'processing-preview') {
       statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render Preview</span>`;
     } else if (status === 'success') {
-      statusBadge = `<span class="status-badge badge-success">✅ Sukses</span>`;
+      if (item.statusRender4k === 'processing') {
+        statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render 4K...</span>`;
+      } else if (item.statusRender4k === 'success') {
+        statusBadge = `<span class="status-badge badge-success">✅ Selesai 4K</span>`;
+      } else if (item.statusRender4k === 'failed') {
+        statusBadge = `<span class="status-badge badge-error">❌ Gagal 4K</span>`;
+      } else {
+        statusBadge = `<span class="status-badge badge-success">✅ Preview Siap</span>`;
+      }
     } else if (status === 'failed') {
-      statusBadge = `<span class="status-badge badge-error">❌ Gagal</span>`;
+      statusBadge = `<span class="status-badge badge-error">❌ Gagal TSX/Preview</span>`;
     } else if (status === 'cancelled') {
       statusBadge = `<span class="status-badge badge-cancelled">🚫 Dibatalkan</span>`;
+    } else if (status === 'waiting') {
+      statusBadge = `<span class="status-badge badge-queued" style="background:rgba(100,100,100,0.12);color:#94a3b8;border:1px solid rgba(100,100,100,0.2)">⏸ Menunggu SEO</span>`;
+    } else if (status === 'waiting-otp') {
+      statusBadge = `<span class="status-badge badge-queued" style="background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.35);"><span class="spin">🔑</span> Menunggu OTP</span>`;
+    } else if (status === 'waiting-preview') {
+      statusBadge = `<span class="status-badge badge-queued" style="background:rgba(124,58,237,0.12);color:var(--purple);border:1px solid rgba(124,58,237,0.25);">⏸ Menunggu Preview</span>`;
     }
 
     const logs = item.logs || [];
@@ -1062,12 +1438,28 @@
     }).join('');
 
     const logBoxId = `logbox_${item.id}`;
+    
+    let otpForm = '';
+    if (status === 'waiting-otp') {
+      otpForm = `
+        <div style="margin-top:8px; padding:8px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px; max-width:100%;">
+          <div style="font-size:11px; color:var(--amber); font-weight:600; margin-bottom:4px;">🔑 Masukkan OTP Syntx.ai:</div>
+          <div style="font-size:10px; color:var(--text-dim); margin-bottom:6px; word-break:break-all;">Kirim ke: <a href="https://www.emailnator.com/mailbox/#${escHtml(item.otpEmail || '')}" target="_blank" style="color:var(--cyan); font-weight:bold; text-decoration:underline; font-family:monospace;">${escHtml(item.otpEmail || '')}</a></div>
+          <div style="display:flex; gap:4px;">
+            <input type="text" id="otp_input_${item.id}" placeholder="6-digit" class="select-input" style="padding:4px 8px; font-size:11px; height:auto; text-align:center; font-family:monospace; font-weight:bold; width:80px;" maxlength="6" />
+            <button class="btn-action" onclick="submitOtp('${item.id}')" style="padding:4px 10px; font-size:11px; margin:0; line-height:1.3; width:auto; background:var(--amber); border:1px solid var(--amber); color:#000; font-weight:600; border-radius:6px; cursor:pointer;">Kirim</button>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div>
-        <div>${statusBadge}</div>
-        <div class="mini-log-box" id="${logBoxId}">
+        <div style="margin-bottom:6px;">${statusBadge}</div>
+        <div class="mini-log-box" id="${logBoxId}" style="height: 140px; min-height: 140px; max-height: 140px;">
           ${logsHtml || '<div style="color:var(--text-dim);font-size:10px;">Belum ada log.</div>'}
         </div>
+        ${otpForm}
       </div>
     `;
   }
@@ -1076,27 +1468,61 @@
     const previewCell = renderPreviewCell(item);
     const logCell = renderLogCell(item);
     const actsCell = renderActionsCell(item);
+    const canBatch4k = !!(item.promptCode);
+
+    const checkboxCell = batchModeActive
+      ? `<td rowspan="3" style="text-align:center;vertical-align:middle; border-bottom:2px solid var(--border);"><input type="checkbox" class="row-checkbox" data-id="${item.id}" ${!canBatch4k ? 'disabled title="Tidak memiliki TSX code"' : ''} ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" /></td>`
+      : '';
 
     return `
-      <tr id="row_${item.id}">
-        <td class="td-no">${no}</td>
-        <td class="td-file">${escHtml(item.fileName || item.id)}</td>
-        <td>
-          <div class="edit-wrap">
-            <input id="title_${item.id}" class="edit-field" type="text" value="${escHtml(item.judul||'')}" placeholder="Judul video..." style="height:36px" />
-            <button class="btn-copy" onclick="copyText('${escHtml(item.judul||'')}', this)">📋</button>
-          </div>
+      <!-- Baris 1: No, Nama File, Aksi -->
+      <tr id="row_1_${item.id}" style="background: rgba(56,189,248,0.02);">
+        ${checkboxCell}
+        <td class="td-no" rowspan="3" style="text-align:center; vertical-align:middle; font-weight:700; border-bottom:2px solid var(--border); border-right:1px solid var(--border);">${no}</td>
+        <td colspan="3" style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--cyan); font-weight:700; padding:10px 14px; border-bottom:1px solid rgba(56,189,248,0.15); vertical-align:middle;">
+          📄 ${escHtml(item.fileName || item.id)}
         </td>
-        <td>
+        <td rowspan="3" style="vertical-align:top; border-left:1px solid var(--border); border-bottom:2px solid var(--border); padding:12px;">
+          ${actsCell}
+        </td>
+      </tr>
+      
+      <!-- Baris 2: Rekomendasi Judul -->
+      <tr id="row_2_${item.id}">
+        <td colspan="3" style="padding:8px 14px; border-bottom:1px solid rgba(56,189,248,0.15); vertical-align:middle;">
+          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:4px; letter-spacing:0.5px;">Rekomendasi Judul</div>
           <div class="edit-wrap">
-            <textarea id="kw_${item.id}" class="edit-field" rows="4" placeholder="Keywords...">${escHtml(item.keywords||'')}</textarea>
+            <textarea id="title_${item.id}" class="edit-field" placeholder="Belum ada judul video..." rows="2" style="width:100%; font-family:inherit; font-size:13px; line-height:1.4; padding:4px 6px;">${escHtml(item.judul||'')}</textarea>
+            <button class="btn-copy" onclick="copyText(document.getElementById('title_${item.id}').value, this)">📋</button>
+          </div>
+          ${item.seoAiUsed ? `<div style="margin-top:4px; font-size:9.5px; color:var(--green); display:flex; align-items:center; gap:3px;"><span>✅</span><span>Generate dengan AI: <strong>${item.seoAiUsed === 'auto' ? 'Auto-Fallback' : item.seoAiUsed === 'groq' ? 'Groq' : item.seoAiUsed === 'syntx-claude' ? 'Syntx Claude' : item.seoAiUsed === 'syntx-gemini' ? 'Syntx Gemini' : item.seoAiUsed === 'gemini' ? 'Gemini API' : item.seoAiUsed === 'openrouter' ? 'OpenRouter' : item.seoAiUsed}</strong></span></div>` : ''}
+        </td>
+      </tr>
+      
+      <!-- Baris 3: Preview, Log Proses, Keywords -->
+      <tr id="row_3_${item.id}" style="border-bottom:2px solid var(--border);">
+        <!-- Preview Cell -->
+        <td class="preview-cell" style="width:180px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:2px solid var(--border);">
+          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px; text-align:center;">Preview</div>
+          ${previewCell}
+        </td>
+        
+        <!-- Log Cell -->
+        <td style="width:320px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:2px solid var(--border);">
+          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px;">Log Proses</div>
+          ${logCell}
+        </td>
+        
+        <!-- Keywords Cell -->
+        <td style="padding:10px; vertical-align:top; border-bottom:2px solid var(--border);">
+          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px;">Rekomendasi Keywords</div>
+          <div class="edit-wrap">
+            <textarea id="kw_${item.id}" class="edit-field" rows="6" placeholder="Belum ada keywords..." style="padding:4px 6px; font-size:12px; line-height:1.4; height:140px; min-height:140px; max-height:140px;">${escHtml(item.keywords||'')}</textarea>
             <button class="btn-copy" onclick="copyText(document.getElementById('kw_${item.id}').value, this)">📋</button>
           </div>
         </td>
-        <td>${logCell}</td>
-        <td class="preview-cell">${previewCell}</td>
-        <td>${actsCell}</td>
-      </tr>`;
+      </tr>
+    `;
   }
 
   function renderPreviewCell(item) {
@@ -1104,155 +1530,107 @@
       const videoSrc = (item.previewUrl.startsWith("http://") || item.previewUrl.startsWith("https://"))
         ? item.previewUrl
         : `/api/preview-file/${item.id}`;
-      return `<video class="preview-video" src="${videoSrc}" controls muted loop playsinline></video>`;
+      return `
+        <div style="display:flex; flex-direction:column; align-items:center; gap:8px; width:100%;">
+          <video class="preview-video" src="${videoSrc}#t=0.1" preload="metadata" controls muted loop playsinline style="width:100%; max-width:160px; height:90px; object-fit:cover; border-radius:6px; border:1px solid var(--border); background:#000;" onmouseenter="this.play().catch(e=>{})" onmouseleave="this.pause(); this.currentTime = 0.1;"></video>
+          <button class="btn-browse" onclick="openVideoModal('${videoSrc}')" style="padding:4px 8px; font-size:10px; border-color:var(--cyan); color:var(--cyan); background:var(--cyan-dim); width:100%; display:flex; align-items:center; justify-content:center; gap:4px; font-weight:600; border-radius:6px;">
+            🔍 Perbesar Preview
+          </button>
+        </div>
+      `;
     }
-    return `<div style="text-align:center;color:var(--text-dim);font-size:12px;padding:20px 0;">Menunggu Video</div>`;
+    return `<div style="text-align:center; color:var(--text-dim); font-size:11px; padding:40px 0; border:1px dashed var(--border); border-radius:6px; background:rgba(0,0,0,0.1);">Menunggu Video</div>`;
   }
 
   function renderActionsCell(item) {
-    const has4k = item.outputPath4k;
+    const isSeoRunning = !!activeSeoGenerations[item.id];
+    const isTsxRunning = item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx';
+    const isPreviewRunning = item.statusConvertTsx === 'processing-preview';
+    const is4kRunning = item.statusRender4k === 'processing';
+    const isAnyRunning = isSeoRunning || isTsxRunning || isPreviewRunning || is4kRunning;
+
+    const aiSelect = `
+      <select id="ai_model_${item.id}" class="select-input" style="padding: 4px 8px; font-size: 11px; height: auto; font-weight: 600; width: 100%; margin-bottom: 8px;" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}>
+        <option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>🤖 Auto AI</option>
+        <option value="groq" ${item.aiModel === 'groq' ? 'selected' : ''}>⚡ Groq</option>
+        <option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>🎯 Syntx Claude</option>
+        <option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>🌐 Syntx Gemini</option>
+        <option value="gemini" ${item.aiModel === 'gemini' ? 'selected' : ''}>🧠 Gemini API</option>
+        <option value="openrouter" ${item.aiModel === 'openrouter' ? 'selected' : ''}>🔀 OpenRouter</option>
+      </select>
+    `;
+
+    // Button 1: Judul
+    const hasJudul = !!(item.judul && item.judul.trim());
+    let btnJudulText = hasJudul ? '✨ REGEN JUDUL' : '✨ GEN JUDUL';
+    if (isSeoRunning) btnJudulText = '⏳ Generating...';
+    const btnJudulDisabled = isAnyRunning;
+    const btnJudul = `<button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${btnJudulDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btnJudulText}</button>`;
+
+    // Button 2: TSX
+    const hasTsx = !!item.promptCode;
+    let btnTsxText = hasTsx ? '⚙️ REGEN TSX' : '⚙️ GEN TSX';
+    if (isTsxRunning) btnTsxText = '⏳ Converting...';
+    const btnTsxDisabled = isAnyRunning || !hasJudul;
+    const btnTsx = `<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${btnTsxDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:${btnTsxDisabled ? 'rgba(100,100,100,0.1)' : 'linear-gradient(135deg,rgba(56,189,248,0.15),rgba(168,85,247,0.15))'}; border:1px solid ${btnTsxDisabled ? 'rgba(100,100,100,0.2)' : 'rgba(56,189,248,0.35)'}; color:${btnTsxDisabled ? 'var(--text-dim)' : 'var(--cyan)'};">${btnTsxText}</button>`;
+
+    // Button 3: Preview
     const hasPreview = !!item.previewUrl;
-    const is4kRendering = item.statusRender4k === 'processing';
-    const status = item.statusConvertTsx || 'queued';
-    const isRunning = status === 'queued' || status === 'processing-tsx' || status === 'processing-preview';
-    const canGen4k = (status === 'success' || hasPreview) && item.promptCode;
+    let btnPreviewText = hasPreview ? '☁️ REGEN PREVIEW' : '☁️ GEN PREVIEW';
+    if (isPreviewRunning) btnPreviewText = '⏳ Rendering...';
+    const btnPreviewDisabled = isAnyRunning || !hasTsx;
+    const btnPreview = `<button class="btn-action" onclick="triggerPreview('${item.id}')" ${btnPreviewDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:${btnPreviewDisabled ? 'rgba(100,100,100,0.1)' : 'linear-gradient(135deg,#7c3aed,#6366f1)'}; border:none; color:${btnPreviewDisabled ? 'var(--text-dim)' : '#fff'};">${btnPreviewText}</button>`;
 
-    const btn4k = canGen4k
-      ? `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${is4kRendering ? 'disabled' : ''}>${is4kRendering ? '<span class="spin">☁</span> Rendering...' : '🚀 Generate 4K'}</button>`
-      : `<button class="btn-action btn-4k" disabled style="opacity:0.35">🚀 Generate 4K</button>`;
+    // Button 4: 4K
+    const has4k = !!item.outputPath4k;
+    let btn4kText = has4k ? '🚀 REGEN 4K' : '🚀 GEN 4K';
+    if (is4kRunning) btn4kText = '⏳ Rendering 4K...';
+    const btn4kDisabled = isAnyRunning || !hasPreview;
+    const btn4k = `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${btn4kDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btn4kText}</button>`;
 
-    let previewHref = `/api/preview-file/${item.id}`;
-    if (item.previewUrl && (item.previewUrl.startsWith("http://") || item.previewUrl.startsWith("https://"))) {
-      previewHref = item.previewUrl;
-    }
-    const btnDl = hasPreview
-      ? `<a class="btn-action btn-dl" href="${previewHref}" target="_blank" download="${item.id}-preview.mp4">⬇ Download Preview</a>`
+    // Download 4K Zip Button
+    const downloadZipBtn = has4k
+      ? `<a href="/api/download-4k-zip/${item.id}" class="btn-action" style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; text-decoration:none; text-align:center; display:block; border-radius:6px; box-sizing:border-box;">📥 DOWNLOAD 4K (ZIP)</a>`
       : '';
 
-    let url4k = `/api/4k-file/${item.id}`;
-    if (has4k && (has4k.startsWith("http://") || has4k.startsWith("https://"))) {
-      url4k = has4k;
-    }
-    const btnDl4k = has4k
-      ? `<a class="btn-action btn-dl" href="${url4k}" target="_blank" download="${item.id}-4k.mov">⬇ Download 4K</a>`
+    // Utility actions
+    const btnCancel = (isTsxRunning || isPreviewRunning)
+      ? `<button class="btn-action btn-cancel" onclick="cancelTask('${item.id}')" style="margin:0; padding:6px 10px; font-size:11px; width:100%;">🚫 Batal</button>`
       : '';
 
-    // Tombol Batal
-    const btnCancel = isRunning
-      ? `<button class="btn-action btn-cancel" onclick="cancelTask('${item.id}')">🚫 Batal</button>`
+    const btnDel = `<button class="btn-action btn-del" onclick="deleteItem('${item.id}')" style="margin:0; padding:6px 10px; font-size:11px; width:100%;">🗑 Hapus</button>`;
+
+    const htmlCodeLink = `<a class="btn-code-link" href="/saved-code/${item.id}.html" target="_blank" download="${item.id}.html" style="font-size:10px; padding:3px 6px; flex:1; text-align:center; display:block;">🌐 HTML Asli</a>`;
+    const tsxCodeLink = hasTsx
+      ? `<a class="btn-code-link" href="/saved-code/${item.id}.tsx" target="_blank" download="${item.id}.tsx" style="font-size:10px; padding:3px 6px; flex:1; text-align:center; display:block;">📦 TSX File</a>`
       : '';
 
-    // Tombol Retry (untuk item gagal/dibatalkan yang punya htmlPreview)
-    const isFailed = status === 'failed' || status === 'cancelled';
-    const btnRetry = isFailed && item.htmlPreview
-      ? `<button class="btn-action btn-retry" onclick="retryTask('${item.id}')">🔄 Retry</button>`
-      : '';
-
-    const btnDel = `<button class="btn-action btn-del" onclick="deleteItem('${item.id}')">🗑 Hapus</button>`;
-
-    // Download links untuk HTML asli & TSX hasil konversi
-    const htmlCodeLink = `<a class="btn-code-link" href="/saved-code/${item.id}.html" target="_blank" download="${item.id}.html">🌐 HTML Asli</a>`;
-    const tsxCodeLink = item.promptCode
-      ? `<a class="btn-code-link" href="/saved-code/${item.id}.tsx" target="_blank" download="${item.id}.tsx">📦 TSX Remotion</a>`
-      : '';
-
-    return `<div class="actions">${btn4k}${btnDl}${btnDl4k}${btnCancel}${btnRetry}${btnDel}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${htmlCodeLink}${tsxCodeLink}</div></div>`;
+    return `
+      <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
+        ${aiSelect}
+        ${btnJudul}
+        ${btnTsx}
+        ${btnPreview}
+        ${btn4k}
+        ${downloadZipBtn}
+        ${btnCancel}
+        ${btnDel}
+        <div style="display:flex; gap:4px; width:100%; margin-top:4px;">
+          ${htmlCodeLink}
+          ${tsxCodeLink}
+        </div>
+      </div>
+    `;
   }
 
-  // ═══════════════════════════════════════════
-  // POLLING
-  // ═══════════════════════════════════════════
-  function startPolling(itemId, renderType) {
-    const key = `${itemId}_${renderType}`;
-    if (pollTimers[key]) return; // already polling
-    pollTimers[key] = setInterval(() => checkStatus(itemId, renderType, key), 15000);
-  }
-
-  async function checkStatus(itemId, renderType, key) {
-    try {
-      const resp = await fetch(`/api/check-render-status/${itemId}/${renderType}`);
-      const data = await resp.json();
-
-      // Clear any temporary connection error counters on success check
-      if (pollTimers[key + '_errors']) {
-        delete pollTimers[key + '_errors'];
-      }
-
-      if (data.status === 'success') {
-        clearInterval(pollTimers[key]);
-        delete pollTimers[key];
-
-        // Update DB and re-render
-        if (renderType === 'preview') {
-          await fetch(`/api/save-item`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item: { id: itemId, previewUrl: data.url, statusConvertTsx: 'success' } })
-          });
-        } else {
-          await fetch(`/api/save-item`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item: { id: itemId, outputPath4k: data.url, statusRender4k: 'success' } })
-          });
-        }
-        showToast(`✅ ${renderType === 'preview' ? 'Preview' : '4K'} siap: ${itemId}`, 'success');
-        loadResults();
-
-      } else if (data.status === 'failed') {
-        clearInterval(pollTimers[key]);
-        delete pollTimers[key];
-        
-        // Update DB to failed state
-        if (renderType === 'preview') {
-          await fetch(`/api/save-item`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item: { id: itemId, statusConvertTsx: 'failed' } })
-          });
-        } else {
-          await fetch(`/api/save-item`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item: { id: itemId, statusRender4k: 'failed' } })
-          });
-        }
-        
-        showToast(`❌ Render ${renderType} gagal: ${itemId}`, 'error');
-        loadResults();
-      }
-    } catch(e) { 
-      console.error('Polling error:', e);
-      if (!pollTimers[key + '_errors']) pollTimers[key + '_errors'] = 0;
-      pollTimers[key + '_errors']++;
-      
-      // Stop polling after 3 consecutive failures to avoid infinite spinning
-      if (pollTimers[key + '_errors'] >= 3) {
-        clearInterval(pollTimers[key]);
-        delete pollTimers[key];
-        delete pollTimers[key + '_errors'];
-        showToast(`❌ Koneksi status render gagal 3x untuk ${itemId}`, 'error');
-        
-        fetch(`/api/save-item`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ item: { id: itemId, [renderType === 'preview' ? 'statusConvertTsx' : 'statusRender4k']: 'failed' } })
-        }).then(() => loadResults()).catch(console.error);
-      }
-    }
-  }
-
-  // ═══════════════════════════════════════════
-  // ACTIONS
-  // ═══════════════════════════════════════════
   async function trigger4K(id) {
     if (!confirm(`Generate 4K ProRes untuk "${id}"?\n\nProses ini akan git push dan trigger GitHub Actions (~10-15 menit).`)) return;
     try {
       const resp = await fetch(`/api/trigger-4k/${id}`, { method: 'POST' });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
-      showToast('🚀 4K render dipicu! Pantau di GitHub Actions.', 'success');
-      startPolling(id, '4k');
+      showToast('🚀 4K render dipicu! Pantau di log box.', 'success');
+      startTaskLogStream(id);
       loadResults();
     } catch(err) {
       showToast('❌ Gagal: ' + err.message, 'error');
@@ -1292,6 +1670,251 @@
   }
 
   // ═══════════════════════════════════════════
+  // NEW ACTIONS: START, REGEN SEO, REGEN TSX
+  // ═══════════════════════════════════════════
+  async function regenerateSeo(id) {
+    const aiModel = document.getElementById(`ai_model_${id}`).value;
+    activeSeoGenerations[id] = true;
+    loadResults();
+    try {
+      showToast('✨ Memulai regenerasi Judul & Keywords...', 'info');
+      startTaskLogStream(id);
+
+      const resp = await fetch(`/api/regenerate-seo/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aiModel })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('✅ Judul & Keywords berhasil diperbarui!', 'success');
+    } catch(err) {
+      showToast('❌ Gagal regenerasi: ' + err.message, 'error');
+    } finally {
+      activeSeoGenerations[id] = false;
+      loadResults();
+    }
+  }
+
+  async function generateTsx(id, currentStatus) {
+    const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
+    const animationDuration = Number(document.getElementById('animationDurationSelect').value);
+
+    try {
+      if (currentStatus === 'waiting') {
+        showToast('▶ Memulai Generate TSX dengan AI: ' + (aiModel === 'auto' ? 'Auto' : aiModel) + '...', 'info');
+        const resp = await fetch(`/api/start-task/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aiModel })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        showToast('🚀 Generate TSX dimulai!', 'success');
+      } else {
+        if (!confirm(`Regenerasi TSX untuk "${id}"?\n\nProses ini akan mengkonversi ulang HTML ke TSX Remotion dengan AI: ${aiModel}.`)) return;
+        showToast('⚙️ Memulai regenerasi TSX...', 'info');
+        const resp = await fetch(`/api/retry-task/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aiModel, animationDuration })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        showToast('🔄 Regenerasi TSX dimulai!', 'success');
+      }
+
+      startTaskLogStream(id);
+      setTimeout(loadResults, 600);
+    } catch(err) {
+      showToast('❌ Gagal: ' + err.message, 'error');
+    }
+  }
+
+  async function triggerPreview(id) {
+    try {
+      showToast('☁️ Memulai Render Preview di GitHub...', 'info');
+      startTaskLogStream(id);
+      
+      const resp = await fetch(`/api/trigger-preview/${id}`, { method: 'POST' });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      
+      showToast('🚀 Render preview dipicu! Pantau di log box.', 'success');
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal render preview: ' + err.message, 'error');
+    }
+  }
+
+  async function submitOtp(id) {
+    const inputEl = document.getElementById(`otp_input_${id}`);
+    const otp = inputEl ? inputEl.value.trim() : '';
+    if (!otp) {
+      showToast('⚠️ OTP tidak boleh kosong', 'warning');
+      return;
+    }
+    try {
+      showToast('🔑 Mengirim OTP...', 'info');
+      const resp = await fetch('/api/submit-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, otp })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('✅ OTP berhasil dikirim!', 'success');
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal mengirim OTP: ' + err.message, 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // PROMPT MANAGEMENT
+  // ═══════════════════════════════════════════
+  async function loadPrompts() {
+    try {
+      const resp = await fetch('/api/prompts');
+      const data = await resp.json();
+      document.getElementById('promptSeoText').value = data.seoPrompt || '';
+      document.getElementById('promptConversionText').value = data.conversionPrompt || '';
+    } catch(err) {
+      console.error('Gagal load prompts:', err);
+    }
+  }
+
+  function togglePromptEditor() {
+    const el = document.getElementById('promptEditorPanel');
+    const isHidden = el.style.display === 'none';
+    el.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) {
+      loadPrompts();
+    }
+  }
+
+  async function savePrompts() {
+    const seoPrompt = document.getElementById('promptSeoText').value;
+    const conversionPrompt = document.getElementById('promptConversionText').value;
+    try {
+      const resp = await fetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seoPrompt, conversionPrompt })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('✅ System prompts berhasil disimpan!', 'success');
+      togglePromptEditor();
+    } catch(err) {
+      showToast('❌ Gagal simpan prompt: ' + err.message, 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // API KEYS MANAGEMENT
+  // ═══════════════════════════════════════════
+  function toggleApiKeysPanel() {
+    const el = document.getElementById('apiKeysPanel');
+    const isHidden = el.style.display === 'none';
+    el.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) {
+      loadApiKeys();
+      // Reset statuses
+      document.getElementById('status_groq').innerHTML = '';
+      document.getElementById('status_gemini').innerHTML = '';
+      document.getElementById('status_openrouter').innerHTML = '';
+      document.getElementById('status_gmailnator').innerHTML = '';
+    }
+  }
+
+  async function loadApiKeys() {
+    try {
+      const resp = await fetch('/api/keys');
+      const data = await resp.json();
+      document.getElementById('keyGroq').value = data.groqKey || '';
+      document.getElementById('keyGemini').value = data.geminiKey || '';
+      document.getElementById('keyOpenrouter').value = data.openrouterKey || '';
+      document.getElementById('keyRapidapi').value = data.rapidApiKey || '';
+      document.getElementById('syntxBaseEmail').value = data.syntxBaseEmail || '';
+      document.getElementById('syntxEmailIndex').value = data.syntxEmailIndex || '0';
+      document.getElementById('githubToken').value = data.githubToken || '';
+      document.getElementById('githubUsername').value = data.githubUsername || '';
+      document.getElementById('githubRepo').value = data.githubRepo || '';
+    } catch (err) {
+      showToast('❌ Gagal memuat API Keys: ' + err.message, 'error');
+    }
+  }
+
+  async function saveApiKeys() {
+    const groqKey = document.getElementById('keyGroq').value;
+    const geminiKey = document.getElementById('keyGemini').value;
+    const openrouterKey = document.getElementById('keyOpenrouter').value;
+    const rapidApiKey = document.getElementById('keyRapidapi').value;
+    const syntxBaseEmail = document.getElementById('syntxBaseEmail').value;
+    const syntxEmailIndex = document.getElementById('syntxEmailIndex').value;
+    const githubToken = document.getElementById('githubToken').value;
+    const githubUsername = document.getElementById('githubUsername').value;
+    const githubRepo = document.getElementById('githubRepo').value;
+
+    try {
+      const resp = await fetch('/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groqKey,
+          geminiKey,
+          openrouterKey,
+          rapidApiKey,
+          syntxBaseEmail,
+          syntxEmailIndex,
+          githubToken,
+          githubUsername,
+          githubRepo
+        })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('✅ API Keys berhasil disimpan!', 'success');
+      toggleApiKeysPanel();
+    } catch(err) {
+      showToast('❌ Gagal menyimpan API Keys: ' + err.message, 'error');
+    }
+  }
+
+  async function testApiKey(provider) {
+    const inputId = provider === 'groq' ? 'keyGroq' : provider === 'gemini' ? 'keyGemini' : provider === 'gmailnator' ? 'keyRapidapi' : 'keyOpenrouter';
+    const statusId = `status_${provider}`;
+    const apiKey = document.getElementById(inputId).value;
+    const statusEl = document.getElementById(statusId);
+
+    if (!apiKey) {
+      statusEl.innerHTML = '<span style="color:var(--amber);">⚠️ Kosong</span>';
+      return;
+    }
+
+    statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Mengecek...</span>';
+
+    try {
+      const resp = await fetch('/api/keys/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, apiKey })
+      });
+      const data = await resp.json();
+      if (data.valid) {
+        statusEl.innerHTML = '<span style="color:var(--green);">✅ Valid</span>';
+      } else {
+        statusEl.innerHTML = `<span style="color:var(--red);" title="${data.error || 'Gagal'}">❌ Invalid</span>`;
+        showToast(`❌ API Key ${provider} tidak valid: ${data.error || 'Gagal'}`, 'error');
+      }
+    } catch(err) {
+      statusEl.innerHTML = `<span style="color:var(--red);" title="${err.message}">❌ Error</span>`;
+      showToast(`❌ Gagal mengetes key: ${err.message}`, 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════
   // TOAST
   // ═══════════════════════════════════════════
   function showToast(msg, type = 'info') {
@@ -1304,13 +1927,44 @@
     setTimeout(() => el.remove(), 4000);
   }
 
+  function openVideoModal(src) {
+    const modal = document.getElementById('videoModal');
+    const video = document.getElementById('modalVideoPlayer');
+    video.src = src;
+    modal.style.display = 'flex';
+    video.play().catch(e => console.log('Autoplay blocked:', e));
+  }
+
+  function closeVideoModal() {
+    const modal = document.getElementById('videoModal');
+    const video = document.getElementById('modalVideoPlayer');
+    video.pause();
+    video.src = '';
+    modal.style.display = 'none';
+  }
+
+  // Close modal when clicking outside the video container
+  window.addEventListener('click', (e) => {
+    const modal = document.getElementById('videoModal');
+    if (e.target === modal) {
+      closeVideoModal();
+    }
+  });
+
   // ═══════════════════════════════════════════
   // INIT
   // ═══════════════════════════════════════════
   loadResults();
+  loadPrompts();
   // Auto-refresh every 30s
   setInterval(loadResults, 30000);
 </script>
+
+<!-- Modal Preview Besar -->
+<div id="videoModal" class="modal">
+  <span class="close-modal" onclick="closeVideoModal()">&times;</span>
+  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; box-shadow:0 0 32px rgba(56,189,248,0.5); border:1px solid rgba(56,189,248,0.3);"></video>
+</div>
 
 </body>
 </html>

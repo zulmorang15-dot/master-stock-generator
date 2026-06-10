@@ -14,8 +14,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, "public")));
+// Serve static files from the public directory with cache disabled
+app.use(express.static(path.join(__dirname, "public"), {
+  etag: false,
+  maxAge: 0,
+  setHeaders: (res, path) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  }
+}));
 
 // Ensure necessary directories exist
 fs.mkdirSync(path.join(__dirname, "public", "previews"), { recursive: true });
@@ -54,8 +60,9 @@ if (!fs.existsSync(dbPath)) {
   }
 }
 
-// Route for the dashboard
+// Route for the dashboard (prevent caching)
 app.get("/dashboard", (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.sendFile(path.join(__dirname, "public", "dashboard.html"));
 });
 
@@ -65,14 +72,17 @@ app.get("/", (req, res) => {
 });
 
 // API Configuration
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
-const GITHUB_USERNAME = process.env.GITHUB_USERNAME;
-const GITHUB_REPO = process.env.GITHUB_REPO;
+let OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+let GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+let GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+let GITHUB_USERNAME = process.env.GITHUB_USERNAME;
+let GITHUB_REPO = process.env.GITHUB_REPO;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+let GROQ_API_KEY = process.env.GROQ_API_KEY;
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
+let RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
+let SYNTX_BASE_EMAIL = process.env.SYNTX_BASE_EMAIL || "";
+let SYNTX_EMAIL_INDEX = process.env.SYNTX_EMAIL_INDEX || "0";
 
 // DeepSeek AI Call Helper (langsung menggunakan API resmi DeepSeek)
 async function callDeepSeek(prompt, model = "deepseek-chat") {
@@ -248,129 +258,227 @@ function isRateLimitError(err) {
 // Smart AI Call dengan auto-fallback: Groq -> Syntx.ai (Claude) -> Gemini -> DeepSeek -> Nvidia -> OpenRouter
 // Syntx.ai dinaikan ke posisi ke-2 karena gratis tak terbatas dan handal
 async function callAIWithFallback(prompt, options = {}) {
-  const { preferModel, validator } = options;
+  const { preferModel, validator, taskId } = options;
+
+  // Helper local untuk logging detail
+  const log = (msg, type = 'info') => {
+    if (options.logger) {
+      options.logger(msg, type);
+    } else if (taskId) {
+      addTaskLog(taskId, msg, type);
+    } else {
+      console.log(`[AI-Fallback] [${type}] ${msg}`);
+    }
+  };
 
   // Helper: cek apakah respons valid dengan validator jika ada
-  const isValid = (text) => {
-    if (!text || !text.trim()) return false;
-    if (validator) return validator(text);
+  const isValid = (text, providerName) => {
+    if (!text || !text.trim()) {
+      log(`   ⚠️ Respons dari ${providerName} kosong`, "warning");
+      return false;
+    }
+    if (validator) {
+      const valid = validator(text);
+      if (!valid) {
+        log(`   ⚠️ Respons dari ${providerName} tidak lolos validasi format TSX`, "warning");
+      }
+      return valid;
+    }
     return true;
   };
 
   const errors = [];
 
+  // Pass logger down to syntx bot
+  const syntxOptions = {
+    taskId: options.taskId,
+    logger: options.logger || (taskId ? (msg, type) => addTaskLog(taskId, msg, type) : null),
+    onEmailGenerated: (nextIndex) => {
+      updateEnvKeys({ syntxEmailIndex: String(nextIndex) });
+    }
+  };
+
   // Jika preferModel adalah specific provider, langsung route ke sana
+  if (preferModel && preferModel !== 'auto') {
+    log(`Mencoba model spesifik pilihan: ${preferModel}...`, 'info');
+  }
+
   if (preferModel === 'groq') {
     try {
       const result = await callGroq(prompt);
-      if (isValid(result)) return result;
-    } catch (err) { errors.push({ provider: 'groq', error: err.message }); }
+      if (isValid(result, 'Groq')) {
+        log(`✅ Sukses menggunakan Groq AI!`, 'success');
+        return result;
+      }
+    } catch (err) {
+      log(`❌ Groq gagal: ${err.message}`, 'warning');
+      errors.push({ provider: 'groq', error: err.message });
+    }
   } else if (preferModel === 'syntx-claude') {
     try {
-      const result = await syntxBot.callSyntx(prompt, 'claude-opus-4-8');
-      if (isValid(result)) return result;
-    } catch (err) { errors.push({ provider: 'syntx-claude', error: err.message }); }
+      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-5', syntxOptions);
+      if (isValid(result, 'Syntx Claude')) {
+        log(`✅ Sukses menggunakan Syntx Claude!`, 'success');
+        return result;
+      }
+    } catch (err) {
+      log(`❌ Syntx Claude gagal: ${err.message}`, 'warning');
+      errors.push({ provider: 'syntx-claude', error: err.message });
+    }
   } else if (preferModel === 'syntx-gemini') {
     try {
-      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash');
-      if (isValid(result)) return result;
-    } catch (err) { errors.push({ provider: 'syntx-gemini', error: err.message }); }
+      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
+      if (isValid(result, 'Syntx Gemini')) {
+        log(`✅ Sukses menggunakan Syntx Gemini!`, 'success');
+        return result;
+      }
+    } catch (err) {
+      log(`❌ Syntx Gemini gagal: ${err.message}`, 'warning');
+      errors.push({ provider: 'syntx-gemini', error: err.message });
+    }
   } else if (preferModel === 'gemini') {
     try {
       if (genAI) {
         const result = await callGemini(prompt);
-        if (isValid(result)) return result;
+        if (isValid(result, 'Gemini')) {
+          log(`✅ Sukses menggunakan Gemini AI!`, 'success');
+          return result;
+        }
+      } else {
+        throw new Error("Gemini AI belum diinisialisasi (GEMINI_API_KEY kosong)");
       }
-    } catch (err) { errors.push({ provider: 'gemini', error: err.message }); }
+    } catch (err) {
+      log(`❌ Gemini gagal: ${err.message}`, 'warning');
+      errors.push({ provider: 'gemini', error: err.message });
+    }
   } else if (preferModel === 'openrouter') {
     try {
       const result = await callOpenRouter(prompt);
-      if (isValid(result)) return result;
-    } catch (err) { errors.push({ provider: 'openrouter', error: err.message }); }
+      if (isValid(result, 'OpenRouter')) {
+        log(`✅ Sukses menggunakan OpenRouter!`, 'success');
+        return result;
+      }
+    } catch (err) {
+      log(`❌ OpenRouter gagal: ${err.message}`, 'warning');
+      errors.push({ provider: 'openrouter', error: err.message });
+    }
   }
 
   // Auto-fallback mode (default) — coba semua secara berurutan
-  // 1. Coba Groq dulu (paling cepat jika tidak kena limit)
+  log("Memulai pencarian model otomatis dengan fallback...", "info");
+
+  // 1. Coba Groq dulu
   if (preferModel !== 'groq') {
     try {
       if (GROQ_API_KEY) {
-        console.log("📡 [1/6] Mencoba Groq AI (llama-3.3-70b)...");
+        log("📡 [1/6] Mencoba Groq AI (llama-3.3-70b)...", "info");
         const result = await callGroq(prompt, "llama-3.3-70b-versatile");
-        if (isValid(result)) return result;
-        console.warn("⚠️ Groq: respons tidak valid (mungkin terpotong), lanjut fallback...");
+        if (isValid(result, "Groq")) {
+          log("✅ Sukses menggunakan Groq AI!", "success");
+          return result;
+        }
+        log("⚠️ Groq: respons tidak valid, lanjut fallback...", "warning");
+      } else {
+        log("⏩ Skip Groq (API Key kosong)", "info");
       }
     } catch (err) {
       const isLimit = isRateLimitError(err);
-      console.warn(`⚠️ Groq gagal${isLimit ? ' (RATE LIMIT)' : ''}:`, err.message?.substring(0, 100));
+      log(`⚠️ Groq gagal${isLimit ? ' (RATE LIMIT)' : ''}: ${err.message?.substring(0, 150)}`, "warning");
       errors.push({ provider: "groq", error: err.message });
     }
   }
 
-  // 2. Syntx.ai Claude Opus 4.8 – GRATIS & UNLIMITED, model terbaik
+  // 2. Syntx.ai Claude
   if (preferModel !== 'syntx-claude') {
     try {
-      console.log("📡 [2/6] Mencoba Syntx.ai Claude Opus 4.8 (gratis, tanpa limit)...");
-      const result = await syntxBot.callSyntx(prompt, 'claude-opus-4-8');
-      if (isValid(result)) return result;
-      console.warn("⚠️ Syntx Claude: respons tidak valid, lanjut fallback...");
+      log("📡 [2/6] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
+      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-5', syntxOptions);
+      if (isValid(result, "Syntx Claude")) {
+        log("✅ Sukses menggunakan Syntx Claude!", "success");
+        return result;
+      }
+      log("⚠️ Syntx Claude: respons tidak valid, lanjut fallback...", "warning");
     } catch (err) {
-      console.warn("⚠️ Syntx.ai Claude gagal:", err.message?.substring(0, 100));
+      log(`⚠️ Syntx.ai Claude gagal: ${err.message?.substring(0, 150)}`, "warning");
       errors.push({ provider: "syntx-claude", error: err.message });
     }
   }
 
-  // 3. Coba Gemini (jika ada)
+  // 3. Gemini AI
   if (preferModel !== 'gemini') {
     try {
       if (genAI) {
-        console.log("📡 [3/6] Mencoba Gemini AI...");
+        log("📡 [3/6] Mencoba Gemini AI...", "info");
         const result = await callGemini(prompt);
-        if (isValid(result)) return result;
-        console.warn("⚠️ Gemini: respons tidak valid, lanjut fallback...");
+        if (isValid(result, "Gemini")) {
+          log("✅ Sukses menggunakan Gemini AI!", "success");
+          return result;
+        }
+        log("⚠️ Gemini: respons tidak valid, lanjut fallback...", "warning");
+      } else {
+        log("⏩ Skip Gemini AI (API Key kosong)", "info");
       }
     } catch (err) {
       const isLimit = isRateLimitError(err);
-      console.warn(`⚠️ Gemini gagal${isLimit ? ' (QUOTA)' : ''}:`, err.message?.substring(0, 100));
+      log(`⚠️ Gemini gagal${isLimit ? ' (QUOTA)' : ''}: ${err.message?.substring(0, 150)}`, "warning");
       errors.push({ provider: "gemini", error: err.message });
     }
   }
 
-  // 4. Coba Syntx Gemini 3.5 Flash sebagai fallback
+  // 4. Syntx Gemini
   if (preferModel !== 'syntx-gemini') {
     try {
-      console.log("📡 [4/6] Mencoba Syntx.ai Gemini 3.5 Flash...");
-      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash');
-      if (isValid(result)) return result;
-      console.warn("⚠️ Syntx Gemini: respons tidak valid, lanjut fallback...");
+      log("📡 [4/6] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
+      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
+      if (isValid(result, "Syntx Gemini")) {
+        log("✅ Sukses menggunakan Syntx Gemini!", "success");
+        return result;
+      }
+      log("⚠️ Syntx Gemini: respons tidak valid, lanjut fallback...", "warning");
     } catch (err) {
-      console.warn("⚠️ Syntx.ai Gemini gagal:", err.message?.substring(0, 100));
+      log(`⚠️ Syntx.ai Gemini gagal: ${err.message?.substring(0, 150)}`, "warning");
       errors.push({ provider: "syntx-gemini", error: err.message });
     }
   }
 
-  // 5. Coba DeepSeek
+  // 5. DeepSeek
   try {
     if (DEEPSEEK_API_KEY) {
-      console.log("📡 [5/6] Mencoba DeepSeek AI...");
+      log("📡 [5/6] Mencoba DeepSeek AI...", "info");
       const result = await callDeepSeek(prompt);
-      if (isValid(result)) return result;
+      if (isValid(result, "DeepSeek")) {
+        log("✅ Sukses menggunakan DeepSeek AI!", "success");
+        return result;
+      }
+      log("⚠️ DeepSeek: respons tidak valid, lanjut fallback...", "warning");
+    } else {
+      log("⏩ Skip DeepSeek (API Key kosong)", "info");
     }
   } catch (err) {
-    console.warn("⚠️ DeepSeek gagal:", err.message?.substring(0, 100));
+    log(`⚠️ DeepSeek gagal: ${err.message?.substring(0, 150)}`, "warning");
     errors.push({ provider: "deepseek", error: err.message });
   }
 
-  // 6. Coba OpenRouter (fallback terakhir)
+  // 6. OpenRouter
   try {
-    console.log("📡 [6/6] Mencoba OpenRouter sebagai fallback terakhir...");
-    const result = await callOpenRouter(prompt, "default");
-    if (isValid(result)) return result;
+    if (OPENROUTER_API_KEY) {
+      log("📡 [6/6] Mencoba OpenRouter sebagai fallback terakhir...", "info");
+      const result = await callOpenRouter(prompt, "default");
+      if (isValid(result, "OpenRouter")) {
+        log("✅ Sukses menggunakan OpenRouter!", "success");
+        return result;
+      }
+      log("⚠️ OpenRouter: respons tidak valid", "warning");
+    } else {
+      log("⏩ Skip OpenRouter (API Key kosong)", "info");
+    }
   } catch (err) {
-    console.warn("⚠️ OpenRouter gagal:", err.message?.substring(0, 100));
+    log(`⚠️ OpenRouter gagal: ${err.message?.substring(0, 150)}`, "warning");
     errors.push({ provider: "openrouter", error: err.message });
   }
 
   // Semua gagal
+  log(`❌ Semua provider AI gagal! Rincian error: ${JSON.stringify(errors)}`, "error");
   throw new Error(`Semua provider AI gagal: ${JSON.stringify(errors)}`);
 }
 
@@ -1259,6 +1367,10 @@ const MAX_CONCURRENT_TASKS = 5;
 const abortControllers = {}; // { itemId: AbortController }
 const taskLogs = {}; // { itemId: Array of log objects }
 const taskSseClients = {}; // { itemId: Array of SSE response objects }
+const activeSeoGenerations = {}; // { itemId: boolean }
+const activePreviewRenders = {}; // { itemId: boolean }
+const active4kRenders = {}; // { itemId: boolean }
+
 
 // Sequential Git operator lock (Mutex) to prevent local commit/push conflicts
 let gitMutex = Promise.resolve();
@@ -1308,7 +1420,7 @@ function addTaskLog(itemId, message, type = 'info') {
   }
   taskLogs[itemId].push(logEntry);
 
-  if (taskLogs[itemId].length > 50) {
+  if (taskLogs[itemId].length > 500) {
     taskLogs[itemId].shift();
   }
 
@@ -1618,6 +1730,99 @@ function sanitizeKeywordsAndTitle(seoData) {
   return seoData;
 }
 
+const promptsPath = path.join(__dirname, "prompts.json");
+function loadPromptsConfig() {
+  try {
+    if (fs.existsSync(promptsPath)) {
+      const data = fs.readFileSync(promptsPath, "utf-8");
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error("Gagal membaca prompts.json, menggunakan default:", e.message);
+  }
+  return {
+    seoPrompt: `Kamu adalah pakar Creative Director SEO Microstock USA.
+Analisis file HTML berikut dan buat metadata SEO yang luar biasa kreatif, visualnya mewah, dan bernilai jual tinggi untuk dipasarkan di Adobe Stock.
+
+HTML Content:
+{{HTML_CONTENT}}
+
+Keluarkan hasil dalam format JSON murni berbentuk objek tanpa teks pengantar/penutup apa pun.
+DILARANG menggunakan karakter double quote (") di dalam nilai string. Gunakan single quote (') jika perlu.
+Struktur objek wajib persis seperti ini:
+{
+  "judul": "Rekomendasi judul video SEO bahasa Inggris (maksimal 12 kata). DILARANG menggunakan kata teknis pemrograman seperti CSS, keyframes, requestAnimationFrame, HTML, canvas, SVG, easing, DLL. DILARANG menggunakan nama brand (Apple, Nike, Android, Google, Microsoft, dll). Gunakan istilah komersial video seperti: smooth animation, fluid movement, modern UI UX elements overlay, app interface template, abstract particles, seamless loop, data visualization, animated infographics, interactive design concept.",
+  "keywords": "35-50 kata kunci bahasa Inggris dipisah koma. DILARANG menggunakan istilah teknis pemrograman (CSS transition, keyframes, requestAnimationFrame, SVG, canvas, loop) dan DILARANG menggunakan nama brand (Apple, Nike, Android, Google, Microsoft, dll). WAJIB menerjemahkan ke istilah komersial video stock dan disusun berdasarkan Teknik 3 Pilar dengan 7-10 keyword pertama adalah yang paling krusial. Pilar 1 (What/Isi: mouse click, subscribe button, loading bar, progress indicator, dll), Pilar 2 (Visual/Style: minimalist, flat design, modern UI, isolated, 4k. Jika video transparan, keyword 'alpha channel' and 'transparent background' WAJIB ditaruh di 10 keyword pertama), Pilar 3 (Kegunaan/Context: website promo, social media asset, app presentation, marketing material).",
+  "deskripsi": "Deskripsi detail visual bahasa Inggris untuk Adobe Stock (minimal 15 kata). Terjemahkan istilah kode ke visual: jangan sebut keyframes/easing/canvas, tapi gunakan smooth animation, fluid movement, dll.",
+  "kategori": "Kategori Adobe Stock (Technology/Abstract/Business)"
+}`,
+    conversionPrompt: `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
+You need to understand that Remotion renders videos frame-by-frame offline (using Puppeteer/Chrome). Therefore, any real-time browser features (like CSS @keyframes, transition, Date.now(), setInterval, or Math.random()) will cause severe synchronization bugs and frame-tearing in the final .mp4 export.
+
+**OBJECTIVE:**
+Convert the provided HTML/CSS/JS code into a single, production-grade Remotion component (.tsx). The visual output must be a 1:1 mirror of the original HTML, but entirely re-engineered for frame-locked rendering.
+
+**0. MANDATORY IMPORT RULE (ABSOLUTE — NEVER VIOLATE):**
+The FIRST LINE of the output file MUST ALWAYS be exactly this (copy-paste, no changes):
+import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
+- Do NOT import from any local files (e.g. './input', './utils', './config', etc.) — these files do not exist.
+- Do NOT import from 'three', 'gsap', or any external library.
+- Do NOT import React — it is auto-injected by the JSX transform.
+- NEVER add any import other than the single remotion import line above.
+
+**BANNED FUNCTIONS (WILL CAUSE RUNTIME CRASH — NEVER USE):**
+- EasingEaseOut, EasingEaseIn, EasingEaseInOut — these do not exist in Remotion. Use Easing.out(Easing.quad), Easing.in(Easing.quad), Easing.inOut(Easing.quad).
+- Valid Easing values: Easing.linear, Easing.ease, Easing.quad, Easing.cubic, Easing.sin, Easing.circle, Easing.exp, Easing.elastic(), Easing.back(), Easing.bounce, Easing.bezier(), Easing.in(), Easing.out(), Easing.inOut()
+- Date.now(), performance.now(), new Date() — BANNED, breaks deterministic frame rendering.
+- Math.random() inside component render — BANNED. Pre-calculate outside the component into a static const array.
+- setInterval(), setTimeout(), requestAnimationFrame() — BANNED.
+- Any CSS @keyframes, CSS transition, CSS animation property — BANNED.
+
+**1. Dynamic Identification:**
+- Identify the main subject from the HTML and use it as the PascalCase component name (e.g., GlowingButton).
+
+**2. Visual Parity & Animation (CRITICAL):**
+- Motion Mirroring: Analyze the original CSS @keyframes. Map every percentage (0%, 50%, 100%) exactly into the inputRange of Remotion's interpolate() function.
+- Easing Match: Translate CSS easing (e.g., ease-in-out) to the exact equivalent Remotion Easing API.
+- Frame-Locked: ALL motion, opacity, and scale changes MUST be strictly driven by useCurrentFrame().
+
+**3. Deterministic Rendering:**
+- Never use Math.random() inside the component render. Pre-calculate random elements (particles, positions, delays) in a static const array OUTSIDE the component function.
+
+**4. 4K Auto-Fit Landscape Scaling (CRITICAL):**
+- Define: const ORIGINAL_WIDTH = 1920; const ORIGINAL_HEIGHT = 1080;
+- Inside the component: const { width, height, fps } = useVideoConfig();
+- const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
+- Apply transform: scale(\${scaleFactor}) and transformOrigin: 'center center' to the main wrapper div.
+
+**5. Absolute Seamless Looping & Duration (CRITICAL):**
+- The animation MUST loop seamlessly and exactly match a duration of {{ANIMATION_DURATION}} seconds ({{DURATION_FRAMES}} frames at 30fps).
+- Set the component's duration/cycles to fit this {{ANIMATION_DURATION}}-second window.
+- Apply const localFrame = frame % (fps * cycleDuration) for each element to loop perfectly.
+- Symmetrical Interpolation: First and last value in every interpolate() output MUST be identical for seamless looping.
+
+**6. Clean Visuals (NO OVERLAYS):**
+- Do NOT render the video's title or keywords as text overlay, badges, or watermark tags on the video frame. The video canvas must only show the clean, stylized HTML conversion animation without any added watermarks, titles, or tag overlays.
+
+**7. Output Structure:**
+- Provide ONLY the raw .tsx file content — no markdown fences, no explanation text.
+- The main component MUST have \`export default ComponentName;\` as the LAST line.
+- Add a comment \`// END_OF_FILE\` at the very last line of the file.
+
+HERE IS THE HTML TO CONVERT:
+
+{{HTML_CONTENT}}
+
+OUTPUT: Start directly with the import line. No markdown. No explanation.`
+  };
+}
+
+// Helper to strip script tags from HTML to reduce token counts in prompt
+function stripScripts(html) {
+  if (!html) return "";
+  return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "\n<!-- [Script block removed for token size reduction] -->\n");
+}
+
 // Helper: Jalankan job batch di background secara sekuensial
 // Helper: Jalankan job batch di background secara sekuensial (Digantikan oleh sistem Queue)
 async function executeSingleTask(itemId) {
@@ -1658,7 +1863,6 @@ async function executeSingleTask(itemId) {
     if (!taskLogs[itemId]) {
       taskLogs[itemId] = item.logs || [];
     }
-    
     addTaskLog(itemId, "Memulai pemrosesan task...", "info");
 
     // Simpan file HTML asli ke lokal secara fisik
@@ -1666,118 +1870,53 @@ async function executeSingleTask(itemId) {
     fs.writeFileSync(htmlLocalPath, item.htmlPreview);
     addTaskLog(itemId, `HTML asli disimpan secara lokal di /saved-code/${itemId}.html`, "info");
 
-    // 2. Generate SEO Metadata
-    addTaskLog(itemId, "Menghasilkan metadata SEO via AI...", "info");
-    const seoPrompt = `Kamu adalah pakar Creative Director SEO Microstock USA.
-Analisis file HTML berikut dan buat metadata SEO yang luar biasa kreatif, visualnya mewah, dan bernilai jual tinggi untuk dipasarkan di Adobe Stock.
+    const promptsData = loadPromptsConfig();
 
-HTML Content:
-${item.htmlPreview}
+    // 2. Generate SEO Metadata (hanya jika belum ada)
+    if (item.judul && item.keywords) {
+      addTaskLog(itemId, `Menggunakan metadata SEO yang sudah ada. Judul: "${item.judul}"`, "info");
+    } else {
+      addTaskLog(itemId, "Menghasilkan metadata SEO via AI...", "info");
+      const cleanHtml = stripScripts(item.htmlPreview);
+      const seoPrompt = promptsData.seoPrompt.replace("{{HTML_CONTENT}}", cleanHtml);
 
-Keluarkan hasil dalam format JSON murni berbentuk objek tanpa teks pengantar/penutup apa pun.
-DILARANG menggunakan karakter double quote (") di dalam nilai string. Gunakan single quote (') jika perlu.
-Struktur objek wajib persis seperti ini:
-{
-  "judul": "Rekomendasi judul video SEO bahasa Inggris (maksimal 12 kata). DILARANG menggunakan kata teknis pemrograman seperti CSS, keyframes, requestAnimationFrame, HTML, canvas, SVG, easing, DLL. DILARANG menggunakan nama brand (Apple, Nike, Android, Google, Microsoft, dll). Gunakan istilah komersial video seperti: smooth animation, fluid movement, modern UI UX elements overlay, app interface template, abstract particles, seamless loop, data visualization, animated infographics, interactive design concept.",
-  "keywords": "35-50 kata kunci bahasa Inggris dipisah koma. DILARANG menggunakan istilah teknis pemrograman (CSS transition, keyframes, requestAnimationFrame, SVG, canvas, loop) dan DILARANG menggunakan nama brand (Apple, Nike, Android, Google, Microsoft, dll). WAJIB menerjemahkan ke istilah komersial video stock dan disusun berdasarkan Teknik 3 Pilar dengan 7-10 keyword pertama adalah yang paling krusial. Pilar 1 (What/Isi: mouse click, subscribe button, loading bar, progress indicator, dll), Pilar 2 (Visual/Style: minimalist, flat design, modern UI, isolated, 4k. Jika video transparan, keyword 'alpha channel' and 'transparent background' WAJIB ditaruh di 10 keyword pertama), Pilar 3 (Kegunaan/Context: website promo, social media asset, app presentation, marketing material).",
-  "deskripsi": "Deskripsi detail visual bahasa Inggris untuk Adobe Stock (minimal 15 kata). Terjemahkan istilah kode ke visual: jangan sebut keyframes/easing/canvas, tapi gunakan smooth animation, fluid movement, dll.",
-  "kategori": "Kategori Adobe Stock (Technology/Abstract/Business)"
-}`;
+      // Jalankan callAI dengan pembatalan (abortable)
+      let aiResponse = "";
+      try {
+        aiResponse = await runAbortable(callAIWithFallback(seoPrompt, { preferModel: item.aiModel || 'auto', signal, taskId: itemId }), signal);
+      } catch (err) {
+        throw new Error(`Gagal menghasilkan metadata SEO: ${err.message}`);
+      }
 
-    // Jalankan callAI dengan pembatalan (abortable)
-    let aiResponse = "";
-    try {
-      aiResponse = await runAbortable(callAIWithFallback(seoPrompt, { preferModel: item.aiModel || 'auto', signal }), signal);
-    } catch (err) {
-      throw new Error(`Gagal menghasilkan metadata SEO: ${err.message}`);
+      let jsonText = aiResponse.trim();
+      if (jsonText.startsWith("```json")) {
+        jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+      } else if (jsonText.includes("```")) {
+        jsonText = jsonText.split("```")[1].split("```")[0].trim();
+      }
+      jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+      let seoData = JSON.parse(jsonText);
+      seoData = sanitizeKeywordsAndTitle(seoData);
+
+      item.judul = seoData.judul;
+      item.keywords = seoData.keywords;
+      item.deskripsi = seoData.deskripsi;
+      item.kategori = seoData.kategori;
+      item.seoAiUsed = item.aiModel || 'auto';
+      saveOrUpdateItem(item);
+
+      addTaskLog(itemId, `Metadata SEO berhasil didapat. Judul: "${seoData.judul}"`, "success");
     }
-
-    let jsonText = aiResponse.trim();
-    if (jsonText.startsWith("```json")) {
-      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
-    } else if (jsonText.includes("```")) {
-      jsonText = jsonText.split("```")[1].split("```")[0].trim();
-    }
-    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-    let seoData = JSON.parse(jsonText);
-    seoData = sanitizeKeywordsAndTitle(seoData);
-
-    item.judul = seoData.judul;
-    item.keywords = seoData.keywords;
-    item.deskripsi = seoData.deskripsi;
-    item.kategori = seoData.kategori;
-    saveOrUpdateItem(item);
-
-    addTaskLog(itemId, `Metadata SEO berhasil didapat. Judul: "${seoData.judul}"`, "success");
 
     // 3. Konversi HTML ke TSX
     addTaskLog(itemId, "Mengonversi HTML ke kode Remotion TSX...", "info");
     const animationDuration = item.animationDuration || 10;
     const durationFrames = item.durationInFrames || 300;
 
-    const conversionPrompt = `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
-You need to understand that Remotion renders videos frame-by-frame offline (using Puppeteer/Chrome). Therefore, any real-time browser features (like CSS @keyframes, transition, Date.now(), setInterval, or Math.random()) will cause severe synchronization bugs and frame-tearing in the final .mp4 export.
-
-**OBJECTIVE:**
-Convert the provided HTML/CSS/JS code into a single, production-grade Remotion component (.tsx). The visual output must be a 1:1 mirror of the original HTML, but entirely re-engineered for frame-locked rendering.
-
-**0. MANDATORY IMPORT RULE (ABSOLUTE — NEVER VIOLATE):**
-The FIRST LINE of the output file MUST ALWAYS be exactly this (copy-paste, no changes):
-import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
-- Do NOT import from any local files (e.g. './input', './utils', './config', etc.) — these files do not exist.
-- Do NOT import from 'three', 'gsap', or any external library.
-- Do NOT import React — it is auto-injected by the JSX transform.
-- NEVER add any import other than the single remotion import line above.
-
-**BANNED FUNCTIONS (WILL CAUSE RUNTIME CRASH — NEVER USE):**
-- EasingEaseOut, EasingEaseIn, EasingEaseInOut — these do not exist in Remotion. Use Easing.out(Easing.quad), Easing.in(Easing.quad), Easing.inOut(Easing.quad).
-- Valid Easing values: Easing.linear, Easing.ease, Easing.quad, Easing.cubic, Easing.sin, Easing.circle, Easing.exp, Easing.elastic(), Easing.back(), Easing.bounce, Easing.bezier(), Easing.in(), Easing.out(), Easing.inOut()
-- Date.now(), performance.now(), new Date() — BANNED, breaks deterministic frame rendering.
-- Math.random() inside component render — BANNED. Pre-calculate outside the component into a static const array.
-- setInterval(), setTimeout(), requestAnimationFrame() — BANNED.
-- Any CSS @keyframes, CSS transition, CSS animation property — BANNED.
-
-**1. Dynamic Identification:**
-- Identify the main subject from the HTML and use it as the PascalCase component name (e.g., GlowingButton).
-
-**2. Visual Parity & Animation (CRITICAL):**
-- Motion Mirroring: Analyze the original CSS @keyframes. Map every percentage (0%, 50%, 100%) exactly into the inputRange of Remotion's interpolate() function.
-- Easing Match: Translate CSS easing (e.g., ease-in-out) to the exact equivalent Remotion Easing API.
-- Frame-Locked: ALL motion, opacity, and scale changes MUST be strictly driven by useCurrentFrame().
-
-**3. Deterministic Rendering:**
-- Never use Math.random() inside the component render. Pre-calculate random elements (particles, positions, delays) in a static const array OUTSIDE the component function.
-
-**4. 4K Auto-Fit Landscape Scaling (CRITICAL):**
-- Define: const ORIGINAL_WIDTH = 1920; const ORIGINAL_HEIGHT = 1080;
-- Inside the component: const { width, height, fps } = useVideoConfig();
-- const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
-- Apply transform: scale(\${scaleFactor}) and transformOrigin: 'center center' to the main wrapper div.
-
-**5. Absolute Seamless Looping & Duration (CRITICAL):**
-- The animation MUST loop seamlessly and exactly match a duration of ${animationDuration} seconds (${durationFrames} frames at 30fps).
-- Set the component's duration/cycles to fit this ${animationDuration}-second window.
-- Apply const localFrame = frame % (fps * cycleDuration) for each element to loop perfectly.
-- Symmetrical Interpolation: First and last value in every interpolate() output MUST be identical for seamless looping.
-
-**6. Dynamic Text Overlay — Safe getInputProps (CRITICAL):**
-- Use this EXACT pattern at the top of the component body (safe with fallback):
-  const inputProps = (getInputProps() as any) || {};
-  const judul = inputProps.judul || 'Stock Video';
-  const keywordsList = (inputProps.keywords || 'motion, abstract, loop').split(',');
-- Render judul as an elegant glowing title at the bottom-left with a smooth fade-in animation.
-- Render keywordsList as small glassmorphic badge tags below the title.
-
-**7. Output Structure:**
-- Provide ONLY the raw .tsx file content — no markdown fences, no explanation text.
-- The main component MUST have \`export default ComponentName;\` as the LAST line.
-- Add a comment \`// END_OF_FILE\` at the very last line of the file.
-
-HERE IS THE HTML TO CONVERT:
-
-${item.htmlPreview}
-
-OUTPUT: Start directly with the import line. No markdown. No explanation.`;
+    const conversionPrompt = promptsData.conversionPrompt
+      .replace(/{{ANIMATION_DURATION}}/g, String(animationDuration))
+      .replace(/{{DURATION_FRAMES}}/g, String(durationFrames))
+      .replace(/{{HTML_CONTENT}}/g, item.htmlPreview);
 
     let tsxResponse = "";
     let tsxAttempts = 0;
@@ -1807,7 +1946,8 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
         tsxResponse = await runAbortable(
           callAIWithFallback(conversionPrompt, { 
             preferModel: item.aiModel || 'auto',
-            validator: tsxValidator
+            validator: tsxValidator,
+            taskId: itemId
           }),
           signal
         );
@@ -1850,74 +1990,10 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
     fs.writeFileSync(tsxLocalPath, tsxCode);
     addTaskLog(itemId, `File TSX disimpan secara lokal di /saved-code/${itemId}.tsx`, "info");
 
-    // 4. Git Push & Trigger Render Cloud (menulis src/Composition.tsx sementara)
-    addTaskLog(itemId, "Mengantrekan operasi Git Push untuk sinkronisasi kode ke GitHub...", "info");
-    
-    await runGitTask(async () => {
-      if (signal.aborted) throw new Error("Cancelled by user");
-      addTaskLog(itemId, "Mulai menulis src/Composition.tsx dan git push...", "info");
-      fs.writeFileSync("src/Composition.tsx", tsxCode);
-
-      execSync("git add src/Composition.tsx", { stdio: "inherit" });
-      try {
-        execSync(`git commit -m "Queue HTML ke TSX: ${itemId}"`, { stdio: "inherit" });
-      } catch (e) {
-        // No changes is fine
-      }
-      execSync("git push origin main", { stdio: "inherit" });
-
-      const sha = execSync("git rev-parse HEAD").toString().trim();
-      addTaskLog(itemId, `Kode berhasil didorong ke GitHub. Commit SHA: ${sha}`, "success");
-
-      // Trigger GitHub Action
-      addTaskLog(itemId, "Memicu workflow rendering di GitHub Actions...", "info");
-      const workflowFile = "render-preview.yml";
-      const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
-
-      await axios.post(
-        workflowDispatchUrl,
-        {
-          ref: "main",
-          inputs: {
-            composition_id: itemId,
-            duration_frames: String(durationFrames),
-            judul: item.judul || "Stock Video",
-            keywords: item.keywords || "motion, abstract, loop"
-          }
-        },
-        {
-          headers: {
-            Authorization: "token " + GITHUB_TOKEN,
-            Accept: "application/vnd.github.v3+json"
-          }
-        }
-      );
-
-      const trackingKey = `${itemId}_preview`;
-      gitRuns[trackingKey] = {
-        sha: sha,
-        status: "triggered",
-        runId: null,
-        triggeredAt: Date.now(),
-        workflowFile: workflowFile
-      };
-    });
-
-    item.statusConvertTsx = 'processing-preview';
+    addTaskLog(itemId, `Konversi HTML ke TSX berhasil! Kode disimpan di /saved-code/${itemId}.tsx`, "success");
+    addTaskLog(itemId, `Silakan klik tombol GEN PREVIEW untuk merender video preview di cloud.`, "info");
+    item.statusConvertTsx = 'waiting-preview';
     saveOrUpdateItem(item);
-
-    // 5. Tunggu proses rendering cloud selesai
-    addTaskLog(itemId, "Menunggu proses rendering video preview di GitHub Actions...", "info");
-    const renderSuccess = await waitForRenderSingle(itemId, 'preview', signal);
-    if (renderSuccess) {
-      const fileUrl = `/previews/${itemId}-preview.mp4`;
-      item.previewUrl = fileUrl;
-      item.statusConvertTsx = 'success';
-      saveOrUpdateItem(item);
-      addTaskLog(itemId, "Video preview selesai diproses dan siap diunduh!", "success");
-    } else {
-      throw new Error("Rendering cloud gagal.");
-    }
 
   } catch (err) {
     if (err.message === "Cancelled by user" || signal.aborted) {
@@ -1950,7 +2026,7 @@ async function waitForRenderSingle(id, renderType, signal) {
   const timeoutMs = 20 * 60 * 1000; // 20 menit timeout
 
   while (Date.now() - startTime < timeoutMs) {
-    if (signal && signal.aborted) return false;
+    if (signal && signal.aborted) return null;
 
     const finalFilename = renderType === "preview" ? `${id}-preview.mp4` : `${id}-4k.mov`;
     const legacyFilename = renderType === "preview" ? `${id}.mp4` : `${id}_4k.mov`;
@@ -1961,16 +2037,20 @@ async function waitForRenderSingle(id, renderType, signal) {
       ? path.join(__dirname, "public", "previews", legacyFilename)
       : path.join(__dirname, "out", legacyFilename);
 
-    if (fs.existsSync(finalPath) || fs.existsSync(legacyPath)) {
+    if (fs.existsSync(finalPath)) {
       addTaskLog(id, `Video preview untuk ${id} berhasil ditemukan secara lokal!`, 'success');
-      return true;
+      return renderType === "preview" ? `/previews/${finalFilename}` : `/out/${finalFilename}`;
+    }
+    if (fs.existsSync(legacyPath)) {
+      addTaskLog(id, `Video preview untuk ${id} berhasil ditemukan secara lokal!`, 'success');
+      return renderType === "preview" ? `/previews/${legacyFilename}` : `/out/${legacyFilename}`;
     }
 
     try {
       const statusResult = await checkGithubRenderStatusInternal(id, renderType);
       if (statusResult.status === 'success') {
-        addTaskLog(id, `Video preview untuk ${id} berhasil diunduh dari GitHub!`, 'success');
-        return true;
+        addTaskLog(id, `Video preview untuk ${id} berhasil didapat dari GitHub!`, 'success');
+        return statusResult.url;
       } else if (statusResult.status === 'failed') {
         throw new Error(statusResult.error || 'Workflow failed');
       } else {
@@ -2010,12 +2090,12 @@ function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, an
     loop: !!loop,
     transparent: !!transparent,
     aiModel: aiModel,
-    statusConvertTsx: 'queued', // status awal mengantre
+    statusConvertTsx: 'waiting', // status awal menunggu
     statusRender4k: 'idle',
     previewUrl: '',
     outputPath4k: '',
     createdAt: new Date().toISOString(),
-    logs: [{ message: "Masuk antrean...", type: "info", time: new Date().toLocaleTimeString('id-ID') }]
+    logs: [{ message: "Ditambahkan ke daftar. Menunggu tombol Mulai...", type: "info", time: new Date().toLocaleTimeString('id-ID') }]
   };
 
   saveOrUpdateItem(itemData);
@@ -2023,11 +2103,7 @@ function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, an
   // Daftarkan ke memori logs
   taskLogs[id] = [...itemData.logs];
 
-  // Masukkan ke antrean
-  taskQueue.push(id);
-
-  // Picu eksekusi antrean
-  processQueue();
+  // Jangan masukkan ke antrean secara otomatis agar user dapat mengklik Mulai
   
   return id;
 }
@@ -2192,33 +2268,28 @@ app.post("/api/retry-task/:id", (req, res) => {
     return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
   }
 
-  // Hanya izinkan retry untuk status failed/cancelled
-  if (item.statusConvertTsx !== 'failed' && item.statusConvertTsx !== 'cancelled') {
-    return res.status(400).json({ error: "Hanya item yang gagal atau dibatalkan yang bisa di-retry" });
-  }
-
-  if (!item.htmlPreview) {
-    return res.status(400).json({ error: "Tidak ada konten HTML yang tersimpan untuk item ini" });
-  }
-
-  // Cek apakah sudah ada di antrian
-  if (taskQueue.includes(id) || activeTasks.has(id)) {
-    return res.status(400).json({ error: "Task sudah ada di antrian" });
+  // Hanya izinkan jika tidak sedang aktif berjalan
+  if (taskQueue.includes(id) || activeTasks.has(id) || item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx' || item.statusConvertTsx === 'processing-preview') {
+    return res.status(400).json({ error: "Task sedang berjalan atau mengantre" });
   }
 
   console.log(`🔄 Mengantrekan ulang task: ${id}`);
 
-  // Reset status dan logs
+  // Reset status and logs (preserving old ones)
   item.statusConvertTsx = 'queued';
   item.previewUrl = '';
   item.promptCode = '';
-  item.logs = [{ message: "Dimasukkan ulang ke antrean (retry)...", type: "info", time: new Date().toLocaleTimeString('id-ID') }];
-  item.lastLogMessage = "Dimasukkan ulang ke antrean (retry)...";
   if (aiModel) item.aiModel = aiModel;
   if (animationDuration) {
     item.animationDuration = Number(animationDuration);
     item.durationInFrames = Number(animationDuration) * 30;
   }
+
+  if (!item.logs) item.logs = [];
+  const timeStr = new Date().toLocaleTimeString('id-ID');
+  item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+  item.logs.push({ message: `🔄 Mengulang proses (Retry) dengan AI: ${item.aiModel || 'auto'}`, type: "info", time: timeStr });
+  item.lastLogMessage = "Mengulang proses...";
 
   // Simpan ke DB
   const index = items.findIndex(i => i.id === id);
@@ -2315,13 +2386,17 @@ app.get("/api/task-logs/:id", (req, res) => {
     res.write(`data: ${JSON.stringify(log)}\n\n`);
   });
 
-  // Cek status pengerjaan saat ini. Jika sudah selesai, tutup stream
+  // Cek status pengerjaan saat ini. Jika sudah selesai dan tidak sedang dalam regenerasi SEO, tutup stream
   try {
     const dbPath = path.join(__dirname, "saved-items.json");
     const data = fs.readFileSync(dbPath, "utf-8");
     const items = JSON.parse(data);
     const item = items.find(i => i.id === id);
-    if (item && (item.statusConvertTsx === 'success' || item.statusConvertTsx === 'failed' || item.statusConvertTsx === 'cancelled')) {
+    const isRunning = activeSeoGenerations[id] || 
+                      activePreviewRenders[id] || 
+                      active4kRenders[id] ||
+                      (item && (item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx' || item.statusConvertTsx === 'processing-preview'));
+    if (!isRunning && item && (item.statusConvertTsx === 'success' || item.statusConvertTsx === 'failed' || item.statusConvertTsx === 'cancelled' || item.statusConvertTsx === 'waiting' || item.statusConvertTsx === 'waiting-preview')) {
       res.write(`data: ${JSON.stringify({ type: 'done', message: 'Task selesai' })}\n\n`);
       res.end();
       return;
@@ -2375,6 +2450,268 @@ app.get("/api/batch-logs/:jobId", (req, res) => {
   });
 });
 
+// Helper untuk memproses Render Preview di background secara asinkron
+async function runPreviewRenderBackground(itemId) {
+  activePreviewRenders[itemId] = true;
+  
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    console.error("Gagal membaca database di runPreviewRenderBackground", e);
+    delete activePreviewRenders[itemId];
+    return;
+  }
+  const item = items.find(i => i.id === itemId);
+  if (!item) {
+    delete activePreviewRenders[itemId];
+    return;
+  }
+
+  if (!taskLogs[itemId]) {
+    taskLogs[itemId] = item.logs || [];
+  }
+
+  addTaskLog(itemId, `=================================`, "info");
+  addTaskLog(itemId, `☁️ Memulai proses Render Preview (Cloud)...`, "info");
+
+  try {
+    addTaskLog(itemId, "Mengantrekan operasi Git Push untuk sinkronisasi kode ke GitHub...", "info");
+    
+    await runGitTask(async () => {
+      addTaskLog(itemId, "Mulai menulis src/Composition.tsx dan git push...", "info");
+      fs.writeFileSync("src/Composition.tsx", item.promptCode);
+
+      execSync("git add src/Composition.tsx", { stdio: "inherit" });
+      try {
+        execSync(`git commit -m "Render Preview: ${itemId}"`, { stdio: "inherit" });
+      } catch (e) {
+        // No changes is fine
+      }
+      execSync("git push origin main", { stdio: "inherit" });
+
+      const sha = execSync("git rev-parse HEAD").toString().trim();
+      addTaskLog(itemId, `Kode berhasil didorong ke GitHub. Commit SHA: ${sha}`, "success");
+
+      addTaskLog(itemId, "Memicu workflow rendering preview di GitHub Actions...", "info");
+      const workflowFile = "render-preview.yml";
+      const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
+
+      await axios.post(
+        workflowDispatchUrl,
+        {
+          ref: "main",
+          inputs: {
+            composition_id: itemId,
+            duration_frames: String(item.durationInFrames || 300),
+            judul: item.judul || "Stock Video",
+            keywords: item.keywords || "motion, abstract, loop"
+          }
+        },
+        {
+          headers: {
+            Authorization: "token " + GITHUB_TOKEN,
+            Accept: "application/vnd.github.v3+json"
+          }
+        }
+      );
+
+      const trackingKey = `${itemId}_preview`;
+      gitRuns[trackingKey] = {
+        sha: sha,
+        status: "triggered",
+        runId: null,
+        triggeredAt: Date.now(),
+        workflowFile: workflowFile
+      };
+    });
+
+    addTaskLog(itemId, "Menunggu proses rendering video preview di GitHub Actions...", "info");
+    const fileUrl = await waitForRenderSingle(itemId, 'preview');
+    if (fileUrl) {
+      // Ambil data terbaru untuk mencegah overwrite
+      const dataFresh = fs.readFileSync(dbPath, "utf-8");
+      const itemsFresh = JSON.parse(dataFresh);
+      const itemFresh = itemsFresh.find(i => i.id === itemId);
+      
+      itemFresh.previewUrl = fileUrl;
+      itemFresh.statusConvertTsx = 'success';
+      saveOrUpdateItem(itemFresh);
+      addTaskLog(itemId, `Video preview selesai diproses! URL: ${fileUrl}`, "success");
+    } else {
+      throw new Error("Rendering cloud gagal.");
+    }
+  } catch (err) {
+    const dataFresh = fs.readFileSync(dbPath, "utf-8");
+    const itemsFresh = JSON.parse(dataFresh);
+    const itemFresh = itemsFresh.find(i => i.id === itemId);
+    
+    itemFresh.statusConvertTsx = 'failed';
+    saveOrUpdateItem(itemFresh);
+    addTaskLog(itemId, `Gagal merender preview: ${err.message}`, "error");
+  } finally {
+    delete activePreviewRenders[itemId];
+    
+    if (taskSseClients[itemId]) {
+      taskSseClients[itemId].forEach(client => {
+        client.write(`data: ${JSON.stringify({ type: 'done', message: 'Render Preview selesai' })}\n\n`);
+        client.end();
+      });
+      delete taskSseClients[itemId];
+    }
+  }
+}
+
+// Helper untuk memproses Render 4K di background secara asinkron
+async function run4kRenderBackground(itemId) {
+  active4kRenders[itemId] = true;
+  
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    console.error("Gagal membaca database di run4kRenderBackground", e);
+    delete active4kRenders[itemId];
+    return;
+  }
+  const item = items.find(i => i.id === itemId);
+  if (!item) {
+    delete active4kRenders[itemId];
+    return;
+  }
+
+  if (!taskLogs[itemId]) {
+    taskLogs[itemId] = item.logs || [];
+  }
+
+  addTaskLog(itemId, `=================================`, "info");
+  addTaskLog(itemId, `🚀 Memulai proses Render 4K ProRes (Cloud)...`, "info");
+
+  try {
+    addTaskLog(itemId, "Mengantrekan operasi Git Push untuk sinkronisasi kode ke GitHub...", "info");
+    
+    await runGitTask(async () => {
+      addTaskLog(itemId, "Mulai menulis src/Composition.tsx dan git push...", "info");
+      fs.writeFileSync("src/Composition.tsx", item.promptCode);
+
+      execSync("git add src/Composition.tsx", { stdio: "inherit" });
+      try {
+        execSync(`git commit -m "Render 4K: ${itemId}"`, { stdio: "inherit" });
+      } catch (e) {
+        // No changes is fine
+      }
+      execSync("git push origin main", { stdio: "inherit" });
+
+      const sha = execSync("git rev-parse HEAD").toString().trim();
+      addTaskLog(itemId, `Kode berhasil didorong ke GitHub. Commit SHA: ${sha}`, "success");
+
+      addTaskLog(itemId, "Memicu workflow rendering 4K di GitHub Actions...", "info");
+      const workflowFile = "render-4k.yml";
+      const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
+
+      await axios.post(
+        workflowDispatchUrl,
+        {
+          ref: "main",
+          inputs: {
+            composition_id: itemId,
+            duration_frames: String(item.durationInFrames || 300),
+            judul: item.judul || "Stock Video",
+            keywords: item.keywords || "motion, abstract, loop"
+          }
+        },
+        {
+          headers: {
+            Authorization: "token " + GITHUB_TOKEN,
+            Accept: "application/vnd.github.v3+json"
+          }
+        }
+      );
+
+      const trackingKey = `${itemId}_4k`;
+      gitRuns[trackingKey] = {
+        sha: sha,
+        status: "triggered",
+        runId: null,
+        triggeredAt: Date.now(),
+        workflowFile: workflowFile
+      };
+    });
+
+    addTaskLog(itemId, "Menunggu proses rendering video 4K ProRes di GitHub Actions (~10-15 menit)...", "info");
+    const fileUrl = await waitForRenderSingle(itemId, '4k');
+    if (fileUrl) {
+      const dataFresh = fs.readFileSync(dbPath, "utf-8");
+      const itemsFresh = JSON.parse(dataFresh);
+      const itemFresh = itemsFresh.find(i => i.id === itemId);
+      
+      itemFresh.outputPath4k = fileUrl;
+      itemFresh.statusRender4k = 'success';
+      saveOrUpdateItem(itemFresh);
+      addTaskLog(itemId, `Video 4K ProRes selesai diproses! URL: ${fileUrl}`, "success");
+    } else {
+      throw new Error("Rendering cloud 4K gagal.");
+    }
+  } catch (err) {
+    const dataFresh = fs.readFileSync(dbPath, "utf-8");
+    const itemsFresh = JSON.parse(dataFresh);
+    const itemFresh = itemsFresh.find(i => i.id === itemId);
+    
+    itemFresh.statusRender4k = 'failed';
+    saveOrUpdateItem(itemFresh);
+    addTaskLog(itemId, `Gagal merender 4K: ${err.message}`, "error");
+  } finally {
+    delete active4kRenders[itemId];
+    
+    if (taskSseClients[itemId]) {
+      taskSseClients[itemId].forEach(client => {
+        client.write(`data: ${JSON.stringify({ type: 'done', message: 'Render 4K selesai' })}\n\n`);
+        client.end();
+      });
+      delete taskSseClients[itemId];
+    }
+  }
+}
+
+// POST: Trigger render Preview
+app.post("/api/trigger-preview/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    const data = fs.readFileSync(dbPath, "utf-8");
+    const items = JSON.parse(data);
+    const item = items.find(i => i.id === id);
+    if (!item) {
+      return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
+    }
+
+    if (!item.promptCode) {
+      return res.status(400).json({ error: "Item tidak memiliki kode TSX untuk dirender" });
+    }
+
+    if (item.statusConvertTsx === 'processing-preview') {
+      return res.status(400).json({ error: "Render preview sedang berjalan" });
+    }
+
+    item.statusConvertTsx = 'processing-preview';
+    fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+
+    // Jalankan background task asinkron
+    runPreviewRenderBackground(id).catch(err => {
+      console.error(`Error in runPreviewRenderBackground for ${id}:`, err);
+    });
+
+    res.json({ success: true, message: "Render preview dimulai di background" });
+  } catch (error) {
+    console.error(`❌ Gagal di trigger-preview untuk ${id}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST: Trigger render 4K ProRes
 app.post("/api/trigger-4k/:id", async (req, res) => {
   const { id } = req.params;
@@ -2391,61 +2728,81 @@ app.post("/api/trigger-4k/:id", async (req, res) => {
       return res.status(400).json({ error: "Item tidak memiliki kode TSX untuk dirender" });
     }
 
-    // Update status render 4k ke processing
+    if (item.statusRender4k === 'processing') {
+      return res.status(400).json({ error: "Render 4K sedang berjalan" });
+    }
+
     item.statusRender4k = 'processing';
     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
 
-    console.log(`🚀 Memicu render 4K untuk item: ${id}`);
+    // Jalankan background task asinkron
+    run4kRenderBackground(id).catch(err => {
+      console.error(`Error in run4kRenderBackground for ${id}:`, err);
+    });
 
-    // Tulis file src/Composition.tsx
-    fs.writeFileSync("src/Composition.tsx", item.promptCode);
-
-    // Commit & Push kode yang akan dirender
-    execSync("git add src/Composition.tsx", { stdio: "inherit" });
-    try {
-      execSync(`git commit -m "Render 4K: ${id}"`, { stdio: "inherit" });
-    } catch (e) {
-      console.log("ℹ️ Tidak ada perubahan kode baru untuk di-commit.");
-    }
-    execSync("git push origin main", { stdio: "inherit" });
-
-    const sha = execSync("git rev-parse HEAD").toString().trim();
-
-    // Trigger GitHub workflow dispatch untuk render-4k.yml
-    const workflowFile = "render-4k.yml";
-    const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
-
-    await axios.post(
-      workflowDispatchUrl,
-      {
-        ref: "main",
-        inputs: {
-          composition_id: id,
-          duration_frames: String(Number(item.durationInFrames) || 150),
-          judul: item.judul || "Stock Video",
-          keywords: item.keywords || "motion, abstract, loop"
-        }
-      },
-      {
-        headers: {
-          Authorization: "token " + GITHUB_TOKEN,
-          Accept: "application/vnd.github.v3+json"
-        }
-      }
-    );
-
-    const trackingKey = `${id}_4k`;
-    gitRuns[trackingKey] = {
-      sha: sha,
-      status: "triggered",
-      runId: null,
-      triggeredAt: Date.now(),
-      workflowFile: workflowFile
-    };
-
-    res.json({ success: true, sha });
+    res.json({ success: true, message: "Render 4K dimulai di background" });
   } catch (error) {
     console.error(`❌ Gagal di trigger-4k untuk ${id}:`, error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET: Download 4K ProRes Zip directly from GitHub Actions artifacts
+app.get("/api/download-4k-zip/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    if (!fs.existsSync(dbPath)) {
+      return res.status(404).json({ error: "Database tidak ditemukan" });
+    }
+    const data = fs.readFileSync(dbPath, "utf-8");
+    const items = JSON.parse(data);
+    const item = items.find(i => i.id === id);
+    if (!item) {
+      return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
+    }
+
+    if (!GITHUB_USERNAME || !GITHUB_REPO || !GITHUB_TOKEN) {
+      return res.status(500).json({ error: "Kredensial GitHub tidak dikonfigurasi di server" });
+    }
+
+    // Cari artifact dengan nama `${id}-4k-video`
+    const artifactsUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/artifacts?per_page=100`;
+    const response = await axios.get(artifactsUrl, {
+      headers: {
+        Authorization: "token " + GITHUB_TOKEN,
+        Accept: "application/vnd.github.v3+json"
+      }
+    });
+
+    const artifacts = response.data.artifacts || [];
+    const targetArtifactName = `${id}-4k-video`;
+    const matchedArtifact = artifacts.find(a => a.name === targetArtifactName);
+
+    if (!matchedArtifact) {
+      return res.status(404).json({ error: `Artifact "${targetArtifactName}" tidak ditemukan di GitHub. Pastikan render 4K sudah selesai.` });
+    }
+
+    // Stream file zip langsung ke response
+    const downloadUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/artifacts/${matchedArtifact.id}/zip`;
+    
+    res.setHeader("Content-Disposition", `attachment; filename="${targetArtifactName}.zip"`);
+    res.setHeader("Content-Type", "application/zip");
+
+    console.log(`⬇️ Streaming artifact zip untuk ${id} dari GitHub...`);
+    const downloadRes = await axios({
+      method: "get",
+      url: downloadUrl,
+      responseType: "stream",
+      headers: {
+        Authorization: "token " + GITHUB_TOKEN,
+        Accept: "application/vnd.github.v3+json"
+      }
+    });
+
+    downloadRes.data.pipe(res);
+  } catch (error) {
+    console.error(`❌ Gagal mendownload 4k zip untuk ${id}:`, error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -2537,7 +2894,12 @@ app.get("/api/syntx-status", (req, res) => {
 app.post("/api/syntx-login", async (req, res) => {
   try {
     console.log("🔐 Manual trigger: Login ke syntx.ai...");
-    await syntxBot.loginAndGetToken();
+    await syntxBot.loginAndGetToken({
+      taskId: 'manual',
+      onEmailGenerated: (nextIndex) => {
+        updateEnvKeys({ syntxEmailIndex: String(nextIndex) });
+      }
+    });
     const state = syntxBot.getSessionState();
     res.json({
       success: true,
@@ -2564,6 +2926,561 @@ app.post("/api/syntx-test", async (req, res) => {
   } catch (err) {
     console.error("❌ Gagal test syntx.ai:", err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST: Batch trigger 4K render untuk beberapa item sekaligus
+app.post("/api/batch-trigger-4k", async (req, res) => {
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "Parameter 'ids' harus berupa array ID yang valid" });
+  }
+
+  const results = [];
+  const dbPath = path.join(__dirname, "saved-items.json");
+
+  for (const id of ids) {
+    try {
+      const data = fs.readFileSync(dbPath, "utf-8");
+      const items = JSON.parse(data);
+      const item = items.find(i => i.id === id);
+
+      if (!item) {
+        results.push({ id, success: false, error: `Item ${id} tidak ditemukan` });
+        continue;
+      }
+      if (!item.promptCode) {
+        results.push({ id, success: false, error: `Item ${id} tidak memiliki TSX code` });
+        continue;
+      }
+
+      // Update status ke processing
+      item.statusRender4k = 'processing';
+      fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+
+      // Tulis TSX
+      fs.writeFileSync("src/Composition.tsx", item.promptCode);
+
+      // Commit & Push
+      execSync("git add src/Composition.tsx", { stdio: "inherit" });
+      try {
+        execSync(`git commit -m "Render 4K Batch: ${id}"`, { stdio: "inherit" });
+      } catch (e) {
+        console.log(`ℹ️ Tidak ada perubahan kode baru untuk ${id}.`);
+      }
+      execSync("git push origin main", { stdio: "inherit" });
+
+      const sha = execSync("git rev-parse HEAD").toString().trim();
+
+      // Trigger workflow dispatch
+      const workflowFile = "render-4k.yml";
+      await axios.post(
+        `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`,
+        {
+          ref: "main",
+          inputs: {
+            composition_id: id,
+            duration_frames: String(Number(item.durationInFrames) || 150),
+            judul: item.judul || "Stock Video",
+            keywords: item.keywords || "motion, abstract, loop"
+          }
+        },
+        {
+          headers: {
+            Authorization: "token " + GITHUB_TOKEN,
+            Accept: "application/vnd.github.v3+json"
+          }
+        }
+      );
+
+      const trackingKey = `${id}_4k`;
+      gitRuns[trackingKey] = {
+        sha,
+        status: "triggered",
+        runId: null,
+        triggeredAt: Date.now(),
+        workflowFile
+      };
+
+      results.push({ id, success: true, sha });
+      console.log(`✅ 4K batch trigger berhasil untuk: ${id}`);
+
+    } catch (err) {
+      console.error(`❌ Gagal batch-trigger-4k untuk ${id}:`, err.message);
+      results.push({ id, success: false, error: err.message });
+    }
+  }
+
+  res.json({ results });
+});
+
+// GET: Ambil prompt dari prompts.json
+app.get("/api/prompts", (req, res) => {
+  const prompts = loadPromptsConfig();
+  res.json(prompts);
+});
+
+// POST: Update prompt ke prompts.json
+app.post("/api/prompts", (req, res) => {
+  const { seoPrompt, conversionPrompt } = req.body;
+  try {
+    fs.writeFileSync(promptsPath, JSON.stringify({ seoPrompt, conversionPrompt }, null, 2));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Gagal menyimpan prompts.json: " + err.message });
+  }
+});
+
+// POST: Mulai task yang sedang menunggu (waiting)
+app.post("/api/start-task/:id", (req, res) => {
+  const { id } = req.params;
+  const { aiModel } = req.body; // opsional: model AI yang dipilih user
+
+  // Baca item dari DB
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    return res.status(500).json({ error: "Gagal membaca database" });
+  }
+
+  const item = items.find(i => i.id === id);
+  if (!item) {
+    return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
+  }
+
+  if (item.statusConvertTsx !== 'waiting') {
+    return res.status(400).json({ error: "Task tidak sedang dalam status menunggu" });
+  }
+
+  // Cek apakah sudah ada di antrian
+  if (taskQueue.includes(id) || activeTasks.has(id)) {
+    return res.status(400).json({ error: "Task sudah ada di antrian" });
+  }
+
+  console.log(`▶ Memulai task: ${id} (AI: ${aiModel || 'auto'})`);
+
+  // Update status ke queued, simpan aiModel jika ada
+  item.statusConvertTsx = 'queued';
+  if (aiModel) item.aiModel = aiModel;
+  
+  if (!item.logs) item.logs = [];
+  const timeStr = new Date().toLocaleTimeString('id-ID');
+  item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+  item.logs.push({ message: `▶ Memulai proses baru dengan AI: ${aiModel || 'auto'}`, type: "info", time: timeStr });
+  item.lastLogMessage = "Memulai proses...";
+
+  // Simpan ke DB
+  const index = items.findIndex(i => i.id === id);
+  items[index] = item;
+  fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+
+  // Inisialisasi logs memori
+  taskLogs[id] = [...item.logs];
+
+  // Masukkan ke antrean
+  taskQueue.push(id);
+  processQueue();
+
+  res.json({ success: true, id });
+});
+
+// Fungsi untuk memperbarui file .env dan memory variables
+function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo }) {
+  const envPath = path.join(__dirname, ".env");
+  let content = "";
+  if (fs.existsSync(envPath)) {
+    content = fs.readFileSync(envPath, "utf-8");
+  }
+
+  // Parse existing content
+  const lines = content.split(/\r?\n/);
+  const keyValues = {};
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const parts = trimmed.split("=");
+    if (parts.length >= 2) {
+      const key = parts[0].trim();
+      const val = parts.slice(1).join("=").trim();
+      keyValues[key] = val;
+    }
+  }
+
+  // Update keys
+  if (groqKey !== undefined) keyValues["GROQ_API_KEY"] = groqKey;
+  if (geminiKey !== undefined) keyValues["GEMINI_API_KEY"] = geminiKey;
+  if (openrouterKey !== undefined) keyValues["OPENROUTER_API_KEY"] = openrouterKey;
+  if (rapidApiKey !== undefined) keyValues["RAPIDAPI_KEY"] = rapidApiKey;
+  if (syntxBaseEmail !== undefined) keyValues["SYNTX_BASE_EMAIL"] = syntxBaseEmail;
+  if (syntxEmailIndex !== undefined) keyValues["SYNTX_EMAIL_INDEX"] = syntxEmailIndex;
+  if (githubToken !== undefined) keyValues["GITHUB_TOKEN"] = githubToken;
+  if (githubUsername !== undefined) keyValues["GITHUB_USERNAME"] = githubUsername;
+  if (githubRepo !== undefined) keyValues["GITHUB_REPO"] = githubRepo;
+
+  // Build new content preserving original lines/formatting
+  const newLines = [];
+  const updatedKeys = new Set();
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith("#")) {
+      const parts = trimmed.split("=");
+      if (parts.length >= 2) {
+        const key = parts[0].trim();
+        if (keyValues[key] !== undefined) {
+          newLines.push(`${key}=${keyValues[key]}`);
+          updatedKeys.add(key);
+          continue;
+        }
+      }
+    }
+    newLines.push(line);
+  }
+
+  // Add keys that weren't in the original file
+  for (const key of Object.keys(keyValues)) {
+    if (!updatedKeys.has(key)) {
+      newLines.push(`${key}=${keyValues[key]}`);
+    }
+  }
+
+  fs.writeFileSync(envPath, newLines.join("\n"));
+
+  // Update memory variables
+  if (groqKey !== undefined) {
+    process.env.GROQ_API_KEY = groqKey;
+    GROQ_API_KEY = groqKey;
+  }
+  if (geminiKey !== undefined) {
+    process.env.GEMINI_API_KEY = geminiKey;
+    GEMINI_API_KEY = geminiKey;
+    if (geminiKey) {
+      genAI = new GoogleGenAI({ apiKey: geminiKey });
+    } else {
+      genAI = null;
+    }
+  }
+  if (openrouterKey !== undefined) {
+    process.env.OPENROUTER_API_KEY = openrouterKey;
+    OPENROUTER_API_KEY = openrouterKey;
+  }
+  if (rapidApiKey !== undefined) {
+    process.env.RAPIDAPI_KEY = rapidApiKey;
+    RAPIDAPI_KEY = rapidApiKey;
+  }
+  if (syntxBaseEmail !== undefined) {
+    process.env.SYNTX_BASE_EMAIL = syntxBaseEmail;
+    SYNTX_BASE_EMAIL = syntxBaseEmail;
+  }
+  if (syntxEmailIndex !== undefined) {
+    process.env.SYNTX_EMAIL_INDEX = syntxEmailIndex;
+    SYNTX_EMAIL_INDEX = syntxEmailIndex;
+  }
+  if (githubToken !== undefined) {
+    process.env.GITHUB_TOKEN = githubToken;
+    GITHUB_TOKEN = githubToken;
+  }
+  if (githubUsername !== undefined) {
+    process.env.GITHUB_USERNAME = githubUsername;
+    GITHUB_USERNAME = githubUsername;
+  }
+  if (githubRepo !== undefined) {
+    process.env.GITHUB_REPO = githubRepo;
+    GITHUB_REPO = githubRepo;
+  }
+}
+
+// GET: Ambil API Keys saat ini
+app.get("/api/keys", (req, res) => {
+  res.json({
+    groqKey: process.env.GROQ_API_KEY || "",
+    geminiKey: process.env.GEMINI_API_KEY || "",
+    openrouterKey: process.env.OPENROUTER_API_KEY || "",
+    rapidApiKey: process.env.RAPIDAPI_KEY || "",
+    syntxBaseEmail: process.env.SYNTX_BASE_EMAIL || "",
+    syntxEmailIndex: process.env.SYNTX_EMAIL_INDEX || "0",
+    githubToken: process.env.GITHUB_TOKEN || "",
+    githubUsername: process.env.GITHUB_USERNAME || "",
+    githubRepo: process.env.GITHUB_REPO || ""
+  });
+});
+
+// POST: Simpan API Keys baru
+app.post("/api/keys", (req, res) => {
+  const { groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo } = req.body;
+  try {
+    updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo });
+    console.log("🔑 API Keys & Config GitHub berhasil diperbarui di server runtime.");
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Gagal menyimpan API Keys ke .env: " + err.message });
+  }
+});
+
+// POST: Test validitas API Key untuk provider tertentu
+app.post("/api/keys/test", async (req, res) => {
+  const { provider, apiKey } = req.body;
+
+  if (!apiKey) {
+    return res.status(400).json({ valid: false, error: "API Key tidak boleh kosong" });
+  }
+
+  console.log(`🧪 Mengetes API Key untuk provider: ${provider}...`);
+  try {
+    if (provider === "gemini") {
+      const tempGenAI = new GoogleGenAI({ apiKey: apiKey });
+      const response = await tempGenAI.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: "Hello",
+        config: {
+          maxOutputTokens: 5
+        }
+      });
+      if (response && response.text) {
+        return res.json({ valid: true });
+      } else {
+        throw new Error("Respons dari Gemini kosong atau tidak valid");
+      }
+    } else if (provider === "groq") {
+      const response = await axios.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            { role: "user", content: "Hello" }
+          ],
+          max_tokens: 5
+        },
+        {
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          timeout: 15000
+        }
+      );
+      if (response.data && response.data.choices && response.data.choices[0]) {
+        return res.json({ valid: true });
+      } else {
+        throw new Error("Respons dari Groq tidak valid");
+      }
+    } else if (provider === "openrouter") {
+      const response = await axios.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          model: "google/gemini-2.5-flash:free",
+          messages: [
+            { role: "user", content: "Hello" }
+          ],
+          max_tokens: 5
+        },
+        {
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "HTTP-Referer": "http://localhost:5000",
+            "X-Title": "Stock Generator",
+            "Content-Type": "application/json"
+          },
+          timeout: 15000
+        }
+      );
+      if (response.data && response.data.choices && response.data.choices[0]) {
+        return res.json({ valid: true });
+      } else {
+        throw new Error("Respons dari OpenRouter tidak valid");
+      }
+    } else if (provider === "gmailnator") {
+      const response = await axios.post(
+        "https://gmailnator.p.rapidapi.com/api/emails/generate",
+        {},
+        {
+          headers: {
+            "content-type": "application/json",
+            "X-RapidAPI-Key": apiKey,
+            "X-RapidAPI-Host": "gmailnator.p.rapidapi.com"
+          },
+          timeout: 15000
+        }
+      );
+      if (response.data && response.data.email) {
+        return res.json({ valid: true });
+      } else {
+        throw new Error("Respons dari Gmailnator tidak valid: " + JSON.stringify(response.data));
+      }
+    } else {
+      return res.status(400).json({ valid: false, error: "Provider tidak dikenal" });
+    }
+  } catch (error) {
+    console.error(`❌ Test API Key ${provider} gagal:`, error.response?.data || error.message);
+    const errorMsg = error.response?.data?.error?.message || error.message;
+    return res.status(400).json({ valid: false, error: errorMsg });
+  }
+});
+
+// Pending OTP Resolvers for manual Syntx.ai logins
+const pendingOtpResolvers = {};
+
+// POST: Submit manual OTP code for a waiting task/login
+app.post("/api/submit-otp", (req, res) => {
+  const { id, otp } = req.body;
+  if (!id || !otp) {
+    return res.status(400).json({ error: "id dan otp diperlukan" });
+  }
+
+  console.log(`🔑 Menerima OTP manual untuk task: ${id}, OTP: ${otp}`);
+  const resolver = pendingOtpResolvers[id];
+  if (!resolver) {
+    return res.status(404).json({ error: "Tidak ada proses login yang menunggu OTP untuk ID ini" });
+  }
+
+  // Resolve pending promise with the OTP
+  resolver.resolve(otp.trim());
+  delete pendingOtpResolvers[id];
+
+  res.json({ success: true });
+});
+
+// Register OTP Provider to syntxBot
+syntxBot.registerOtpProvider(async (email, taskId) => {
+  console.log(`⏳ Menunggu input OTP manual untuk email: ${email} (Task ID: ${taskId})...`);
+  
+  // Jika taskId !== 'manual', update status item di DB agar user tahu
+  if (taskId !== 'manual') {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    let items = [];
+    try {
+      items = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+    } catch (e) {}
+    
+    const item = items.find(i => i.id === taskId);
+    if (item) {
+      item.statusConvertTsx = 'waiting-otp';
+      item.otpEmail = email;
+      if (!item.logs) item.logs = [];
+      item.logs.push({
+        message: `⚠️ Menunggu kode OTP Syntx.ai dikirim ke ${email}. Silakan buka mailbox email Anda di emailnator.com dan masukkan kode di bawah.`,
+        type: 'warning',
+        time: new Date().toLocaleTimeString('id-ID')
+      });
+      item.lastLogMessage = `Menunggu input OTP untuk ${email}...`;
+      
+      // Save changes immediately
+      fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    pendingOtpResolvers[taskId] = { resolve, reject, email };
+    
+    // Timeout setelah 5 menit
+    setTimeout(() => {
+      if (pendingOtpResolvers[taskId]) {
+        reject(new Error("Timeout menunggu input OTP manual"));
+        delete pendingOtpResolvers[taskId];
+        
+        if (taskId !== 'manual') {
+          const dbPath = path.join(__dirname, "saved-items.json");
+          let items = [];
+          try { items = JSON.parse(fs.readFileSync(dbPath, "utf-8")); } catch (e) {}
+          const item = items.find(i => i.id === taskId);
+          if (item && item.statusConvertTsx === 'waiting-otp') {
+            item.statusConvertTsx = 'failed';
+            item.logs.push({
+              message: `❌ Timeout menunggu input OTP manual (5 menit)`,
+              type: 'error',
+              time: new Date().toLocaleTimeString('id-ID')
+            });
+            fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+          }
+        }
+      }
+    }, 5 * 60 * 1000);
+  });
+});
+
+// POST: Regenerate SEO metadata (judul & keyword) saja untuk suatu item
+app.post("/api/regenerate-seo/:id", async (req, res) => {
+  const { id } = req.params;
+  const { aiModel } = req.body;
+
+  // Baca item dari DB
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    return res.status(500).json({ error: "Gagal membaca database" });
+  }
+
+  const item = items.find(i => i.id === id);
+  if (!item) {
+    return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
+  }
+
+  if (!item.htmlPreview) {
+    return res.status(400).json({ error: "Tidak ada konten HTML yang tersimpan untuk item ini" });
+  }
+
+  try {
+    activeSeoGenerations[id] = true;
+    console.log(`✨ Regenerating SEO metadata for ${id} using model: ${aiModel || 'auto'}`);
+    
+    const timeStr = new Date().toLocaleTimeString('id-ID');
+    if (!item.logs) item.logs = [];
+    item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+    item.logs.push({ message: `✨ Memulai regenerasi Judul & Keywords (AI: ${aiModel || 'auto'})`, type: "info", time: timeStr });
+    saveOrUpdateItem(item);
+
+    // Inisialisasi logs memori agar sync dengan DB
+    taskLogs[id] = [...item.logs];
+
+    addTaskLog(id, "Menghubungi AI...", "info");
+
+    // Load SEO prompt, replace {{HTML_CONTENT}}
+    const promptsData = loadPromptsConfig();
+    const cleanHtml = stripScripts(item.htmlPreview);
+    const activeSeoPrompt = promptsData.seoPrompt.replace("{{HTML_CONTENT}}", cleanHtml);
+
+    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: aiModel || 'auto', taskId: id });
+    
+    let jsonText = aiResponse.trim();
+    if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+    } else if (jsonText.includes("```")) {
+      jsonText = jsonText.split("```")[1].split("```")[0].trim();
+    }
+    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+    let seoData = JSON.parse(jsonText);
+    seoData = sanitizeKeywordsAndTitle(seoData);
+
+    item.judul = seoData.judul;
+    item.keywords = seoData.keywords;
+    item.deskripsi = seoData.deskripsi;
+    item.kategori = seoData.kategori;
+    item.seoAiUsed = aiModel || 'auto';
+    
+    saveOrUpdateItem(item);
+    
+    addTaskLog(id, `Judul & keywords berhasil di-regenerate!`, "success");
+    
+    res.json({ success: true, item });
+  } catch (err) {
+    addTaskLog(id, `Gagal regenerasi SEO: ${err.message}`, "error");
+    res.status(500).json({ error: err.message });
+  } finally {
+    delete activeSeoGenerations[id];
+
+    // Tutup SSE stream clients jika ada
+    if (taskSseClients[id]) {
+      taskSseClients[id].forEach(client => {
+        client.write(`data: ${JSON.stringify({ type: 'done', message: 'SEO Selesai' })}\n\n`);
+        client.end();
+      });
+      delete taskSseClients[id];
+    }
   }
 });
 

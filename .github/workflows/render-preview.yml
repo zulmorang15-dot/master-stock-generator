@@ -87,7 +87,7 @@ jobs:
         run: |
           echo "=== Embedding metadata into output video ==="
           FILENAME="${{ github.event.inputs.composition_id }}-preview.mp4"
-          ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata comment="${{ github.event.inputs.keywords }}" -codec copy out/temp_$FILENAME
+          ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata description="${{ github.event.inputs.judul }}" -metadata comment="${{ github.event.inputs.keywords }}" -metadata keywords="${{ github.event.inputs.keywords }}" -codec copy out/temp_$FILENAME
           mv out/temp_$FILENAME out/$FILENAME
 
       - name: Upload to x0.at Cloud

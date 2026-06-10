@@ -59,11 +59,19 @@ function randomString(len = 10) {
   return result;
 }
 
+// Logging helper supporting parent task delegation
+function logToTask(options, message, type = 'info') {
+  console.log(message);
+  if (options && options.logger) {
+    options.logger(message, type);
+  }
+}
+
 // ─────────────────────────────────────────────
 // STEP 1: Buat akun email temporer di mail.tm
 // ─────────────────────────────────────────────
-async function createTempEmail() {
-  console.log('📧 [syntx-bot] Membuat email temporer via mail.tm...');
+async function createTempEmail(options) {
+  logToTask(options, '📧 [syntx-bot] Membuat email temporer via mail.tm...', 'info');
 
   const domainRes = await axios.get(`${MAIL_TM_API}/domains`, {
     headers: { 'Accept': 'application/json' },
@@ -89,7 +97,7 @@ async function createTempEmail() {
   });
 
   const accountId = createRes.data.id;
-  console.log(`✅ [syntx-bot] Email temporer dibuat: ${email} (ID: ${accountId})`);
+  logToTask(options, `✅ [syntx-bot] Email temporer dibuat: ${email} (ID: ${accountId})`, 'success');
 
   const loginRes = await axios.post(`${MAIL_TM_API}/token`, {
     address: email,
@@ -100,7 +108,7 @@ async function createTempEmail() {
   });
 
   const mailToken = loginRes.data.token;
-  console.log(`🔑 [syntx-bot] Token mail.tm berhasil didapat`);
+  logToTask(options, `🔑 [syntx-bot] Token mail.tm berhasil didapat`, 'success');
 
   return { email, password, accountId, mailToken };
 }
@@ -108,8 +116,8 @@ async function createTempEmail() {
 // ─────────────────────────────────────────────
 // STEP 2: Request OTP ke syntx.ai
 // ─────────────────────────────────────────────
-async function requestSyntxOTP(email) {
-  console.log(`📨 [syntx-bot] Meminta OTP syntx.ai untuk: ${email}`);
+async function requestSyntxOTP(email, options) {
+  logToTask(options, `📨 [syntx-bot] Meminta OTP syntx.ai untuk: ${email}`, 'info');
   
   const res = await axios.post(`${SYNTX_API_V1}/auth/email/send-otp`, {
     email: email
@@ -122,15 +130,15 @@ async function requestSyntxOTP(email) {
     },
     timeout: 20000
   });
-  console.log(`✅ [syntx-bot] OTP terkirim ke ${email}:`, res.data?.message || 'OK');
+  logToTask(options, `✅ [syntx-bot] OTP terkirim ke ${email}: ${res.data?.message || 'OK'}`, 'success');
   return true;
 }
 
 // ─────────────────────────────────────────────
 // STEP 3: Ambil OTP dari inbox mail.tm
 // ─────────────────────────────────────────────
-async function fetchOTPFromMailTm(mailToken, maxWaitMs = 60000) {
-  console.log('🔍 [syntx-bot] Menunggu OTP di inbox mail.tm...');
+async function fetchOTPFromMailTm(mailToken, maxWaitMs = 60000, options) {
+  logToTask(options, '🔍 [syntx-bot] Menunggu OTP di inbox mail.tm...', 'info');
   const startTime = Date.now();
   
   while (Date.now() - startTime < maxWaitMs) {
@@ -148,7 +156,7 @@ async function fetchOTPFromMailTm(mailToken, maxWaitMs = 60000) {
       const messages = messagesRes.data['hydra:member'] || messagesRes.data.data || messagesRes.data || [];
       
       if (messages.length === 0) {
-        console.log(`⏳ [syntx-bot] Inbox masih kosong, tunggu 5s lagi... (${Math.floor((Date.now() - startTime)/1000)}s)`);
+        logToTask(options, `   ⏳ Inbox masih kosong, tunggu 5s lagi... (${Math.floor((Date.now() - startTime)/1000)}s)`, 'info');
         continue;
       }
 
@@ -166,7 +174,7 @@ async function fetchOTPFromMailTm(mailToken, maxWaitMs = 60000) {
       const otpMatch = body.match(/\b(\d{6})\b/);
       if (otpMatch) {
         const otp = otpMatch[1];
-        console.log(`🎯 [syntx-bot] OTP berhasil ditemukan: ${otp}`);
+        logToTask(options, `🎯 [syntx-bot] OTP berhasil ditemukan: ${otp}`, 'success');
         return otp;
       }
 
@@ -174,13 +182,13 @@ async function fetchOTPFromMailTm(mailToken, maxWaitMs = 60000) {
       const subjectMatch = subject.match(/\b(\d{6})\b/);
       if (subjectMatch) {
         const otp = subjectMatch[1];
-        console.log(`🎯 [syntx-bot] OTP ditemukan di subject: ${otp}`);
+        logToTask(options, `🎯 [syntx-bot] OTP ditemukan di subject: ${otp}`, 'success');
         return otp;
       }
 
-      console.log(`⚠️ [syntx-bot] Pesan diterima tapi OTP tidak ditemukan. Subject: "${messages[0].subject}"`);
+      logToTask(options, `⚠️ [syntx-bot] Pesan diterima tapi OTP tidak ditemukan. Subject: "${messages[0].subject}"`, 'warning');
     } catch (err) {
-      console.warn(`⚠️ [syntx-bot] Error saat cek inbox: ${err.message}`);
+      logToTask(options, `⚠️ [syntx-bot] Error saat cek inbox: ${err.message}`, 'warning');
     }
   }
 
@@ -190,8 +198,8 @@ async function fetchOTPFromMailTm(mailToken, maxWaitMs = 60000) {
 // ─────────────────────────────────────────────
 // STEP 4: Verifikasi OTP di syntx.ai → dapat token
 // ─────────────────────────────────────────────
-async function verifySyntxOTP(email, otp) {
-  console.log(`🔐 [syntx-bot] Memverifikasi OTP ${otp} untuk ${email}...`);
+async function verifySyntxOTP(email, otp, options) {
+  logToTask(options, `🔐 [syntx-bot] Memverifikasi OTP ${otp} untuk ${email}...`, 'info');
   
   const res = await axios.post(`${SYNTX_API_V1}/auth/email/verify-otp`, {
     email: email,
@@ -210,15 +218,15 @@ async function verifySyntxOTP(email, otp) {
   if (!token) {
     throw new Error('Token tidak ditemukan di respons: ' + JSON.stringify(res.data));
   }
-  console.log(`✅ [syntx-bot] Token syntx.ai berhasil didapat!`);
+  logToTask(options, `✅ [syntx-bot] Token syntx.ai berhasil didapat!`, 'success');
   return token;
 }
 
 // ─────────────────────────────────────────────
 // STEP 5A: Buat sesi chat baru di syntx.ai
 // ─────────────────────────────────────────────
-async function createChatSession(token) {
-  console.log('📂 [syntx-bot] Membuat sesi chat baru...');
+async function createChatSession(token, options) {
+  logToTask(options, '📂 [syntx-bot] Membuat sesi chat baru...', 'info');
   
   const res = await axios.post(`${SYNTX_API_V1}/chats`, {
     title: 'New chat',
@@ -241,7 +249,7 @@ async function createChatSession(token) {
     throw new Error('Chat UUID/ID tidak ditemukan di respons: ' + JSON.stringify(res.data).substring(0, 200));
   }
   
-  console.log(`✅ [syntx-bot] Sesi chat dibuat: UUID=${chatUuid}, ID=${chatId}`);
+  logToTask(options, `✅ [syntx-bot] Sesi chat dibuat: UUID=${chatUuid}, ID=${chatId}`, 'success');
   return { uuid: chatUuid, id: chatId };
 }
 
@@ -250,14 +258,17 @@ async function createChatSession(token) {
 // API bersifat async – response dari Claude muncul di messages list
 // ─────────────────────────────────────────────
 // Highest available models on Syntx (verified via API validation error):
-// Claude: claude-opus-4-8
-// Gemini: gemini-3.5-flash
-async function sendPromptToSyntx(token, prompt, model = 'claude-opus-4-8') {
+// Claude (cepat ke lambat): claude-haiku-4-5 < claude-sonnet-4-5 < claude-opus-4-8
+// Gemini (cepat ke lambat): gemini-flash-2-0 < gemini-3.5-flash
+// 
+// REKOMENDASI DEFAULT: claude-sonnet-4-5 (balance kualitas vs kecepatan)
+// Opus terlalu lambat (60-120s), Haiku kurang power untuk TSX besar
+async function sendPromptToSyntx(token, prompt, model = 'claude-sonnet-4-5', options = {}) {
   const isGemini = model.toLowerCase().startsWith('gemini');
   const aiName = isGemini ? 'gemini' : 'claude';
   const label = isGemini ? 'Gemini' : 'Claude';
 
-  console.log(`🤖 [syntx-bot] Mengirim prompt ke syntx.ai ${label} (${model})...`);
+  logToTask(options, `🤖 [syntx-bot] Mengirim prompt ke syntx.ai ${label} (${model})...`, 'info');
   
   const authHeaders = {
     'Authorization': `Bearer ${token}`,
@@ -268,7 +279,7 @@ async function sendPromptToSyntx(token, prompt, model = 'claude-opus-4-8') {
   };
   
   // Buat sesi chat baru → gunakan UUID untuk endpoint berikutnya
-  const { uuid: chatUuid } = await createChatSession(token);
+  const { uuid: chatUuid } = await createChatSession(token, options);
   
   // Kirim pesan ke sesi chat (format dikonfirmasi dari Playwright intercept)
   const messagePayload = {
@@ -280,7 +291,7 @@ async function sendPromptToSyntx(token, prompt, model = 'claude-opus-4-8') {
     }
   };
   
-  console.log(`   📡 Mengirim ke: /api/v1/chats/${chatUuid}/messages?ai_name=${aiName}`);
+  logToTask(options, `   📡 Mengirim ke: /api/v1/chats/${chatUuid}/messages?ai_name=${aiName}`, 'info');
   
   await axios.post(
     `${SYNTX_API_V1}/chats/${chatUuid}/messages?ai_name=${aiName}`,
@@ -294,11 +305,11 @@ async function sendPromptToSyntx(token, prompt, model = 'claude-opus-4-8') {
     }
   );
   
-  console.log(`   ⏳ Pesan terkirim! Polling untuk respons ${label}...`);
+  logToTask(options, `   ⏳ Pesan terkirim! Polling untuk respons ${label}...`, 'info');
   
   // Poll GET /chats/{uuid}/messages untuk mendapat respons AI
-  const maxWait = 120000;  // 2 menit
-  const pollInterval = 3000; // 3 detik
+  const maxWait = 180000;  // 3 menit (naik dari 2 menit)
+  const pollInterval = 1500; // 1.5 detik (turun dari 3 detik) 
   const startTime = Date.now();
   
   while (Date.now() - startTime < maxWait) {
@@ -329,44 +340,475 @@ async function sendPromptToSyntx(token, prompt, model = 'claude-opus-4-8') {
           
           if (!isUserMsg && msgTexts.length > 0) {
             const aiContent = msgTexts.join('\n');
-            console.log(`✅ [syntx-bot] Respons ${label} diterima dalam ${elapsed}s!`);
+            logToTask(options, `✅ [syntx-bot] Respons ${label} diterima dalam ${elapsed}s!`, 'success');
             return aiContent;
           }
         }
       }
       
-      console.log(`   ⏳ Menunggu ${label}... (${elapsed}s, messages: ${messages.length})`);
+      logToTask(options, `   ⏳ Menunggu ${label}... (${elapsed}s, messages: ${messages.length})`, 'info');
       
     } catch (pollErr) {
-      console.warn(`   ⚠️ Poll error: ${pollErr.message}`);
+      logToTask(options, `   ⚠️ Poll error: ${pollErr.message}`, 'warning');
     }
   }
   
-  throw new Error(`Timeout: Respons ${label} tidak diterima dalam 2 menit`);
+  throw new Error(`Timeout: Respons ${label} tidak diterima dalam 3 menit`);
+}
+
+// ─────────────────────────────────────────────
+// EMAILNATOR WEB API (TANPA KEY - GRATIS)
+// https://www.emailnator.com
+// ─────────────────────────────────────────────
+const EMAILNATOR_BASE = 'https://www.emailnator.com';
+
+// Header standar agar mirip browser
+function emailnatorHeaders(cookies = '', referer = '') {
+  return {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json, text/plain, */*',
+    'Origin': 'https://www.emailnator.com',
+    'Referer': referer || 'https://www.emailnator.com/',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+    ...(cookies ? { 'Cookie': cookies } : {})
+  };
+}
+
+/**
+ * Buat email @gmail.com via Emailnator web API.
+ * Return: { email, cookies } – cookies diperlukan untuk baca inbox.
+ */
+async function createEmailnatorGmail(options) {
+  logToTask(options, '📧 [syntx-bot] Membuat email @gmail.com via Emailnator...', 'info');
+
+  // Step 1: ambil XSRF token + session cookie
+  let xsrfToken = '';
+  let sessionCookies = '';
+
+  try {
+    const homeRes = await axios.get(EMAILNATOR_BASE, {
+      headers: emailnatorHeaders(),
+      timeout: 15000,
+      maxRedirects: 5
+    });
+
+    const setCookieHeader = homeRes.headers['set-cookie'] || [];
+    const allCookies = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
+
+    for (const c of allCookies) {
+      const match = c.match(/XSRF-TOKEN=([^;]+)/);
+      if (match) xsrfToken = decodeURIComponent(match[1]);
+    }
+    // Gabung semua cookie name=value
+    sessionCookies = allCookies.map(c => c.split(';')[0]).join('; ');
+    logToTask(options, `   🍪 Session cookies didapat, XSRF: ${xsrfToken ? xsrfToken.substring(0, 20) + '...' : 'tidak ada'}`, 'info');
+  } catch (err) {
+    logToTask(options, `   ⚠️ Gagal ambil home page Emailnator: ${err.message}`, 'warning');
+  }
+
+  // Step 2: generate email dengan tipe "plusGmail" atau "dotGmail"
+  let email = null;
+  let attempts = 0;
+
+  while (!email && attempts < 5) {
+    attempts++;
+    try {
+      const genHeaders = {
+        ...emailnatorHeaders(sessionCookies),
+        ...(xsrfToken ? { 'X-XSRF-TOKEN': xsrfToken } : {})
+      };
+
+      const genRes = await axios.post(`${EMAILNATOR_BASE}/generate-email`, {
+        email: ['dotGmail', 'plusGmail']
+      }, {
+        headers: genHeaders,
+        timeout: 15000
+      });
+
+      const emails = genRes.data?.email || [];
+      // Ambil yang @gmail.com
+      const gmailEmail = emails.find(e => e.endsWith('@gmail.com'));
+
+      if (gmailEmail) {
+        email = gmailEmail;
+
+        // Update cookies AND XSRF token dari generate-email response (Laravel merotasi keduanya)
+        const respCookies = genRes.headers['set-cookie'] || [];
+        const respCookieArr = Array.isArray(respCookies) ? respCookies : [respCookies];
+        if (respCookieArr.length > 0) {
+          // Update xsrfToken jika ada yang baru
+          for (const c of respCookieArr) {
+            const xsrfMatch = c.match(/XSRF-TOKEN=([^;]+)/);
+            if (xsrfMatch) xsrfToken = decodeURIComponent(xsrfMatch[1]);
+          }
+          // Merge cookies
+          const existing = {};
+          sessionCookies.split('; ').forEach(pair => {
+            const [k, v] = pair.split('=');
+            if (k) existing[k] = v;
+          });
+          respCookieArr.map(c => c.split(';')[0]).forEach(pair => {
+            const [k, v] = pair.split('=');
+            if (k) existing[k] = v;
+          });
+          sessionCookies = Object.entries(existing).map(([k, v]) => `${k}=${v}`).join('; ');
+        }
+        logToTask(options, `✅ [syntx-bot] Email Emailnator dibuat: ${email} (XSRF updated)`, 'success');
+      } else {
+        logToTask(options, `   ⏳ Belum dapat @gmail.com, coba lagi... (attempts: ${attempts})`, 'info');
+        await sleep(1500);
+      }
+    } catch (err) {
+      logToTask(options, `   ⚠️ Error generate Emailnator (attempt ${attempts}): ${err.message}`, 'warning');
+      await sleep(2000);
+    }
+  }
+
+  if (!email) {
+    throw new Error('Gagal mendapatkan email @gmail.com dari Emailnator setelah 5 percobaan');
+  }
+
+  return { email, cookies: sessionCookies, xsrfToken };
+}
+
+/**
+ * Baca inbox Emailnator dan ambil OTP dari pesan Syntx.ai.
+ */
+async function fetchOTPFromEmailnator(email, cookies, xsrfToken, maxWaitMs = 90000, options) {
+  logToTask(options, `🔍 [syntx-bot] Menunggu OTP di inbox Emailnator untuk: ${email}...`, 'info');
+  const startTime = Date.now();
+
+  // Headers untuk request inbox - Emailnator butuh Referer /mailbox/{email} agar tidak 500
+  const buildHeaders = (xsrf, cookieStr) => ({
+    ...emailnatorHeaders(cookieStr, `https://www.emailnator.com/mailbox/${email}`),
+    ...(xsrf ? { 'X-XSRF-TOKEN': xsrf } : {})
+  });
+
+  let currentXsrf = xsrfToken;
+  let currentCookies = cookies;
+
+  while (Date.now() - startTime < maxWaitMs) {
+    await sleep(5000);
+
+    try {
+      const headers = buildHeaders(currentXsrf, currentCookies);
+
+      // Cek daftar pesan di inbox
+      const inboxRes = await axios.post(`${EMAILNATOR_BASE}/message-list`, {
+        email
+      }, { headers, timeout: 25000 });
+
+      // Update cookies dari response jika ada
+      const respC = inboxRes.headers['set-cookie'] || [];
+      const respCArr = Array.isArray(respC) ? respC : [respC];
+      if (respCArr.length > 0) {
+        for (const c of respCArr) {
+          const m = c.match(/XSRF-TOKEN=([^;]+)/);
+          if (m) currentXsrf = decodeURIComponent(m[1]);
+        }
+        const existing = {};
+        currentCookies.split('; ').forEach(pair => { const [k,v]=pair.split('='); if(k) existing[k]=v; });
+        respCArr.map(c=>c.split(';')[0]).forEach(pair => { const [k,v]=pair.split('='); if(k) existing[k]=v; });
+        currentCookies = Object.entries(existing).map(([k,v])=>`${k}=${v}`).join('; ');
+      }
+
+      const messageList = inboxRes.data?.messageData || [];
+
+      if (messageList.length === 0) {
+        logToTask(options, `   ⏳ Inbox Emailnator kosong (${Math.floor((Date.now() - startTime) / 1000)}s)...`, 'info');
+        continue;
+      }
+
+      // Skip pesan iklan bawaan Emailnator (ADSVPN = promotional, tidak bisa dibuka)
+      const realMessages = messageList.filter(m => m.messageID && m.messageID !== 'ADSVPN');
+
+      if (realMessages.length === 0) {
+        logToTask(options, `   ⏳ Inbox hanya berisi iklan bawaan, menunggu email Syntx... (${Math.floor((Date.now() - startTime) / 1000)}s)`, 'info');
+        continue;
+      }
+
+      // Ambil pesan pertama yang bukan iklan
+      const firstMsg = realMessages[0];
+      const msgId = firstMsg.messageID;
+
+      if (!msgId) {
+        logToTask(options, '   ⚠️ messageID tidak ditemukan di entry inbox', 'warning');
+        continue;
+      }
+
+      logToTask(options, `   📨 Pesan diterima: "${firstMsg.subject || '?'}" dari "${firstMsg.from || '?'}" (msgID: ${msgId})`, 'info');
+      
+      // Cek apakah subject sudah mengandung OTP
+      const subjectOtpMatch = (firstMsg.subject || '').match(/\b(\d{6})\b/);
+      if (subjectOtpMatch) {
+        logToTask(options, `🎯 [syntx-bot] OTP ditemukan di subject: ${subjectOtpMatch[1]}`, 'success');
+        return subjectOtpMatch[1];
+      }
+
+      // Baca konten pesan dengan XSRF terbaru
+      const msgRes = await axios.post(`${EMAILNATOR_BASE}/message-list`, {
+        email,
+        messageID: msgId
+      }, { headers: buildHeaders(currentXsrf, currentCookies), timeout: 25000 });
+
+      const body = msgRes.data || '';
+      const bodyText = typeof body === 'string' ? body : JSON.stringify(body);
+
+      // Cari OTP 6 digit (bisa di body atau subject)
+      const otpMatch = bodyText.match(/\b(\d{6})\b/);
+      if (otpMatch) {
+        const otp = otpMatch[1];
+        logToTask(options, `🎯 [syntx-bot] OTP berhasil ditemukan via Emailnator: ${otp}`, 'success');
+        return otp;
+      }
+
+      const subjectMatch = (firstMsg.subject || '').match(/\b(\d{6})\b/);
+      if (subjectMatch) {
+        logToTask(options, `🎯 [syntx-bot] OTP ditemukan di subject: ${subjectMatch[1]}`, 'success');
+        return subjectMatch[1];
+      }
+
+      logToTask(options, `   ⚠️ Pesan masuk tapi OTP tidak ditemukan. Body preview: ${bodyText.substring(0, 100)}`, 'warning');
+    } catch (err) {
+      logToTask(options, `   ⚠️ Error cek inbox Emailnator (${Math.floor((Date.now()-startTime)/1000)}s): ${err.response?.status || ''} ${err.message}`, 'warning');
+    }
+  }
+
+  throw new Error('Timeout: OTP tidak diterima via Emailnator dalam batas waktu');
+}
+
+
+// ─────────────────────────────────────────────
+// GMAILNATOR (RAPIDAPI) INTEGRATION FOR DISPOSABLE EMAIL BYPASS
+// ─────────────────────────────────────────────
+async function createGmailnatorEmail(rapidApiKey, options) {
+  logToTask(options, '📧 [syntx-bot] Membuat email Gmailnator via RapidAPI...', 'info');
+  const response = await axios.post(
+    'https://gmailnator.p.rapidapi.com/api/emails/generate',
+    {
+      type: ["public_gmail_dot"]
+    },
+    {
+      headers: {
+        'content-type': 'application/json',
+        'X-RapidAPI-Key': rapidApiKey,
+        'X-RapidAPI-Host': 'gmailnator.p.rapidapi.com'
+      },
+      timeout: 20000
+    }
+  );
+  const email = response.data?.email;
+  if (!email) {
+    throw new Error('Gagal mendapatkan email dari Gmailnator: ' + JSON.stringify(response.data));
+  }
+  logToTask(options, `✅ [syntx-bot] Email Gmailnator dibuat: ${email}`, 'success');
+  return email;
+}
+
+async function fetchOTPFromGmailnator(rapidApiKey, email, maxWaitMs = 90000, options) {
+  logToTask(options, `🔍 [syntx-bot] Menunggu OTP di inbox Gmailnator untuk: ${email}...`, 'info');
+  const startTime = Date.now();
+  const headers = {
+    'content-type': 'application/json',
+    'X-RapidAPI-Key': rapidApiKey,
+    'X-RapidAPI-Host': 'gmailnator.p.rapidapi.com'
+  };
+
+  while (Date.now() - startTime < maxWaitMs) {
+    await sleep(5000);
+
+    try {
+      const response = await axios.post(
+        'https://gmailnator.p.rapidapi.com/api/inbox',
+        { email },
+        { headers, timeout: 20000 }
+      );
+
+      const messages = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+      if (messages.length === 0) {
+        logToTask(options, `⏳ [syntx-bot] Inbox Gmailnator kosong, tunggu 5s... (${Math.floor((Date.now() - startTime)/1000)}s)`, 'info');
+        continue;
+      }
+
+      // Ambil pesan pertama karena email ini baru dibuat dan khusus untuk menerima OTP
+      const otpMail = messages[0];
+
+      const messageId = otpMail.message_id || otpMail.id;
+      if (!messageId) {
+        throw new Error('Message ID tidak ditemukan di entry inbox: ' + JSON.stringify(otpMail));
+      }
+
+      // Fetch detail message
+      logToTask(options, `🎯 [syntx-bot] Email OTP masuk! Membaca konten pesan: ${messageId}...`, 'info');
+      const msgDetailRes = await axios.get(
+        `https://gmailnator.p.rapidapi.com/api/inbox/${messageId}`,
+        { headers, timeout: 20000 }
+      );
+
+      const body = msgDetailRes.data?.content || msgDetailRes.data?.text || msgDetailRes.data?.html || '';
+      const subject = otpMail.subject || msgDetailRes.data?.subject || '';
+
+      const otpMatch = body.match(/\b(\d{6})\b/) || subject.match(/\b(\d{6})\b/);
+      if (otpMatch) {
+        const otp = otpMatch[1];
+        logToTask(options, `🎯 [syntx-bot] OTP berhasil ditemukan via Gmailnator: ${otp}`, 'success');
+        return otp;
+      } else {
+        logToTask(options, `⚠️ [syntx-bot] OTP tidak ditemukan di badan atau subjek email.`, 'warning');
+      }
+    } catch (err) {
+      logToTask(options, `⚠️ [syntx-bot] Error saat cek inbox Gmailnator: ${err.message}`, 'warning');
+    }
+  }
+
+  throw new Error('Timeout: OTP tidak diterima via Gmailnator dalam 90 detik');
 }
 
 // ─────────────────────────────────────────────
 // MAIN: Full login flow + send prompt
 // ─────────────────────────────────────────────
-async function loginAndGetToken() {
-  console.log('\n🔄 [syntx-bot] Memulai proses login syntx.ai...');
+// Helper to generate dot-variants of a Gmail address
+function getDotVariant(email, index) {
+  const parts = email.split('@');
+  if (parts.length !== 2) return email;
+  const originalUsername = parts[0];
+  const domain = parts[1];
   
-  const { email, mailToken, accountId } = await createTempEmail();
+  const canonicalUsername = originalUsername.replace(/\./g, '');
+  if (canonicalUsername.length <= 1) return email;
   
-  await requestSyntxOTP(email);
+  // Calculate baseIndex of the original email address
+  let baseIndex = 0;
+  let canonicalPos = 0;
+  for (let i = 0; i < originalUsername.length - 1; i++) {
+    if (originalUsername[i] !== '.') {
+      if (originalUsername[i + 1] === '.') {
+        baseIndex |= (1 << canonicalPos);
+      }
+      canonicalPos++;
+    }
+  }
   
-  const otp = await fetchOTPFromMailTm(mailToken, 60000);
+  const numSlots = canonicalUsername.length - 1;
+  const maxVariants = 1 << numSlots;
   
-  const syntxToken = await verifySyntxOTP(email, otp);
+  const targetIndex = (baseIndex + index) % maxVariants;
+  
+  let variant = canonicalUsername[0];
+  for (let i = 0; i < numSlots; i++) {
+    if ((targetIndex & (1 << i)) !== 0) {
+      variant += '.';
+    }
+    variant += canonicalUsername[i + 1];
+  }
+  
+  return `${variant}@${domain}`;
+}
+
+let otpProvider = null;
+
+function registerOtpProvider(fn) {
+  otpProvider = fn;
+}
+
+// ─────────────────────────────────────────────
+// MAIN: Full login flow + send prompt
+// ─────────────────────────────────────────────
+async function loginAndGetToken(options = {}) {
+  logToTask(options, '\n🔄 [syntx-bot] Memulai proses login syntx.ai...', 'info');
+  
+  // Prioritas: 1) Emailnator (gratis, tanpa key), 2) dot-variant base email, 3) Gmailnator RapidAPI, 4) Mail.tm
+  const rapidApiKey = process.env.RAPIDAPI_KEY;
+  const baseEmail = process.env.SYNTX_BASE_EMAIL;
+  let email;
+  let syntxToken;
+  let emailnatorCookies = null;
+  let emailnatorXsrf = null;
+
+  // === OPSI 1: Emailnator Web (PRIORITAS UTAMA - Gratis & Otomatis) ===
+  try {
+    logToTask(options, '🌐 [syntx-bot] Mencoba Emailnator Web API (gratis, tanpa key)...', 'info');
+    const { email: enEmail, cookies: enCookies, xsrfToken: enXsrf } = await createEmailnatorGmail(options);
+    email = enEmail;
+    emailnatorCookies = enCookies;
+    emailnatorXsrf = enXsrf;
+  } catch (enErr) {
+    logToTask(options, `⚠️ [syntx-bot] Emailnator gagal: ${enErr.message}`, 'warning');
+
+    // === OPSI 2: Gmail dot-variant (jika SYNTX_BASE_EMAIL dikonfigurasi) ===
+    if (baseEmail && baseEmail.includes('@')) {
+      const currentIndex = parseInt(process.env.SYNTX_EMAIL_INDEX || '0', 10);
+      email = getDotVariant(baseEmail, currentIndex);
+      logToTask(options, `📧 [syntx-bot] Fallback ke Gmail dot-variant (${currentIndex}): ${email}`, 'info');
+      if (options.onEmailGenerated) {
+        options.onEmailGenerated(currentIndex + 1);
+      }
+    }
+    // === OPSI 3: Gmailnator RapidAPI ===
+    else if (rapidApiKey) {
+      logToTask(options, '🔑 [syntx-bot] Fallback ke Gmailnator (RapidAPI)...', 'info');
+      email = await createGmailnatorEmail(rapidApiKey, options);
+    }
+    // === OPSI 4: Mail.tm (terakhir - sering diblokir Syntx) ===
+    else {
+      logToTask(options, '⚠️ [syntx-bot] Fallback ke Mail.tm...', 'warning');
+      const { email: tempEmail, mailToken, accountId } = await createTempEmail(options);
+      email = tempEmail;
+      sessionState.mailToken = mailToken;
+      sessionState.mailId = accountId;
+    }
+  }
+
+  // Send OTP
+  await requestSyntxOTP(email, options);
+
+  // Retrieve OTP sesuai sumber email
+  let otp;
+  if (emailnatorCookies) {
+    // Emailnator inbox
+    try {
+      otp = await fetchOTPFromEmailnator(email, emailnatorCookies, emailnatorXsrf, 90000, options);
+    } catch (err) {
+      logToTask(options, `⚠️ Gagal mengambil OTP dari Emailnator: ${err.message}`, 'warning');
+    }
+  } else if (baseEmail && baseEmail.includes('@') && rapidApiKey) {
+    try {
+      otp = await fetchOTPFromGmailnator(rapidApiKey, email, 60000, options);
+    } catch (err) {
+      logToTask(options, `⚠️ Gagal mengambil OTP dari Gmailnator: ${err.message}`, 'warning');
+    }
+  } else if (rapidApiKey && !baseEmail) {
+    try {
+      otp = await fetchOTPFromGmailnator(rapidApiKey, email, 90000, options);
+    } catch (err) {
+      logToTask(options, `⚠️ Gagal mengambil OTP dari Gmailnator: ${err.message}`, 'warning');
+    }
+  } else if (sessionState.mailToken) {
+    try {
+      otp = await fetchOTPFromMailTm(sessionState.mailToken, 60000, options);
+    } catch (err) {
+      logToTask(options, `⚠️ Gagal mengambil OTP dari Mail.tm: ${err.message}`, 'warning');
+    }
+  }
+
+  // Fallback to manual OTP if automated failed/wasn't tried
+  if (!otp && otpProvider) {
+    logToTask(options, `⏳ [syntx-bot] Menunggu input OTP manual untuk email: ${email}...`, 'warning');
+    otp = await otpProvider(email, options.taskId || 'manual');
+  }
+
+  if (!otp) {
+    throw new Error('Gagal mendapatkan OTP untuk verifikasi Syntx.ai');
+  }
+
+  syntxToken = await verifySyntxOTP(email, otp, options);
   
   sessionState.token = syntxToken;
   sessionState.email = email;
-  sessionState.mailToken = mailToken;
-  sessionState.mailId = accountId;
   sessionState.expiresAt = Date.now() + (23 * 60 * 60 * 1000); // 23 jam
   sessionState.messageCount = 0; // reset counter saat akun baru
   
-  console.log('🎉 [syntx-bot] Login syntx.ai berhasil! Session tersimpan.\n');
+  logToTask(options, '🎉 [syntx-bot] Login syntx.ai berhasil! Session tersimpan.\n', 'success');
   return syntxToken;
 }
 
@@ -374,7 +816,7 @@ async function loginAndGetToken() {
 // PUBLIC API: callSyntx(prompt)
 // Auto-rotate akun saat mendekati/melebihi limit pesan
 // ─────────────────────────────────────────────
-async function callSyntx(prompt, model = 'claude-opus-4-8') {
+async function callSyntx(prompt, model = 'claude-sonnet-4-5', options = {}) {
   const isTokenValid = sessionState.token && 
                        sessionState.expiresAt && 
                        Date.now() < sessionState.expiresAt;
@@ -384,27 +826,27 @@ async function callSyntx(prompt, model = 'claude-opus-4-8') {
   
   if (!isTokenValid || nearLimit) {
     if (nearLimit && isTokenValid) {
-      console.log(`🔄 [syntx-bot] Mendekati limit pesan (${sessionState.messageCount}/${sessionState.messageLimit}), rotasi akun baru...`);
+      logToTask(options, `🔄 [syntx-bot] Mendekati limit pesan (${sessionState.messageCount}/${sessionState.messageLimit}), rotasi akun baru...`, 'info');
     } else {
-      console.log('🔑 [syntx-bot] Token tidak ada atau expired, melakukan re-login...');
+      logToTask(options, '🔑 [syntx-bot] Token tidak ada atau expired, melakukan re-login...', 'info');
     }
-    await loginAndGetToken();
+    await loginAndGetToken(options);
   }
 
   try {
-    const result = await sendPromptToSyntx(sessionState.token, prompt, model);
+    const result = await sendPromptToSyntx(sessionState.token, prompt, model, options);
     sessionState.messageCount++; // track jumlah pesan
-    console.log(`📊 [syntx-bot] Pesan ke-${sessionState.messageCount}/${sessionState.messageLimit} di akun ini`);
+    logToTask(options, `📊 [syntx-bot] Pesan ke-${sessionState.messageCount}/${sessionState.messageLimit} di akun ini`, 'info');
     return result;
   } catch (err) {
     const status = err.response?.status;
     
     // Handle token expired
     if (err.message === 'TOKEN_EXPIRED' || status === 401) {
-      console.log('🔄 [syntx-bot] Token expired, re-login otomatis...');
+      logToTask(options, '🔄 [syntx-bot] Token expired, re-login otomatis...', 'warning');
       sessionState.token = null;
-      await loginAndGetToken();
-      const result = await sendPromptToSyntx(sessionState.token, prompt, model);
+      await loginAndGetToken(options);
+      const result = await sendPromptToSyntx(sessionState.token, prompt, model, options);
       sessionState.messageCount++;
       return result;
     }
@@ -413,11 +855,11 @@ async function callSyntx(prompt, model = 'claude-opus-4-8') {
     if (status === 402 || status === 403 || 
         err.message?.toLowerCase().includes('limit') ||
         err.message?.toLowerCase().includes('quota')) {
-      console.log(`🔄 [syntx-bot] Limit akun tercapai (status ${status}), membuat akun baru...`);
+      logToTask(options, `🔄 [syntx-bot] Limit akun tercapai (status ${status}), membuat akun baru...`, 'warning');
       sessionState.token = null;
       sessionState.messageCount = 0;
-      await loginAndGetToken();
-      const result = await sendPromptToSyntx(sessionState.token, prompt, model);
+      await loginAndGetToken(options);
+      const result = await sendPromptToSyntx(sessionState.token, prompt, model, options);
       sessionState.messageCount++;
       return result;
     }
@@ -432,6 +874,7 @@ async function callSyntx(prompt, model = 'claude-opus-4-8') {
 module.exports = {
   callSyntx,
   loginAndGetToken,
+  registerOtpProvider,
   getSessionState: () => ({ ...sessionState, token: sessionState.token ? '***HIDDEN***' : null }),
 };
 
