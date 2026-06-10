@@ -90,14 +90,14 @@ jobs:
           ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata comment="${{ github.event.inputs.keywords }}" -codec copy out/temp_$FILENAME
           mv out/temp_$FILENAME out/$FILENAME
 
-      - name: Upload to Catbox Cloud
+      - name: Upload to x0.at Cloud
         id: upload_cloud
         run: |
-          echo "=== Uploading video to Catbox Cloud ==="
+          echo "=== Uploading video to x0.at Cloud ==="
           FILENAME="${{ github.event.inputs.composition_id }}-preview.mp4"
-          curl -s -F "reqtype=fileupload" -F "fileToUpload=@out/$FILENAME" https://catbox.moe/user/api.php > catbox_res.txt
-          cat catbox_res.txt
-          LINK=$(cat catbox_res.txt | tr -d '\r\n')
+          curl -s -F "file=@out/$FILENAME" https://x0.at/ > x0_res.txt
+          cat x0_res.txt
+          LINK=$(cat x0_res.txt | tr -d '\r\n')
           echo "Cloud Link: $LINK"
           echo "$LINK" > cloud-link.txt
 
