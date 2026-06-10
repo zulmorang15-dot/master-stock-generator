@@ -46,7 +46,7 @@ const CyberpunkGamingEndscreen = () => {
           height: ORIGINAL_HEIGHT,
           background: 'repeating-linear-gradient(to bottom, rgba(0, 243, 255, 0.03) 0px, rgba(0, 243, 255, 0.03) 2px, transparent 2px, transparent 4px)',
           pointerEvents: 'none',
-          box-shadow: 'inset 0 0 150px rgba(188, 19, 254, 0.15)',
+          boxShadow: 'inset 0 0 150px rgba(188, 19, 254, 0.15)',
         }}
       />
 
