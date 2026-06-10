@@ -57,14 +57,19 @@ jobs:
         run: mkdir -p out
 
       - name: Write Render Props File
+        env:
+          JUDUL: ${{ github.event.inputs.judul }}
+          KEYWORDS: ${{ github.event.inputs.keywords }}
+          DURATION: ${{ github.event.inputs.duration_frames }}
         run: |
-          cat > temp-props.json << 'PROPS_EOF'
-          {
-            "durationInFrames": ${{ github.event.inputs.duration_frames }},
-            "judul": "${{ github.event.inputs.judul }}",
-            "keywords": "${{ github.event.inputs.keywords }}"
-          }
-          PROPS_EOF
+          node -e "
+            const props = {
+              durationInFrames: parseInt(process.env.DURATION) || 150,
+              judul: process.env.JUDUL || 'Stock Video',
+              keywords: process.env.KEYWORDS || 'motion, abstract, loop'
+            };
+            require('fs').writeFileSync('temp-props.json', JSON.stringify(props, null, 2));
+          "
           echo "=== Props being used ==="
           cat temp-props.json
 
@@ -77,6 +82,13 @@ jobs:
             --codec=h264 \
             --scale=0.5 \
             --log=verbose
+
+      - name: Embed Metadata via FFmpeg
+        run: |
+          echo "=== Embedding metadata into output video ==="
+          FILENAME="${{ github.event.inputs.composition_id }}-preview.mp4"
+          ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata comment="${{ github.event.inputs.keywords }}" -codec copy out/temp_$FILENAME
+          mv out/temp_$FILENAME out/$FILENAME
 
       - name: Upload to BashUpload Cloud
         id: upload_cloud

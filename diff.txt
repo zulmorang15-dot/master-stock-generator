@@ -1,0 +1,1785 @@
+diff --git a/.github/workflows/render-4k.yml b/.github/workflows/render-4k.yml
+index 603f3fd..66456b1 100644
+--- a/.github/workflows/render-4k.yml
++++ b/.github/workflows/render-4k.yml
+@@ -77,6 +77,13 @@ jobs:
+             --codec=prores \
+             --log=verbose
+ 
++      - name: Embed Metadata via FFmpeg
++        run: |
++          echo "=== Embedding metadata into output video ==="
++          FILENAME="${{ github.event.inputs.composition_id }}-4k.mov"
++          ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata comment="${{ github.event.inputs.keywords }}" -codec copy out/temp_$FILENAME
++          mv out/temp_$FILENAME out/$FILENAME
++
+       - name: Upload to BashUpload Cloud
+         id: upload_cloud
+         run: |
+diff --git a/.github/workflows/render-preview.yml b/.github/workflows/render-preview.yml
+index f73686b..d67f150 100644
+--- a/.github/workflows/render-preview.yml
++++ b/.github/workflows/render-preview.yml
+@@ -78,6 +78,13 @@ jobs:
+             --scale=0.5 \
+             --log=verbose
+ 
++      - name: Embed Metadata via FFmpeg
++        run: |
++          echo "=== Embedding metadata into output video ==="
++          FILENAME="${{ github.event.inputs.composition_id }}-preview.mp4"
++          ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata comment="${{ github.event.inputs.keywords }}" -codec copy out/temp_$FILENAME
++          mv out/temp_$FILENAME out/$FILENAME
++
+       - name: Upload to BashUpload Cloud
+         id: upload_cloud
+         run: |
+diff --git a/package-lock.json b/package-lock.json
+index 6485db1..881d524 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -29,6 +29,7 @@
+         "@types/react": "19.2.7",
+         "@types/web": "0.0.166",
+         "eslint": "9.19.0",
++        "playwright": "^1.60.0",
+         "prettier": "3.8.1",
+         "typescript": "5.9.3"
+       }
+@@ -4040,6 +4041,21 @@
+       "integrity": "sha512-cybjIfiiE+pTWicSCLFHSrXZ6EilF30oh91FDP9S2B051prEa7QWfrVTQm10/dDpswBDXZugPa1Ogu8Yh+HV0Q==",
+       "license": "Unlicense"
+     },
++    "node_modules/fsevents": {
++      "version": "2.3.2",
++      "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz",
++      "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
++      "dev": true,
++      "hasInstallScript": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "darwin"
++      ],
++      "engines": {
++        "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
++      }
++    },
+     "node_modules/function-bind": {
+       "version": "1.1.2",
+       "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
+@@ -5509,6 +5525,38 @@
+         "url": "https://github.com/sponsors/jonschlinkert"
+       }
+     },
++    "node_modules/playwright": {
++      "version": "1.60.0",
++      "resolved": "https://registry.npmjs.org/playwright/-/playwright-1.60.0.tgz",
++      "integrity": "sha512-hheHdokM8cdqCb0lcE3s+zT4t4W+vvjpGxsZlDnikarzx8tSzMebh3UiFtgqwFwnTnjYQcsyMF8ei2mCO/tpeA==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "dependencies": {
++        "playwright-core": "1.60.0"
++      },
++      "bin": {
++        "playwright": "cli.js"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "optionalDependencies": {
++        "fsevents": "2.3.2"
++      }
++    },
++    "node_modules/playwright-core": {
++      "version": "1.60.0",
++      "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.60.0.tgz",
++      "integrity": "sha512-9bW6zvX/m0lEbgTKJ6YppOKx8H3VOPBMOCFh2irXFOT4BbHgrx5hPjwJYLT40Lu+4qtD36qKc/Hn56StUW57IA==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "bin": {
++        "playwright-core": "cli.js"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
+     "node_modules/postcss": {
+       "version": "8.5.15",
+       "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.15.tgz",
+diff --git a/package.json b/package.json
+index 6fbe8f4..95fabd1 100644
+--- a/package.json
++++ b/package.json
+@@ -26,6 +26,7 @@
+     "@types/react": "19.2.7",
+     "@types/web": "0.0.166",
+     "eslint": "9.19.0",
++    "playwright": "^1.60.0",
+     "prettier": "3.8.1",
+     "typescript": "5.9.3"
+   },
+diff --git a/public/dashboard.html b/public/dashboard.html
+index 063bfb5..f322094 100644
+--- a/public/dashboard.html
++++ b/public/dashboard.html
+@@ -155,6 +155,26 @@
+       box-shadow: 0 2px 8px rgba(56,189,248,0.3);
+     }
+     .toggle-btn.active.green { background: var(--green); box-shadow: 0 2px 8px rgba(16,185,129,0.3); }
++    .select-input, .number-input {
++      background: var(--bg3);
++      border: 1px solid var(--border);
++      border-radius: 8px;
++      color: var(--text);
++      font-size: 13px;
++      font-weight: 600;
++      padding: 7px 12px;
++      outline: none;
++      transition: all 0.2s;
++      cursor: pointer;
++    }
++    .select-input:focus, .number-input:focus {
++      border-color: var(--cyan);
++      box-shadow: 0 0 8px rgba(56,189,248,0.2);
++    }
++    .select-input option {
++      background: var(--bg2);
++      color: var(--text);
++    }
+     /* ── GENERATE BUTTON ───────────────────────── */
+     .btn-generate {
+       width: 100%;
+@@ -394,6 +414,129 @@
+     @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+     .toast.success { border-color: rgba(16,185,129,0.5); color: var(--green); }
+     .toast.error { border-color: rgba(239,68,68,0.5); color: var(--red); }
++    /* ── TABS & CODE EDITOR ──────────────────────── */
++    .input-tabs {
++      display: flex;
++      gap: 10px;
++      margin-bottom: 20px;
++      border-bottom: 1px solid var(--border);
++      padding-bottom: 12px;
++    }
++    .tab-btn {
++      padding: 8px 16px;
++      background: transparent;
++      border: 1px solid transparent;
++      color: var(--text-dim);
++      border-radius: var(--radius-sm);
++      font-size: 13px;
++      font-weight: 600;
++      cursor: pointer;
++      transition: all 0.2s;
++    }
++    .tab-btn:hover { color: var(--text); }
++    .tab-btn.active {
++      background: var(--cyan-dim);
++      border-color: rgba(56,189,248,0.4);
++      color: var(--cyan);
++    }
++    .tab-content { display: none; }
++    .tab-content.active { display: block; }
++    .code-editor-textarea {
++      width: 100%;
++      min-height: 200px;
++      background: #050810;
++      border: 1px solid var(--border);
++      border-radius: var(--radius-sm);
++      color: #22c55e;
++      font-family: 'JetBrains Mono', monospace;
++      font-size: 13px;
++      padding: 16px;
++      outline: none;
++      transition: border-color 0.2s;
++      resize: vertical;
++    }
++    .code-editor-textarea:focus { border-color: var(--cyan); }
++    .input-text-field {
++      width: 100%;
++      background: var(--bg3);
++      border: 1px solid var(--border);
++      border-radius: 8px;
++      color: var(--text);
++      font-size: 13px;
++      padding: 10px 14px;
++      outline: none;
++      margin-bottom: 14px;
++      font-family: inherit;
++    }
++    .input-text-field:focus { border-color: var(--cyan); }
++    
++    /* ── BADGES & LOGS ───────────────────────────── */
++    .status-badge {
++      display: inline-flex;
++      align-items: center;
++      gap: 6px;
++      padding: 4px 10px;
++      border-radius: 6px;
++      font-size: 11px;
++      font-weight: 600;
++      text-transform: uppercase;
++      letter-spacing: 0.5px;
++    }
++    .badge-queued { background: rgba(148, 163, 184, 0.12); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
++    .badge-converting { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.2); }
++    .badge-rendering { background: rgba(168, 85, 247, 0.12); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.2); }
++    .badge-cancelled { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2); }
++    .badge-error { background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
++    .badge-success { background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
++    
++    .mini-log-box {
++      font-family: 'JetBrains Mono', monospace;
++      font-size: 10.5px;
++      line-height: 1.45;
++      color: var(--text-mid);
++      max-height: 100px;
++      overflow-y: auto;
++      background: rgba(0,0,0,0.3);
++      border: 1px solid rgba(56,189,248,0.06);
++      padding: 8px 10px;
++      border-radius: 6px;
++      margin-top: 8px;
++    }
++    .mini-log-line { display: flex; gap: 6px; margin-bottom: 3px; align-items: flex-start; }
++    .mini-log-time { color: var(--text-dim); flex-shrink: 0; font-size: 9.5px; }
++    .mini-log-msg { word-break: break-word; }
++    .mini-log-msg.error { color: var(--red); }
++    .mini-log-msg.success { color: var(--green); }
++    .mini-log-msg.warning { color: var(--amber); }
++
++    .btn-action.btn-cancel {
++      background: var(--red-dim);
++      border: 1px solid rgba(239,68,68,0.3);
++      color: var(--red);
++    }
++    .btn-action.btn-cancel:hover { background: rgba(239,68,68,0.25); }
++    .btn-action.btn-cancel:disabled { opacity: 0.3; cursor: not-allowed; }
++
++    .btn-code-link {
++      font-size: 11px;
++      color: var(--cyan);
++      text-decoration: none;
++      display: inline-flex;
++      align-items: center;
++      gap: 4px;
++      padding: 4px 8px;
++      background: rgba(56,189,248,0.04);
++      border: 1px solid rgba(56,189,248,0.15);
++      border-radius: 6px;
++      transition: all 0.2s;
++      font-weight: 500;
++      margin-top: 4px;
++    }
++    .btn-code-link:hover {
++      background: rgba(56,189,248,0.15);
++      border-color: var(--cyan);
++    }
++
+     /* ── SCROLL ─────────────────────────────────── */
+     html { scroll-behavior: smooth; }
+   </style>
+@@ -412,16 +555,30 @@
+ 
+   <!-- ═══════════ INPUT CARD ═══════════ -->
+   <div class="input-card">
+-    <!-- Drop Zone -->
+-    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+-      <div class="drop-icon">📁</div>
+-      <div class="drop-title">Drag & drop file .html ke sini</div>
+-      <div class="drop-sub">Mendukung multi-file (maks. 10 file)</div>
+-      <label class="btn-browse" onclick="event.stopPropagation()">
+-        Pilih File HTML
+-        <input type="file" id="fileInput" multiple accept=".html" hidden onchange="handleFileSelect(this.files)" />
+-      </label>
+-      <div class="file-list" id="fileList"></div>
++    <!-- Input Tabs -->
++    <div class="input-tabs">
++      <button class="tab-btn active" id="tabUploadBtn" onclick="switchInputTab('upload')">📂 Upload File HTML</button>
++      <button class="tab-btn" id="tabPasteBtn" onclick="switchInputTab('paste')">✍ Paste Kode HTML</button>
++    </div>
++
++    <!-- Tab Upload Content -->
++    <div class="tab-content active" id="tabUploadContent">
++      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
++        <div class="drop-icon">📁</div>
++        <div class="drop-title">Drag & drop file .html ke sini</div>
++        <div class="drop-sub">Mendukung multi-file (maks. 10 file)</div>
++        <label class="btn-browse" onclick="event.stopPropagation()">
++          Pilih File HTML
++          <input type="file" id="fileInput" multiple accept=".html" hidden onchange="handleFileSelect(this.files)" />
++        </label>
++        <div class="file-list" id="fileList"></div>
++      </div>
++    </div>
++
++    <!-- Tab Paste Content -->
++    <div class="tab-content" id="tabPasteContent">
++      <input type="text" class="input-text-field" id="pasteFileName" placeholder="Nama file / ID unik kustom (misal: glowing_button) — opsional" />
++      <textarea class="code-editor-textarea" id="pasteHtmlCode" placeholder="Tempelkan (paste) kode HTML lengkap Anda di sini..." oninput="checkPasteInput()"></textarea>
+     </div>
+ 
+     <!-- Options -->
+@@ -440,6 +597,29 @@
+           <button class="toggle-btn active" id="bgSolid" onclick="setBg(false)">Solid</button>
+         </div>
+       </div>
++      <div class="option-group">
++        <span class="option-label">🤖 Model AI</span>
++        <select class="select-input" id="aiModelSelect">
++          <option value="auto">Auto-Fallback (Default)</option>
++          <option value="groq">⚡ Groq (Llama 3.3)</option>
++          <option value="syntx-claude">🎯 Syntx Claude (Sonnet 3.5)</option>
++          <option value="syntx-gemini">🌐 Syntx Gemini (2.5 Flash)</option>
++          <option value="gemini">🧠 Gemini API (2.0 Flash)</option>
++          <option value="openrouter">🔀 OpenRouter (Llama 3.3 Free)</option>
++        </select>
++      </div>
++      <div class="option-group">
++        <span class="option-label">⏱️ Durasi</span>
++        <select class="select-input" id="animationDurationSelect">
++          <option value="5">5 Detik</option>
++          <option value="8">8 Detik</option>
++          <option value="10" selected>10 Detik</option>
++          <option value="12">12 Detik</option>
++          <option value="15">15 Detik</option>
++          <option value="20">20 Detik</option>
++          <option value="30">30 Detik</option>
++        </select>
++      </div>
+     </div>
+ 
+     <!-- Generate Button -->
+@@ -557,75 +737,191 @@
+     document.getElementById('bgSolid').classList.toggle('active', !isTransparent);
+   }
+ 
++  // ═══════════════════════════════════════════
++  // GENERATE
++  // ═══════════════════════════════════════════
++  // TABS & PASTING LOGIC
++  let currentInputTab = 'upload'; // 'upload' atau 'paste'
++
++  function switchInputTab(tab) {
++    currentInputTab = tab;
++    document.getElementById('tabUploadBtn').classList.toggle('active', tab === 'upload');
++    document.getElementById('tabPasteBtn').classList.toggle('active', tab === 'paste');
++    document.getElementById('tabUploadContent').classList.toggle('active', tab === 'upload');
++    document.getElementById('tabPasteContent').classList.toggle('active', tab === 'paste');
++    updateGenerateBtn();
++  }
++
++  function checkPasteInput() {
++    updateGenerateBtn();
++  }
++
++  function updateGenerateBtn() {
++    const btn = document.getElementById('btnGenerate');
++    if (currentInputTab === 'upload') {
++      btn.disabled = selectedFiles.length === 0 || isGenerating;
++      if (isGenerating) btn.textContent = '⏳  Memproses...';
++      else if (selectedFiles.length === 0) btn.textContent = '⚡  GENERATE ASSET';
++      else btn.innerHTML = `⚡ &nbsp;GENERATE ASSET &nbsp;<span style="opacity:0.7;font-weight:400">(${selectedFiles.length} file)</span>`;
++    } else {
++      const code = document.getElementById('pasteHtmlCode').value.trim();
++      btn.disabled = !code || isGenerating;
++      if (isGenerating) btn.textContent = '⏳  Memproses...';
++      else btn.textContent = '⚡  GENERATE FROM PASTE';
++    }
++  }
++
+   // ═══════════════════════════════════════════
+   // GENERATE
+   // ═══════════════════════════════════════════
+   async function startGenerate() {
+-    if (selectedFiles.length === 0 || isGenerating) return;
++    const aiModel = document.getElementById('aiModelSelect').value;
++    const animationDuration = Number(document.getElementById('animationDurationSelect').value);
++    
+     isGenerating = true;
+     updateGenerateBtn();
+ 
+-    // Show log panel
+-    const logPanel = document.getElementById('logPanel');
+-    logPanel.style.display = 'block';
+-    logPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+-    document.getElementById('logBody').innerHTML = '';
+-    document.getElementById('logStatus').textContent = 'Memproses...';
+-    document.getElementById('logDot').classList.remove('idle');
+-
+     try {
+-      // Read all files as text
+-      addLog('🔄 Membaca file HTML...', 'info');
+-      const filesPayload = await Promise.all(selectedFiles.map(async f => {
+-        const content = await readFileText(f.file);
+-        return { name: f.name, content };
+-      }));
+-
+-      // POST to start batch
+-      addLog(`📦 Mengirim ${filesPayload.length} file ke server...`, 'info');
+-      const resp = await fetch('/api/process-html-batch', {
+-        method: 'POST',
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ files: filesPayload, loop: loopEnabled, transparent: transparentBg })
+-      });
+-      const { jobId, error } = await resp.json();
+-      if (error) throw new Error(error);
++      if (currentInputTab === 'upload') {
++        if (selectedFiles.length === 0) return;
++        showToast('📦 Mengirim batch file ke antrean...', 'info');
+ 
+-      // Connect SSE
+-      addLog(`🔌 Terhubung ke job: ${jobId}`, 'info');
+-      const es = new EventSource(`/api/batch-logs/${jobId}`);
++        const filesPayload = await Promise.all(selectedFiles.map(async f => {
++          const content = await readFileText(f.file);
++          return { name: f.name, content };
++        }));
+ 
+-      es.onmessage = (ev) => {
+-        const data = JSON.parse(ev.data);
+-        if (data.type === 'done') {
+-          es.close();
+-          isGenerating = false;
+-          updateGenerateBtn();
+-          selectedFiles = [];
+-          renderFileList();
+-          document.getElementById('logDot').classList.add('idle');
+-          document.getElementById('logStatus').textContent = 'Selesai';
+-          showToast('✅ Semua file diproses!', 'success');
+-          setTimeout(loadResults, 1500);
+-        } else {
+-          addLog(data.message, data.type || 'info', data.time);
+-        }
+-      };
+-      es.onerror = () => {
+-        es.close();
+-        isGenerating = false;
+-        updateGenerateBtn();
+-        document.getElementById('logDot').classList.add('idle');
+-        document.getElementById('logStatus').textContent = 'Koneksi terputus';
+-        addLog('⚠️ Koneksi SSE terputus. Cek server.', 'error');
+-      };
++        const resp = await fetch('/api/process-html-batch', {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({ 
++            files: filesPayload, 
++            loop: loopEnabled, 
++            transparent: transparentBg,
++            aiModel,
++            animationDuration
++          })
++        });
++        
++        const data = await resp.json();
++        if (data.error) throw new Error(data.error);
++        
++        showToast('✅ Batch berhasil ditambahkan ke antrean!', 'success');
++        selectedFiles = [];
++        renderFileList();
++
++      } else {
++        const htmlContent = document.getElementById('pasteHtmlCode').value.trim();
++        const customId = document.getElementById('pasteFileName').value.trim();
++        if (!htmlContent) return;
++
++        showToast('✍ Mengirim kode paste ke antrean...', 'info');
++
++        const resp = await fetch('/api/paste-html', {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({
++            id: customId,
++            htmlContent,
++            loop: loopEnabled,
++            transparent: transparentBg,
++            aiModel,
++            animationDuration
++          })
++        });
++
++        const data = await resp.json();
++        if (data.error) throw new Error(data.error);
++
++        showToast('✅ Kode paste berhasil diantrekan!', 'success');
++        document.getElementById('pasteHtmlCode').value = '';
++        document.getElementById('pasteFileName').value = '';
++      }
++
++      // Refresh results list immediately to show newly queued item(s)
++      setTimeout(loadResults, 500);
+ 
+     } catch(err) {
+-      addLog('❌ Error: ' + err.message, 'error');
++      showToast('❌ Error: ' + err.message, 'error');
++    } finally {
+       isGenerating = false;
+       updateGenerateBtn();
+-      document.getElementById('logDot').classList.add('idle');
+-      document.getElementById('logStatus').textContent = 'Error';
++    }
++  }
++
++  // ═══════════════════════════════════════════
++  // CANCELLATION & SSE LOG STREAM
++  // ═══════════════════════════════════════════
++  const taskStreams = {};
++
++  function startTaskLogStream(itemId) {
++    if (taskStreams[itemId]) return; // stream sudah berjalan
++
++    const source = new EventSource(`/api/task-logs/${itemId}`);
++    taskStreams[itemId] = source;
++
++    source.onmessage = (event) => {
++      try {
++        const data = JSON.parse(event.data);
++        
++        if (data.type === 'done') {
++          source.close();
++          delete taskStreams[itemId];
++          // Tunggu sebentar lalu reload table untuk update status badge final
++          setTimeout(loadResults, 1000);
++          return;
++        }
++
++        // Cari log box untuk baris item ini
++        const logBox = document.getElementById(`logbox_${itemId}`);
++        if (logBox) {
++          if (logBox.innerHTML.includes("Belum ada log")) {
++            logBox.innerHTML = '';
++          }
++
++          let msgClass = '';
++          if (data.type === 'error') msgClass = 'error';
++          else if (data.type === 'success') msgClass = 'success';
++          else if (data.type === 'warning') msgClass = 'warning';
++
++          const lineEl = document.createElement('div');
++          lineEl.className = 'mini-log-line';
++          lineEl.innerHTML = `
++            <span class="mini-log-time">${data.time || ''}</span>
++            <span class="mini-log-msg ${msgClass}">${escHtml(data.message || '')}</span>
++          `;
++          logBox.appendChild(lineEl);
++          logBox.scrollTop = logBox.scrollHeight;
++        }
++      } catch (e) {
++        console.error("Gagal parse SSE log data:", e);
++      }
++    };
++
++    source.onerror = () => {
++      source.close();
++      delete taskStreams[itemId];
++    };
++  }
++
++  async function cancelTask(id) {
++    if (!confirm(`Batalkan proses generate untuk "${id}"?`)) return;
++    try {
++      const resp = await fetch(`/api/cancel-task/${id}`, { method: 'POST' });
++      const data = await resp.json();
++      if (data.error) throw new Error(data.error);
++      
++      showToast('🚫 Task dibatalkan!', 'success');
++      
++      // Close stream jika ada
++      if (taskStreams[id]) {
++        taskStreams[id].close();
++        delete taskStreams[id];
++      }
++      
++      loadResults();
++    } catch(err) {
++      showToast('❌ Gagal batal: ' + err.message, 'error');
+     }
+   }
+ 
+@@ -638,16 +934,6 @@
+     });
+   }
+ 
+-  function addLog(message, type = 'info', time = null) {
+-    const body = document.getElementById('logBody');
+-    const t = time || new Date().toLocaleTimeString('id-ID');
+-    const div = document.createElement('div');
+-    div.className = 'log-line';
+-    div.innerHTML = `<span class="log-time">${t}</span><span class="log-msg ${type}">${escHtml(message)}</span>`;
+-    body.appendChild(div);
+-    body.scrollTop = body.scrollHeight;
+-  }
+-
+   function escHtml(s) {
+     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+   }
+@@ -660,10 +946,12 @@
+       const resp = await fetch('/api/saved-items');
+       const items = await resp.json();
+       renderTable(items);
+-      // Auto-poll items that are still rendering
++      
++      // Auto-poll atau start SSE stream untuk item yang masih diproses
+       items.forEach(item => {
+-        if (item.statusConvertTsx === 'processing-preview' || item.statusConvertTsx === 'processing-tsx') {
+-          startPolling(item.id, 'preview');
++        const status = item.statusConvertTsx || 'queued';
++        if (status === 'processing-preview' || status === 'processing-tsx' || status === 'queued') {
++          startTaskLogStream(item.id);
+         }
+         if (item.statusRender4k === 'processing') {
+           startPolling(item.id, '4k');
+@@ -677,7 +965,7 @@
+   function renderTable(items) {
+     const container = document.getElementById('resultsContainer');
+     if (!items || items.length === 0) {
+-      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-text">Belum ada hasil</div><div class="empty-sub">Upload file HTML di atas dan tekan Generate Asset</div></div>`;
++      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-text">Belum ada hasil</div><div class="empty-sub">Upload atau Paste kode HTML di atas dan tekan Generate Asset</div></div>`;
+       return;
+     }
+ 
+@@ -693,7 +981,8 @@
+               <th style="width:140px">File HTML</th>
+               <th style="width:220px">Rekomendasi Judul</th>
+               <th>Rekomendasi Keywords</th>
+-              <th style="width:200px">Preview Video</th>
++              <th style="width:260px">Log & Status Proses</th>
++              <th style="width:180px">Preview Video</th>
+               <th style="width:145px">Aksi</th>
+             </tr>
+           </thead>
+@@ -709,13 +998,58 @@
+       const kwEl = document.getElementById(`kw_${item.id}`);
+       if (titleEl) titleEl.addEventListener('blur', () => saveField(item.id, 'judul', titleEl.value));
+       if (kwEl) kwEl.addEventListener('blur', () => saveField(item.id, 'keywords', kwEl.value));
++      
++      // Auto-scroll log box ke bawah saat pertama kali render
++      const logBox = document.getElementById(`logbox_${item.id}`);
++      if (logBox) logBox.scrollTop = logBox.scrollHeight;
+     });
+   }
+ 
++  function renderLogCell(item) {
++    let statusBadge = '';
++    const status = item.statusConvertTsx || 'queued';
++    
++    if (status === 'queued') {
++      statusBadge = `<span class="status-badge badge-queued">⏳ Antrean</span>`;
++    } else if (status === 'processing-tsx') {
++      statusBadge = `<span class="status-badge badge-converting"><span class="spin">⚙</span> Konversi TSX</span>`;
++    } else if (status === 'processing-preview') {
++      statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render Preview</span>`;
++    } else if (status === 'success') {
++      statusBadge = `<span class="status-badge badge-success">✅ Sukses</span>`;
++    } else if (status === 'failed') {
++      statusBadge = `<span class="status-badge badge-error">❌ Gagal</span>`;
++    } else if (status === 'cancelled') {
++      statusBadge = `<span class="status-badge badge-cancelled">🚫 Dibatalkan</span>`;
++    }
++
++    const logs = item.logs || [];
++    const logsHtml = logs.map(log => {
++      let msgClass = '';
++      if (log.type === 'error') msgClass = 'error';
++      else if (log.type === 'success') msgClass = 'success';
++      else if (log.type === 'warning') msgClass = 'warning';
++      return `<div class="mini-log-line">
++        <span class="mini-log-time">${log.time || ''}</span>
++        <span class="mini-log-msg ${msgClass}">${escHtml(log.message || '')}</span>
++      </div>`;
++    }).join('');
++
++    const logBoxId = `logbox_${item.id}`;
++    return `
++      <div>
++        <div>${statusBadge}</div>
++        <div class="mini-log-box" id="${logBoxId}">
++          ${logsHtml || '<div style="color:var(--text-dim);font-size:10px;">Belum ada log.</div>'}
++        </div>
++      </div>
++    `;
++  }
++
+   function renderRow(item, no) {
+     const previewCell = renderPreviewCell(item);
++    const logCell = renderLogCell(item);
+     const actsCell = renderActionsCell(item);
+-    const kwShort = (item.keywords || '').split(',').slice(0,6).join(', ') + ((item.keywords||'').split(',').length > 6 ? '...' : '');
+ 
+     return `
+       <tr id="row_${item.id}">
+@@ -733,6 +1067,7 @@
+             <button class="btn-copy" onclick="copyText(document.getElementById('kw_${item.id}').value, this)">📋</button>
+           </div>
+         </td>
++        <td>${logCell}</td>
+         <td class="preview-cell">${previewCell}</td>
+         <td>${actsCell}</td>
+       </tr>`;
+@@ -745,23 +1080,16 @@
+         : `/api/preview-file/${item.id}`;
+       return `<video class="preview-video" src="${videoSrc}" controls muted loop playsinline></video>`;
+     }
+-    if (item.statusConvertTsx === 'processing-tsx') {
+-      return `<span class="status-badge badge-converting"><span class="spin">⚙</span> Converting TSX...</span>`;
+-    }
+-    if (item.statusConvertTsx === 'processing-preview') {
+-      return `<span class="status-badge badge-rendering"><span class="spin">☁</span> Rendering di Cloud...</span>`;
+-    }
+-    if (item.statusConvertTsx === 'failed') {
+-      return `<span class="status-badge badge-error">❌ Gagal</span>`;
+-    }
+-    return `<span class="status-badge badge-queued">⏳ Antrian</span>`;
++    return `<div style="text-align:center;color:var(--text-dim);font-size:12px;padding:20px 0;">Menunggu Video</div>`;
+   }
+ 
+   function renderActionsCell(item) {
+     const has4k = item.outputPath4k;
+     const hasPreview = !!item.previewUrl;
+     const is4kRendering = item.statusRender4k === 'processing';
+-    const canGen4k = (item.statusConvertTsx === 'success' || hasPreview) && item.promptCode;
++    const status = item.statusConvertTsx || 'queued';
++    const isRunning = status === 'queued' || status === 'processing-tsx' || status === 'processing-preview';
++    const canGen4k = (status === 'success' || hasPreview) && item.promptCode;
+ 
+     const btn4k = canGen4k
+       ? `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${is4kRendering ? 'disabled' : ''}>${is4kRendering ? '<span class="spin">☁</span> Rendering...' : '🚀 Generate 4K'}</button>`
+@@ -783,9 +1111,20 @@
+       ? `<a class="btn-action btn-dl" href="${url4k}" target="_blank" download="${item.id}-4k.mov">⬇ Download 4K</a>`
+       : '';
+ 
++    // Tombol Batal
++    const btnCancel = isRunning
++      ? `<button class="btn-action btn-cancel" onclick="cancelTask('${item.id}')">🚫 Batal</button>`
++      : '';
++
+     const btnDel = `<button class="btn-action btn-del" onclick="deleteItem('${item.id}')">🗑 Hapus</button>`;
+ 
+-    return `<div class="actions">${btn4k}${btnDl}${btnDl4k}${btnDel}</div>`;
++    // Download links untuk HTML asli & TSX hasil konversi
++    const htmlCodeLink = `<a class="btn-code-link" href="/saved-code/${item.id}.html" target="_blank" download="${item.id}.html">🌐 HTML Asli</a>`;
++    const tsxCodeLink = item.promptCode
++      ? `<a class="btn-code-link" href="/saved-code/${item.id}.tsx" target="_blank" download="${item.id}.tsx">📦 TSX Remotion</a>`
++      : '';
++
++    return `<div class="actions">${btn4k}${btnDl}${btnDl4k}${btnCancel}${btnDel}<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${htmlCodeLink}${tsxCodeLink}</div></div>`;
+   }
+ 
+   // ═══════════════════════════════════════════
+@@ -802,6 +1141,11 @@
+       const resp = await fetch(`/api/check-render-status/${itemId}/${renderType}`);
+       const data = await resp.json();
+ 
++      // Clear any temporary connection error counters on success check
++      if (pollTimers[key + '_errors']) {
++        delete pollTimers[key + '_errors'];
++      }
++
+       if (data.status === 'success') {
+         clearInterval(pollTimers[key]);
+         delete pollTimers[key];
+@@ -826,10 +1170,44 @@
+       } else if (data.status === 'failed') {
+         clearInterval(pollTimers[key]);
+         delete pollTimers[key];
++        
++        // Update DB to failed state
++        if (renderType === 'preview') {
++          await fetch(`/api/save-item`, {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ item: { id: itemId, statusConvertTsx: 'failed' } })
++          });
++        } else {
++          await fetch(`/api/save-item`, {
++            method: 'POST',
++            headers: { 'Content-Type': 'application/json' },
++            body: JSON.stringify({ item: { id: itemId, statusRender4k: 'failed' } })
++          });
++        }
++        
+         showToast(`❌ Render ${renderType} gagal: ${itemId}`, 'error');
+         loadResults();
+       }
+-    } catch(e) { console.error('Polling error:', e); }
++    } catch(e) { 
++      console.error('Polling error:', e);
++      if (!pollTimers[key + '_errors']) pollTimers[key + '_errors'] = 0;
++      pollTimers[key + '_errors']++;
++      
++      // Stop polling after 3 consecutive failures to avoid infinite spinning
++      if (pollTimers[key + '_errors'] >= 3) {
++        clearInterval(pollTimers[key]);
++        delete pollTimers[key];
++        delete pollTimers[key + '_errors'];
++        showToast(`❌ Koneksi status render gagal 3x untuk ${itemId}`, 'error');
++        
++        fetch(`/api/save-item`, {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({ item: { id: itemId, [renderType === 'preview' ? 'statusConvertTsx' : 'statusRender4k']: 'failed' } })
++        }).then(() => loadResults()).catch(console.error);
++      }
++    }
+   }
+ 
+   // ═══════════════════════════════════════════
+diff --git a/server.js b/server.js
+index 631e98e..bb446aa 100644
+--- a/server.js
++++ b/server.js
+@@ -19,12 +19,39 @@ app.use(express.static(path.join(__dirname, "public")));
+ 
+ // Ensure necessary directories exist
+ fs.mkdirSync(path.join(__dirname, "public", "previews"), { recursive: true });
++fs.mkdirSync(path.join(__dirname, "public", "saved-code"), { recursive: true });
+ fs.mkdirSync(path.join(__dirname, "out"), { recursive: true });
+ 
+ // Initialize database file if not exists
+ const dbPath = path.join(__dirname, "saved-items.json");
+ if (!fs.existsSync(dbPath)) {
+   fs.writeFileSync(dbPath, JSON.stringify([]));
++} else {
++  // Scan and fix stale states on startup
++  try {
++    const data = fs.readFileSync(dbPath, "utf-8");
++    let items = JSON.parse(data);
++    let changed = false;
++    items.forEach(item => {
++      if (item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx' || item.statusConvertTsx === 'processing-preview') {
++        item.statusConvertTsx = 'failed';
++        item.lastLogMessage = 'Server terhenti tak terduga (di-restart).';
++        if (!item.logs) item.logs = [];
++        item.logs.push({ message: 'Server terhenti tak terduga (di-restart).', type: 'error', time: new Date().toLocaleTimeString('id-ID') });
++        changed = true;
++      }
++      if (item.statusRender4k === 'processing') {
++        item.statusRender4k = 'failed';
++        changed = true;
++      }
++    });
++    if (changed) {
++      fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
++      console.log("🧹 Berhasil membersihkan status gantung dari sesi sebelumnya.");
++    }
++  } catch (e) {
++    console.error("Gagal melakukan startup database cleanup:", e);
++  }
+ }
+ 
+ // Route for the dashboard
+@@ -1089,8 +1116,18 @@ app.delete("/api/delete-item/:id", (req, res) => {
+       return res.status(404).json({ error: `Item "${id}" tidak ditemukan` });
+     }
+ 
++    // Hapus file HTML dan TSX lokal jika ada
++    const htmlLocalPath = path.join(__dirname, "public", "saved-code", `${id}.html`);
++    const tsxLocalPath = path.join(__dirname, "public", "saved-code", `${id}.tsx`);
++    try {
++      if (fs.existsSync(htmlLocalPath)) fs.unlinkSync(htmlLocalPath);
++      if (fs.existsSync(tsxLocalPath)) fs.unlinkSync(tsxLocalPath);
++    } catch (fileErr) {
++      console.warn(`Gagal menghapus file lokal untuk ${id}:`, fileErr.message);
++    }
++
+     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+-    console.log(`🗑 Item "${id}" berhasil dihapus dari database`);
++    console.log(`🗑 Item "${id}" beserta kode lokalnya berhasil dihapus`);
+     res.json({ success: true });
+   } catch (error) {
+     console.error("❌ Gagal hapus item:", error.message);
+@@ -1215,6 +1252,38 @@ const gitRuns = {};
+ // Global map to track batch render jobs and SSE streams
+ const batchJobs = {};
+ 
++// Background task queue state
++const taskQueue = []; // Array of item IDs
++const activeTasks = new Set(); // Set of currently processing item IDs
++const MAX_CONCURRENT_TASKS = 5;
++const abortControllers = {}; // { itemId: AbortController }
++const taskLogs = {}; // { itemId: Array of log objects }
++const taskSseClients = {}; // { itemId: Array of SSE response objects }
++
++// Sequential Git operator lock (Mutex) to prevent local commit/push conflicts
++let gitMutex = Promise.resolve();
++async function runGitTask(fn) {
++  const next = gitMutex.then(() => fn());
++  gitMutex = next.catch(() => {});
++  return next;
++}
++
++// Helper: Wrap async function calls with an abortable listener
++async function runAbortable(promise, signal) {
++  if (!signal) return promise;
++  if (signal.aborted) throw new Error("Cancelled by user");
++
++  return new Promise((resolve, reject) => {
++    const onAbort = () => {
++      reject(new Error("Cancelled by user"));
++    };
++    signal.addEventListener('abort', onAbort);
++    promise.then(resolve).catch(reject).finally(() => {
++      signal.removeEventListener('abort', onAbort);
++    });
++  });
++}
++
+ // Helper: Save or update item in database file
+ function saveOrUpdateItem(item) {
+   const dbPath = path.join(__dirname, "saved-items.json");
+@@ -1229,7 +1298,48 @@ function saveOrUpdateItem(item) {
+   fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+ }
+ 
+-// Helper: Add logs for SSE batch rendering
++// Helper: Add logs for SSE task processing (per item)
++function addTaskLog(itemId, message, type = 'info') {
++  const time = new Date().toLocaleTimeString('id-ID');
++  const logEntry = { message, type, time };
++
++  if (!taskLogs[itemId]) {
++    taskLogs[itemId] = [];
++  }
++  taskLogs[itemId].push(logEntry);
++
++  if (taskLogs[itemId].length > 50) {
++    taskLogs[itemId].shift();
++  }
++
++  // Update logs and lastLogMessage in DB synchronously/persistently
++  try {
++    const dbPath = path.join(__dirname, "saved-items.json");
++    if (fs.existsSync(dbPath)) {
++      const data = fs.readFileSync(dbPath, "utf-8");
++      let items = JSON.parse(data);
++      const index = items.findIndex(i => i.id === itemId);
++      if (index !== -1) {
++        items[index].logs = taskLogs[itemId];
++        items[index].lastLogMessage = message;
++        fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
++      }
++    }
++  } catch (e) {
++    console.error("Gagal menyimpan log task ke DB:", e);
++  }
++
++  // Stream to item-specific connected SSE clients
++  if (taskSseClients[itemId]) {
++    taskSseClients[itemId].forEach(client => {
++      client.write(`data: ${JSON.stringify(logEntry)}\n\n`);
++    });
++  }
++
++  console.log(`[Task ${itemId}] [${type}] ${message}`);
++}
++
++// Helper: Add logs for SSE batch rendering (backward compatibility)
+ function addLog(jobId, message, type = 'info') {
+   const time = new Date().toLocaleTimeString('id-ID');
+   const logEntry = { message, type, time };
+@@ -1509,31 +1619,60 @@ function sanitizeKeywordsAndTitle(seoData) {
+ }
+ 
+ // Helper: Jalankan job batch di background secara sekuensial
+-async function runBatchJob(jobId, files, loop, transparent, aiModel = 'auto', animationDuration = 10) {
+-  addLog(jobId, `Mulai memproses batch dengan ${files.length} file...`, 'info');
+-
+-  for (let i = 0; i < files.length; i++) {
+-    const file = files[i];
+-    const stepNum = i + 1;
+-    const totalFiles = files.length;
++// Helper: Jalankan job batch di background secara sekuensial (Digantikan oleh sistem Queue)
++async function executeSingleTask(itemId) {
++  const dbPath = path.join(__dirname, "saved-items.json");
++  let items = [];
++  try {
++    const data = fs.readFileSync(dbPath, "utf-8");
++    items = JSON.parse(data);
++  } catch (e) {
++    console.error("Gagal membaca DB untuk task execution:", e);
++  }
++  
++  const item = items.find(i => i.id === itemId);
++  if (!item) {
++    activeTasks.delete(itemId);
++    processQueue();
++    return;
++  }
+ 
+-    addLog(jobId, `[${stepNum}/${totalFiles}] Membaca file: ${file.name}`, 'info');
++  // Jika statusnya sudah cancelled sebelum mulai, langsung skip
++  if (item.statusConvertTsx === 'cancelled') {
++    activeTasks.delete(itemId);
++    processQueue();
++    return;
++  }
+ 
+-    try {
+-      // 1. Sanitasi ID (Mencegah command injection)
+-      const baseName = path.basename(file.name, '.html');
+-      const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
++  // Buat AbortController untuk task ini
++  const controller = new AbortController();
++  abortControllers[itemId] = controller;
++  const signal = controller.signal;
+ 
+-      addLog(jobId, `Menggunakan ID tersanitasi: ${sanitizedId}`, 'info');
++  try {
++    // 1. Update status ke processing-tsx
++    item.statusConvertTsx = 'processing-tsx';
++    saveOrUpdateItem(item);
++    
++    // Inisialisasi logs memori jika belum ada
++    if (!taskLogs[itemId]) {
++      taskLogs[itemId] = item.logs || [];
++    }
++    
++    addTaskLog(itemId, "Memulai pemrosesan task...", "info");
+ 
+-      // 2. Generate SEO Metadata
+-      addLog(jobId, `Menghasilkan metadata SEO via AI untuk ${sanitizedId}...`, 'info');
++    // Simpan file HTML asli ke lokal secara fisik
++    const htmlLocalPath = path.join(__dirname, "public", "saved-code", `${itemId}.html`);
++    fs.writeFileSync(htmlLocalPath, item.htmlPreview);
++    addTaskLog(itemId, `HTML asli disimpan secara lokal di /saved-code/${itemId}.html`, "info");
+ 
+-      const seoPrompt = `Kamu adalah pakar Creative Director SEO Microstock USA.
++    // 2. Generate SEO Metadata
++    addTaskLog(itemId, "Menghasilkan metadata SEO via AI...", "info");
++    const seoPrompt = `Kamu adalah pakar Creative Director SEO Microstock USA.
+ Analisis file HTML berikut dan buat metadata SEO yang luar biasa kreatif, visualnya mewah, dan bernilai jual tinggi untuk dipasarkan di Adobe Stock.
+ 
+ HTML Content:
+-${file.content}
++${item.htmlPreview}
+ 
+ Keluarkan hasil dalam format JSON murni berbentuk objek tanpa teks pengantar/penutup apa pun.
+ DILARANG menggunakan karakter double quote (") di dalam nilai string. Gunakan single quote (') jika perlu.
+@@ -1545,53 +1684,38 @@ Struktur objek wajib persis seperti ini:
+   "kategori": "Kategori Adobe Stock (Technology/Abstract/Business)"
+ }`;
+ 
+-      let aiResponse = "";
+-      try {
+-        // Gunakan callAIWithFallback yang sudah memiliki chain Groq -> Gemini -> DeepSeek -> OpenRouter
+-        aiResponse = await callAIWithFallback(seoPrompt, { preferModel: aiModel });
+-      } catch (err) {
+-        throw new Error(`Semua provider AI gagal untuk SEO metadata: ${err.message}`);
+-      }
++    // Jalankan callAI dengan pembatalan (abortable)
++    let aiResponse = "";
++    try {
++      aiResponse = await runAbortable(callAIWithFallback(seoPrompt, { preferModel: item.aiModel || 'auto', signal }), signal);
++    } catch (err) {
++      throw new Error(`Gagal menghasilkan metadata SEO: ${err.message}`);
++    }
+ 
+-      let jsonText = aiResponse.trim();
+-      if (jsonText.startsWith("```json")) {
+-        jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+-      } else if (jsonText.includes("```")) {
+-        jsonText = jsonText.split("```")[1].split("```")[0].trim();
+-      }
++    let jsonText = aiResponse.trim();
++    if (jsonText.startsWith("```json")) {
++      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
++    } else if (jsonText.includes("```")) {
++      jsonText = jsonText.split("```")[1].split("```")[0].trim();
++    }
++    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
++    let seoData = JSON.parse(jsonText);
++    seoData = sanitizeKeywordsAndTitle(seoData);
+ 
+-      jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+-      let seoData = JSON.parse(jsonText);
+-      seoData = sanitizeKeywordsAndTitle(seoData);
+-      addLog(jobId, `Metadata SEO berhasil didapat. Judul: "${seoData.judul}"`, 'success');
+-
+-      const durationFrames = (Number(animationDuration) || 10) * 30;
+-
+-      // 3. Simpan state awal ke database
+-      const itemData = {
+-        id: sanitizedId,
+-        fileName: file.name,
+-        judul: seoData.judul,
+-        keywords: seoData.keywords,
+-        deskripsi: seoData.deskripsi,
+-        kategori: seoData.kategori,
+-        durationInFrames: durationFrames,
+-        htmlPreview: file.content,
+-        loop: !!loop,
+-        transparent: !!transparent,
+-        statusConvertTsx: 'processing-tsx',
+-        statusRender4k: 'idle',
+-        previewUrl: '',
+-        outputPath4k: '',
+-        createdAt: new Date().toISOString()
+-      };
++    item.judul = seoData.judul;
++    item.keywords = seoData.keywords;
++    item.deskripsi = seoData.deskripsi;
++    item.kategori = seoData.kategori;
++    saveOrUpdateItem(item);
+ 
+-      saveOrUpdateItem(itemData);
++    addTaskLog(itemId, `Metadata SEO berhasil didapat. Judul: "${seoData.judul}"`, "success");
+ 
+-      // 4. Konversi HTML ke TSX
+-      addLog(jobId, `Mengonversi HTML ke kode Remotion TSX...`, 'info');
++    // 3. Konversi HTML ke TSX
++    addTaskLog(itemId, "Mengonversi HTML ke kode Remotion TSX...", "info");
++    const animationDuration = item.animationDuration || 10;
++    const durationFrames = item.durationInFrames || 300;
+ 
+-      const conversionPrompt = `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
++    const conversionPrompt = `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
+ You need to understand that Remotion renders videos frame-by-frame offline (using Puppeteer/Chrome). Therefore, any real-time browser features (like CSS @keyframes, transition, Date.now(), setInterval, or Math.random()) will cause severe synchronization bugs and frame-tearing in the final .mp4 export.
+ 
+ **OBJECTIVE:**
+@@ -1651,90 +1775,102 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
+ 
+ HERE IS THE HTML TO CONVERT:
+ 
+-${file.content}
++${item.htmlPreview}
+ 
+ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
+ 
+-      let tsxResponse = "";
+-      let tsxAttempts = 0;
+-      const MAX_TSX_ATTEMPTS = 3;
+-
+-      // Validator kuat: cek export default, END_OF_FILE marker, dan bracket balance
+-      const tsxValidator = (text) => {
+-        if (!text || !text.trim()) return false;
+-        const trimmed = text.trim();
+-        // Wajib ada export default
+-        if (!trimmed.includes('export default')) return false;
+-        // Lebih baik kalau ada // END_OF_FILE (artinya AI tidak terpotong)
+-        // Cek bracket balance ({} dan <>)
+-        let curly = 0;
+-        let angle = 0;
+-        for (const ch of trimmed) {
+-          if (ch === '{') curly++;
+-          else if (ch === '}') curly--;
+-          else if (ch === '<') angle++;
+-          else if (ch === '>') angle--;
+-        }
+-        // Harus balanced atau sangat dekat balanced (toleransi 1)
+-        if (Math.abs(curly) > 2 || Math.abs(angle) > 5) return false;
+-        return true;
+-      };
++    let tsxResponse = "";
++    let tsxAttempts = 0;
++    const MAX_TSX_ATTEMPTS = 3;
++
++    const tsxValidator = (text) => {
++      if (!text || !text.trim()) return false;
++      const trimmed = text.trim();
++      if (!trimmed.includes('export default')) return false;
++      let curly = 0;
++      let angle = 0;
++      for (const ch of trimmed) {
++        if (ch === '{') curly++;
++        else if (ch === '}') curly--;
++        else if (ch === '<') angle++;
++        else if (ch === '>') angle--;
++      }
++      if (Math.abs(curly) > 2 || Math.abs(angle) > 5) return false;
++      return true;
++    };
+ 
+-      while (tsxAttempts < MAX_TSX_ATTEMPTS) {
+-        tsxAttempts++;
+-        addLog(jobId, `Mencoba generate TSX (percobaan ke-${tsxAttempts})...`, 'info');
+-        try {
+-          // Gunakan callAIWithFallback yang sudah memiliki chain Groq -> Gemini -> DeepSeek -> OpenRouter
+-          tsxResponse = await callAIWithFallback(conversionPrompt, { 
+-            preferModel: aiModel,
++    while (tsxAttempts < MAX_TSX_ATTEMPTS) {
++      if (signal.aborted) throw new Error("Cancelled by user");
++      tsxAttempts++;
++      addTaskLog(itemId, `Mencoba generate TSX (percobaan ke-${tsxAttempts})...`, "info");
++      try {
++        tsxResponse = await runAbortable(
++          callAIWithFallback(conversionPrompt, { 
++            preferModel: item.aiModel || 'auto',
+             validator: tsxValidator
+-          });
+-          break; // sukses, keluar loop
+-        } catch (err) {
+-          addLog(jobId, `Percobaan ${tsxAttempts} gagal: ${err.message?.substring(0,100)}`, 'warning');
+-          if (tsxAttempts >= MAX_TSX_ATTEMPTS) {
+-            throw new Error(`Semua ${MAX_TSX_ATTEMPTS} percobaan AI gagal untuk TSX Conversion: ${err.message}`);
+-          }
+-          await new Promise(r => setTimeout(r, 2000)); // tunggu 2 detik sebelum retry
++          }),
++          signal
++        );
++        break; // sukses
++      } catch (err) {
++        addTaskLog(itemId, `Percobaan ${tsxAttempts} gagal: ${err.message?.substring(0, 100)}`, "warning");
++        if (tsxAttempts >= MAX_TSX_ATTEMPTS) {
++          throw new Error(`Semua ${MAX_TSX_ATTEMPTS} percobaan AI gagal untuk TSX Conversion: ${err.message}`);
+         }
++        await new Promise((r, reject) => {
++          const tm = setTimeout(r, 2000);
++          if (signal) {
++            signal.addEventListener('abort', () => {
++              clearTimeout(tm);
++              reject(new Error("Cancelled by user"));
++            });
++          }
++        });
+       }
++    }
+ 
+-      let tsxCode = tsxResponse.trim();
+-      if (tsxCode.startsWith("```typescript") || tsxCode.startsWith("```tsx")) {
+-        const parts = tsxCode.split("```");
+-        tsxCode = parts[1].split("\n").slice(1).join("\n").split("```")[0].trim();
+-      } else if (tsxCode.startsWith("```")) {
+-        tsxCode = tsxCode.split("```")[1].split("```")[0].trim();
+-      }
++    let tsxCode = tsxResponse.trim();
++    if (tsxCode.startsWith("```typescript") || tsxCode.startsWith("```tsx")) {
++      const parts = tsxCode.split("```");
++      tsxCode = parts[1].split("\n").slice(1).join("\n").split("```")[0].trim();
++    } else if (tsxCode.startsWith("```")) {
++      tsxCode = tsxCode.split("```")[1].split("```")[0].trim();
++    }
+ 
+-      itemData.promptCode = tsxCode;
+-      saveOrUpdateItem(itemData);
++    // Validasi lokal sebelum push
++    if (!tsxValidator(tsxCode)) {
++      throw new Error('TSX yang dihasilkan tidak valid (bracket tidak balance atau tidak ada export default). Batalkan.');
++    }
+ 
+-      // Validasi lokal sebelum push ke GitHub
+-      if (!tsxValidator(tsxCode)) {
+-        throw new Error('TSX yang dihasilkan tidak valid (bracket tidak balance atau tidak ada export default). Batalkan push.');
+-      }
+-      addLog(jobId, `Konversi HTML ke TSX sukses (TSX tervalidasi)!`, 'success');
++    item.promptCode = tsxCode;
++    saveOrUpdateItem(item);
+ 
+-      // 5. Tulis src/Composition.tsx lokal
+-      addLog(jobId, `Menulis file src/Composition.tsx...`, 'info');
++    // Simpan file TSX lokal secara fisik di public/saved-code/<id>.tsx
++    const tsxLocalPath = path.join(__dirname, "public", "saved-code", `${itemId}.tsx`);
++    fs.writeFileSync(tsxLocalPath, tsxCode);
++    addTaskLog(itemId, `File TSX disimpan secara lokal di /saved-code/${itemId}.tsx`, "info");
++
++    // 4. Git Push & Trigger Render Cloud (menulis src/Composition.tsx sementara)
++    addTaskLog(itemId, "Mengantrekan operasi Git Push untuk sinkronisasi kode ke GitHub...", "info");
++    
++    await runGitTask(async () => {
++      if (signal.aborted) throw new Error("Cancelled by user");
++      addTaskLog(itemId, "Mulai menulis src/Composition.tsx dan git push...", "info");
+       fs.writeFileSync("src/Composition.tsx", tsxCode);
+ 
+-      // 6. Push ke GitHub
+-      addLog(jobId, `Mendorong kode TSX ke repositori GitHub...`, 'info');
+       execSync("git add src/Composition.tsx", { stdio: "inherit" });
+       try {
+-        execSync(`git commit -m "Batch HTML ke TSX: ${sanitizedId}"`, { stdio: "inherit" });
++        execSync(`git commit -m "Queue HTML ke TSX: ${itemId}"`, { stdio: "inherit" });
+       } catch (e) {
+         // No changes is fine
+       }
+       execSync("git push origin main", { stdio: "inherit" });
+ 
+       const sha = execSync("git rev-parse HEAD").toString().trim();
+-      addLog(jobId, `Kode berhasil didorong. Commit SHA: ${sha}`, 'success');
++      addTaskLog(itemId, `Kode berhasil didorong ke GitHub. Commit SHA: ${sha}`, "success");
+ 
+-      // 7. Trigger GitHub Action
+-      addLog(jobId, `Memicu GitHub Actions cloud rendering...`, 'info');
++      // Trigger GitHub Action
++      addTaskLog(itemId, "Memicu workflow rendering di GitHub Actions...", "info");
+       const workflowFile = "render-preview.yml";
+       const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
+ 
+@@ -1743,10 +1879,10 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
+         {
+           ref: "main",
+           inputs: {
+-            composition_id: sanitizedId,
+-            duration_frames: "150",
+-            judul: itemData.judul || "Stock Video",
+-            keywords: itemData.keywords || "motion, abstract, loop"
++            composition_id: itemId,
++            duration_frames: String(durationFrames),
++            judul: item.judul || "Stock Video",
++            keywords: item.keywords || "motion, abstract, loop"
+           }
+         },
+         {
+@@ -1757,7 +1893,7 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
+         }
+       );
+ 
+-      const trackingKey = `${sanitizedId}_preview`;
++      const trackingKey = `${itemId}_preview`;
+       gitRuns[trackingKey] = {
+         sha: sha,
+         status: "triggered",
+@@ -1765,53 +1901,151 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
+         triggeredAt: Date.now(),
+         workflowFile: workflowFile
+       };
++    });
++
++    item.statusConvertTsx = 'processing-preview';
++    saveOrUpdateItem(item);
++
++    // 5. Tunggu proses rendering cloud selesai
++    addTaskLog(itemId, "Menunggu proses rendering video preview di GitHub Actions...", "info");
++    const renderSuccess = await waitForRenderSingle(itemId, 'preview', signal);
++    if (renderSuccess) {
++      const fileUrl = `/previews/${itemId}-preview.mp4`;
++      item.previewUrl = fileUrl;
++      item.statusConvertTsx = 'success';
++      saveOrUpdateItem(item);
++      addTaskLog(itemId, "Video preview selesai diproses dan siap diunduh!", "success");
++    } else {
++      throw new Error("Rendering cloud gagal.");
++    }
++
++  } catch (err) {
++    if (err.message === "Cancelled by user" || signal.aborted) {
++      item.statusConvertTsx = 'cancelled';
++      addTaskLog(itemId, "Proses dibatalkan oleh pengguna.", "warning");
++    } else {
++      item.statusConvertTsx = 'failed';
++      addTaskLog(itemId, `Gagal memproses task: ${err.message}`, "error");
++    }
++    saveOrUpdateItem(item);
++  } finally {
++    delete abortControllers[itemId];
++    activeTasks.delete(itemId);
++    
++    // Kirim event selesai ke SSE clients individual
++    if (taskSseClients[itemId]) {
++      taskSseClients[itemId].forEach(client => {
++        client.write(`data: ${JSON.stringify({ type: 'done', message: 'Task selesai' })}\n\n`);
++        client.end();
++      });
++      delete taskSseClients[itemId];
++    }
++
++    processQueue();
++  }
++}
+ 
+-      itemData.statusConvertTsx = 'processing-preview';
+-      saveOrUpdateItem(itemData);
+-      addLog(jobId, `Workflow dispatch berhasil dikirim ke GitHub.`, 'success');
+-
+-      // 8. Tunggu rendering selesai & unduh hasilnya
+-      const renderSuccess = await waitForRender(sanitizedId, 'preview', jobId);
+-      if (renderSuccess) {
+-        const fileUrl = `/previews/${sanitizedId}-preview.mp4`;
+-        itemData.previewUrl = fileUrl;
+-        itemData.statusConvertTsx = 'success';
+-        saveOrUpdateItem(itemData);
+-        addLog(jobId, `[Sukses] Video preview untuk ${sanitizedId} selesai diproses!`, 'success');
++async function waitForRenderSingle(id, renderType, signal) {
++  const startTime = Date.now();
++  const timeoutMs = 20 * 60 * 1000; // 20 menit timeout
++
++  while (Date.now() - startTime < timeoutMs) {
++    if (signal && signal.aborted) return false;
++
++    const finalFilename = renderType === "preview" ? `${id}-preview.mp4` : `${id}-4k.mov`;
++    const legacyFilename = renderType === "preview" ? `${id}.mp4` : `${id}_4k.mov`;
++    const finalPath = renderType === "preview"
++      ? path.join(__dirname, "public", "previews", finalFilename)
++      : path.join(__dirname, "out", finalFilename);
++    const legacyPath = renderType === "preview"
++      ? path.join(__dirname, "public", "previews", legacyFilename)
++      : path.join(__dirname, "out", legacyFilename);
++
++    if (fs.existsSync(finalPath) || fs.existsSync(legacyPath)) {
++      addTaskLog(id, `Video preview untuk ${id} berhasil ditemukan secara lokal!`, 'success');
++      return true;
++    }
++
++    try {
++      const statusResult = await checkGithubRenderStatusInternal(id, renderType);
++      if (statusResult.status === 'success') {
++        addTaskLog(id, `Video preview untuk ${id} berhasil diunduh dari GitHub!`, 'success');
++        return true;
++      } else if (statusResult.status === 'failed') {
++        throw new Error(statusResult.error || 'Workflow failed');
+       } else {
+-        throw new Error(`Rendering gagal untuk ${sanitizedId}`);
++        addTaskLog(id, `Status render GitHub: ${statusResult.status} (${statusResult.progress || 'menunggu runner'})...`, 'info');
+       }
+-
+     } catch (err) {
+-      addLog(jobId, `Gagal memproses ${file.name}: ${err.message}`, 'error');
++      addTaskLog(id, `Informasi status render: ${err.message}`, 'info');
++    }
+ 
+-      // Simpan status failed
+-      const baseName = path.basename(file.name, '.html');
+-      const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+-      try {
+-        const dbPath = path.join(__dirname, "saved-items.json");
+-        const data = fs.readFileSync(dbPath, "utf-8");
+-        const items = JSON.parse(data);
+-        const item = items.find(i => i.id === sanitizedId);
+-        if (item) {
+-          item.statusConvertTsx = 'failed';
+-          fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+-        }
+-      } catch (dbErr) {
+-        console.error("Gagal update DB status failed:", dbErr);
++    // Tunggu 15 detik sebelum mengecek ulang, dengan dukungan abort signal
++    await new Promise((resolve, reject) => {
++      const tm = setTimeout(resolve, 15000);
++      if (signal) {
++        signal.addEventListener('abort', () => {
++          clearTimeout(tm);
++          reject(new Error("Cancelled by user"));
++        });
+       }
+-    }
++    });
+   }
++  throw new Error("Timeout rendering video di GitHub Actions.");
++}
+ 
+-  addLog(jobId, `Semua file dalam batch selesai diproses.`, 'success');
+-  batchJobs[jobId].status = 'completed';
++function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, animationDuration }) {
++  const durationFrames = (Number(animationDuration) || 10) * 30;
++
++  const itemData = {
++    id: id,
++    fileName: fileName,
++    judul: "",
++    keywords: "",
++    deskripsi: "",
++    kategori: "",
++    durationInFrames: durationFrames,
++    animationDuration: Number(animationDuration) || 10,
++    htmlPreview: htmlContent,
++    loop: !!loop,
++    transparent: !!transparent,
++    aiModel: aiModel,
++    statusConvertTsx: 'queued', // status awal mengantre
++    statusRender4k: 'idle',
++    previewUrl: '',
++    outputPath4k: '',
++    createdAt: new Date().toISOString(),
++    logs: [{ message: "Masuk antrean...", type: "info", time: new Date().toLocaleTimeString('id-ID') }]
++  };
+ 
+-  // Kirim event selesai ke SSE clients
+-  batchJobs[jobId].clients.forEach(client => {
+-    client.write(`data: ${JSON.stringify({ type: 'done', message: 'Semua proses selesai' })}\n\n`);
+-    client.end();
+-  });
+-  batchJobs[jobId].clients = [];
++  saveOrUpdateItem(itemData);
++
++  // Daftarkan ke memori logs
++  taskLogs[id] = [...itemData.logs];
++
++  // Masukkan ke antrean
++  taskQueue.push(id);
++
++  // Picu eksekusi antrean
++  processQueue();
++  
++  return id;
++}
++
++function processQueue() {
++  console.log(`[Queue] Checking queue... Active: ${activeTasks.size}/${MAX_CONCURRENT_TASKS}, Queue length: ${taskQueue.length}`);
++  
++  while (activeTasks.size < MAX_CONCURRENT_TASKS && taskQueue.length > 0) {
++    const nextItemId = taskQueue.shift();
++    activeTasks.add(nextItemId);
++    
++    console.log(`[Queue] Starting task: ${nextItemId}`);
++    
++    // Jalankan secara asinkron di latar belakang
++    executeSingleTask(nextItemId).catch(err => {
++      console.error(`[Queue] Fatal error executing task ${nextItemId}:`, err);
++    });
++  }
+ }
+ 
+ // POST: Trigger GitHub rendering dispatch (workflow_dispatch)
+@@ -1891,23 +2125,159 @@ app.post("/api/process-html-batch", (req, res) => {
+     return res.status(400).json({ error: "Data batch file tidak valid atau kosong" });
+   }
+ 
+-  const jobId = 'job_' + Date.now();
+-  batchJobs[jobId] = {
+-    logs: [],
+-    clients: [],
+-    status: 'running'
+-  };
++  const enqueuedIds = [];
++  for (const file of files) {
++    const baseName = path.basename(file.name, '.html');
++    const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
++    
++    enqueueTask({
++      id: sanitizedId,
++      fileName: file.name,
++      htmlContent: file.content,
++      loop,
++      transparent,
++      aiModel,
++      animationDuration
++    });
++    enqueuedIds.push(sanitizedId);
++  }
+ 
+-  // Kirim respons langsung agar UI bisa langsung menginisiasi SSE stream
+-  res.json({ jobId });
++  res.json({ success: true, ids: enqueuedIds });
++});
++
++// POST: Generate dari paste kode HTML langsung
++app.post("/api/paste-html", (req, res) => {
++  const { id, htmlContent, loop, transparent, aiModel, animationDuration } = req.body;
++  if (!htmlContent || !htmlContent.trim()) {
++    return res.status(400).json({ error: "Konten HTML kosong" });
++  }
+ 
+-  // Jalankan background job secara asinkron
+-  runBatchJob(jobId, files, loop, transparent, aiModel, animationDuration).catch(err => {
+-    console.error(`Eror fatal saat menjalankan batch ${jobId}:`, err);
++  // Generate kustom ID jika tidak diisi
++  let targetId = id ? id.trim() : "";
++  if (!targetId) {
++    targetId = "paste_" + Math.random().toString(36).substring(2, 10);
++  }
++  const sanitizedId = targetId.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
++
++  enqueueTask({
++    id: sanitizedId,
++    fileName: sanitizedId + ".html",
++    htmlContent,
++    loop,
++    transparent,
++    aiModel,
++    animationDuration
++  });
++
++  res.json({ success: true, id: sanitizedId });
++});
++
++// POST: Batalkan task pemrosesan
++app.post("/api/cancel-task/:id", (req, res) => {
++  const { id } = req.params;
++  
++  // 1. Cek di database
++  const dbPath = path.join(__dirname, "saved-items.json");
++  let items = [];
++  try {
++    const data = fs.readFileSync(dbPath, "utf-8");
++    items = JSON.parse(data);
++  } catch (e) {
++    return res.status(500).json({ error: "Gagal membaca database" });
++  }
++
++  const item = items.find(i => i.id === id);
++  if (!item) {
++    return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
++  }
++
++  // Cek apakah item masih dalam status yang bisa dibatalkan
++  if (item.statusConvertTsx !== 'queued' && item.statusConvertTsx !== 'processing-tsx' && item.statusConvertTsx !== 'processing-preview') {
++    return res.status(400).json({ error: "Task tidak sedang berjalan atau mengantre" });
++  }
++
++  // 2. Jika di antrean pending
++  const queueIndex = taskQueue.indexOf(id);
++  if (queueIndex !== -1) {
++    taskQueue.splice(queueIndex, 1);
++    addTaskLog(id, "Dibatalkan saat berada di antrean pending.", "warning");
++    item.statusConvertTsx = 'cancelled';
++    saveOrUpdateItem(item);
++    return res.json({ success: true, message: "Task antrean berhasil dibatalkan" });
++  }
++
++  // 3. Jika sedang diproses secara aktif
++  if (activeTasks.has(id)) {
++    if (abortControllers[id]) {
++      abortControllers[id].abort(); // Picu abort signal
++      addTaskLog(id, "Meminta pembatalan proses...", "warning");
++      // executeSingleTask catch block akan mengurus perubahan status ke cancelled dan trigger processQueue
++      return res.json({ success: true, message: "Proses task sedang dibatalkan" });
++    }
++  }
++
++  // Fallback pengaman jika status gantung di DB
++  item.statusConvertTsx = 'cancelled';
++  saveOrUpdateItem(item);
++  res.json({ success: true, message: "Status task direset ke cancelled" });
++});
++
++// GET: Stream SSE log per task/item
++app.get("/api/task-logs/:id", (req, res) => {
++  const { id } = req.params;
++
++  res.setHeader('Content-Type', 'text/event-stream');
++  res.setHeader('Cache-Control', 'no-cache');
++  res.setHeader('Connection', 'keep-alive');
++  res.flushHeaders();
++
++  // Kirim log-log yang sudah ada di memori atau DB
++  let existingLogs = taskLogs[id] || [];
++  if (existingLogs.length === 0) {
++    try {
++      const dbPath = path.join(__dirname, "saved-items.json");
++      const data = fs.readFileSync(dbPath, "utf-8");
++      const items = JSON.parse(data);
++      const item = items.find(i => i.id === id);
++      if (item && item.logs) {
++        existingLogs = item.logs;
++        taskLogs[id] = [...item.logs];
++      }
++    } catch (e) {
++      console.error("Gagal mengambil histori log dari DB:", e);
++    }
++  }
++
++  existingLogs.forEach(log => {
++    res.write(`data: ${JSON.stringify(log)}\n\n`);
++  });
++
++  // Cek status pengerjaan saat ini. Jika sudah selesai, tutup stream
++  try {
++    const dbPath = path.join(__dirname, "saved-items.json");
++    const data = fs.readFileSync(dbPath, "utf-8");
++    const items = JSON.parse(data);
++    const item = items.find(i => i.id === id);
++    if (item && (item.statusConvertTsx === 'success' || item.statusConvertTsx === 'failed' || item.statusConvertTsx === 'cancelled')) {
++      res.write(`data: ${JSON.stringify({ type: 'done', message: 'Task selesai' })}\n\n`);
++      res.end();
++      return;
++    }
++  } catch (e) {}
++
++  if (!taskSseClients[id]) {
++    taskSseClients[id] = [];
++  }
++  taskSseClients[id].push(res);
++
++  req.on('close', () => {
++    if (taskSseClients[id]) {
++      taskSseClients[id] = taskSseClients[id].filter(c => c !== res);
++    }
+   });
+ });
+ 
+-// GET: Hubungkan stream SSE untuk log batch
++// GET: Hubungkan stream SSE untuk log batch (backward compatibility)
+ app.get("/api/batch-logs/:jobId", (req, res) => {
+   const { jobId } = req.params;
+ 
+diff --git a/src/Dashboard.tsx b/src/Dashboard.tsx
+index 703c956..f3787ee 100644
+--- a/src/Dashboard.tsx
++++ b/src/Dashboard.tsx
+@@ -38,6 +38,26 @@ export const Dashboard: React.FC = () => {
+     }
+   };
+ 
++  // 2. Fungsi Refresh manual untuk memuat ulang saved-items dari server
++  const handleRefresh = async () => {
++    setLoading(true);
++    try {
++      const response = await axios.get("http://localhost:5000/api/saved-items");
++      const refreshed = response.data.map((item: any) => ({
++        ...item,
++        statusPreview: "idle"
++      }));
++      setResults(refreshed);
++    } catch (error) {
++      const globalObj = globalThis as any;
++      if (globalObj.console) {
++        globalObj.console.error("Gagal refresh data:", error);
++      }
++    } finally {
++      setLoading(false);
++    }
++  };
++
+   // 2. Fungsi Mengubah Parameter Langsung dari Ketikan User di Tabel
+   const handleInputChange = (index: number, field: keyof StockIdea, value: any) => {
+     const updatedResults = [...results];
+@@ -70,6 +90,18 @@ export const Dashboard: React.FC = () => {
+     }
+   };
+ 
++  const handleDelete = async (id: string, index: number) => {
++    try {
++      const encodedId = encodeURIComponent(id);
++      await axios.delete(`http://localhost:5000/api/delete-item/${encodedId}`);
++      const updated = [...results];
++      updated.splice(index, 1);
++      setResults(updated);
++    } catch (error) {
++      console.error("Delete failed", error);
++    }
++  };
++
+   // Fungsi Salin Teks ke Clipboard
+   const copyToClipboard = (text: string) => {
+     const globalObj = globalThis as any;
+@@ -114,6 +146,29 @@ export const Dashboard: React.FC = () => {
+       ) : (
+         <div style={{ width: "100%", margin: "0 auto" }}>
+           <button onClick={() => setResults([])} style={{ background: "none", border: "none", color: "#38bdf8", cursor: "pointer", marginBottom: "20px", fontWeight: "bold" }}>← Cari Kata Kunci Lain</button>
++          {/* Refresh dan Export buttons */}
++          <div style={{ display: "flex", gap: "12px", marginBottom: "10px" }}>
++            <button onClick={handleRefresh} disabled={loading} style={{ backgroundColor: "#2563eb", color: "#f3f4f6", padding: "6px 12px", borderRadius: "6px", border: "none", cursor: loading ? "not-allowed" : "pointer" }}>
++              {loading ? "Menyegarkan..." : "Refresh Data"}
++            </button>
++            <button onClick={async () => {
++              try {
++                const res = await axios.get("http://localhost:5000/api/export-keywords", { responseType: "blob" });
++                const url = window.URL.createObjectURL(new Blob([res.data]));
++                const link = document.createElement("a");
++                link.href = url;
++                link.setAttribute("download", "keywords.csv");
++                document.body.appendChild(link);
++                link.click();
++                link.remove();
++                window.URL.revokeObjectURL(url);
++              } catch (e) {
++                console.error("Export CSV gagal", e);
++              }
++            }} style={{ backgroundColor: "#16a34a", color: "#f3f4f6", padding: "6px 12px", borderRadius: "6px", border: "none", cursor: "pointer" }}>
++              Export CSV
++            </button>
++          </div>
+           <h2 style={{ fontSize: "20px", marginBottom: "20px" }}>Pusat Kendali Hasil Analisis Kompetitor & AI Code: <span style={{ color: "#38bdf8" }}>"{keyword}"</span></h2>
+           
+           <table style={{ width: "100%", borderCollapse: "collapse", backgroundColor: "#111827", borderRadius: "12px", overflow: "hidden", fontSize: "13px", border: "1px solid #1e293b" }}>
+@@ -201,6 +256,13 @@ export const Dashboard: React.FC = () => {
+                     >
+                       {item.statusPreview === "processing" ? "Deploy..." : item.statusPreview === "success" ? "Cetak Lagi" : "Generate"}
+                     </button>
++                    <button
++                      type="button"
++                      onClick={(e) => { e.stopPropagation(); handleDelete(item.id, index); }}
++                      style={{ marginTop: "8px", backgroundColor: "#ef4444", color: "#f3f4f6", padding: "6px 12px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "12px", width: "100%" }}
++                    >
++                      Delete
++                    </button>
+                   </td>
+                   
+                   {/* 7. Kolom Status */}

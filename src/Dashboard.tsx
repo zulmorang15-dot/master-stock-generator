@@ -38,6 +38,26 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  // 2. Fungsi Refresh manual untuk memuat ulang saved-items dari server
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.get("http://localhost:5000/api/saved-items");
+      const refreshed = response.data.map((item: any) => ({
+        ...item,
+        statusPreview: "idle"
+      }));
+      setResults(refreshed);
+    } catch (error) {
+      const globalObj = globalThis as any;
+      if (globalObj.console) {
+        globalObj.console.error("Gagal refresh data:", error);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 2. Fungsi Mengubah Parameter Langsung dari Ketikan User di Tabel
   const handleInputChange = (index: number, field: keyof StockIdea, value: any) => {
     const updatedResults = [...results];
@@ -67,6 +87,18 @@ export const Dashboard: React.FC = () => {
       const finalUpdate = [...results];
       finalUpdate[index].statusPreview = "failed";
       setResults(finalUpdate);
+    }
+  };
+
+  const handleDelete = async (id: string, index: number) => {
+    try {
+      const encodedId = encodeURIComponent(id);
+      await axios.delete(`http://localhost:5000/api/delete-item/${encodedId}`);
+      const updated = [...results];
+      updated.splice(index, 1);
+      setResults(updated);
+    } catch (error) {
+      console.error("Delete failed", error);
     }
   };
 
@@ -114,6 +146,29 @@ export const Dashboard: React.FC = () => {
       ) : (
         <div style={{ width: "100%", margin: "0 auto" }}>
           <button onClick={() => setResults([])} style={{ background: "none", border: "none", color: "#38bdf8", cursor: "pointer", marginBottom: "20px", fontWeight: "bold" }}>← Cari Kata Kunci Lain</button>
+          {/* Refresh dan Export buttons */}
+          <div style={{ display: "flex", gap: "12px", marginBottom: "10px" }}>
+            <button onClick={handleRefresh} disabled={loading} style={{ backgroundColor: "#2563eb", color: "#f3f4f6", padding: "6px 12px", borderRadius: "6px", border: "none", cursor: loading ? "not-allowed" : "pointer" }}>
+              {loading ? "Menyegarkan..." : "Refresh Data"}
+            </button>
+            <button onClick={async () => {
+              try {
+                const res = await axios.get("http://localhost:5000/api/export-keywords", { responseType: "blob" });
+                const url = window.URL.createObjectURL(new Blob([res.data]));
+                const link = document.createElement("a");
+                link.href = url;
+                link.setAttribute("download", "keywords.csv");
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                window.URL.revokeObjectURL(url);
+              } catch (e) {
+                console.error("Export CSV gagal", e);
+              }
+            }} style={{ backgroundColor: "#16a34a", color: "#f3f4f6", padding: "6px 12px", borderRadius: "6px", border: "none", cursor: "pointer" }}>
+              Export CSV
+            </button>
+          </div>
           <h2 style={{ fontSize: "20px", marginBottom: "20px" }}>Pusat Kendali Hasil Analisis Kompetitor & AI Code: <span style={{ color: "#38bdf8" }}>"{keyword}"</span></h2>
           
           <table style={{ width: "100%", borderCollapse: "collapse", backgroundColor: "#111827", borderRadius: "12px", overflow: "hidden", fontSize: "13px", border: "1px solid #1e293b" }}>
@@ -200,6 +255,13 @@ export const Dashboard: React.FC = () => {
                       style={{ backgroundColor: item.statusPreview === "success" ? "#4b5563" : "#38bdf8", color: item.statusPreview === "success" ? "white" : "#0b0f19", padding: "8px 12px", borderRadius: "4px", border: "none", cursor: item.statusPreview === "processing" ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: "bold", width: "100%" }}
                     >
                       {item.statusPreview === "processing" ? "Deploy..." : item.statusPreview === "success" ? "Cetak Lagi" : "Generate"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleDelete(item.id, index); }}
+                      style={{ marginTop: "8px", backgroundColor: "#ef4444", color: "#f3f4f6", padding: "6px 12px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "12px", width: "100%" }}
+                    >
+                      Delete
                     </button>
                   </td>
                   

@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard - Stock Generator</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0f19; color: #f3f4f6; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    function Dashboard() {
+      const [keyword, setKeyword] = useState("");
+      const [results, setResults] = useState([]);
+      const [loading, setLoading] = useState(false);
+      const [showGuide, setShowGuide] = useState(false);
+      const [sidebarTab, setSidebarTab] = useState("guide");
+      const [keywordSearch, setKeywordSearch] = useState("");
+      const [copiedBadge, setCopiedBadge] = useState(null);
+      const [activePreviewItem, setActivePreviewItem] = useState(null);
+      const [savedItems, setSavedItems] = useState([]);
+
+      const loadSavedItems = async () => {
+        try {
+          const response = await axios.get("http://localhost:5000/api/saved-items");
+          setSavedItems(response.data);
+        } catch (error) {
+          console.error("Gagal memuat item tersimpan:", error);
+        }
+      };
+
+      React.useEffect(() => {
+        loadSavedItems();
+      }, []);
+
+      const handleSearch = async () => {
+        if (!keyword) return;
+        setLoading(true);
+        try {
+          const response = await axios.post("http://localhost:5000/api/generate", { keyword });
+          const formatted = response.data.map((item) => ({
+            ...item,
+            promptHTML: "",
+            htmlPreview: "",
+            statusHtmlPreview: "idle",
+            statusConvertTsx: "idle",
+            statusRender4k: "idle",
+            statusSave: "idle",
+            previewUrl: "",
+            outputPath4k: ""
+          }));
+          setResults(formatted);
+        } catch (error) {
+          console.error("Gagal terhubung ke backend:", error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handleInputChange = (index, field, value, isSavedSection = false) => {
+        if (isSavedSection) {
+          const updated = [...savedItems];
+          updated[index] = { ...updated[index], [field]: value };
+          setSavedItems(updated);
+        } else {
+          const updatedResults = [...results];
+          updatedResults[index] = { ...updatedResults[index], [field]: value };
+          setResults(updatedResults);
+        }
+      };
+
+      const handleHtmlUpload = (index, file, isSavedSection = false) => {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target.result;
+          if (isSavedSection) {
+            const updated = [...savedItems];
+            updated[index].htmlPreview = content;
+            updated[index].statusHtmlPreview = "success";
+            setSavedItems(updated);
+          } else {
+            const updated = [...results];
+            updated[index].htmlPreview = content;
+            updated[index].statusHtmlPreview = "success";
+            setResults(updated);
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      const startPolling = (itemId, renderType, isSavedSection = false) => {
+        const interval = setInterval(async () => {
+          try {
+            const response = await axios.get(`http://localhost:5000/api/check-render-status/${itemId}/${renderType}`);
+            const data = response.data;
+
+            const setList = isSavedSection ? setSavedItems : setResults;
+
+            if (data.status === "success") {
+              clearInterval(interval);
+              setList(prevList => {
+                const idx = prevList.findIndex(item => item.id === itemId);
+                if (idx === -1) return prevList;
+                const updated = [...prevList];
+                if (renderType === "preview") {
+                  updated[idx] = {
+                    ...updated[idx],
+                    previewUrl: data.url,
+                    statusConvertTsx: "success"
+                  };
+                } else {
+                  updated[idx] = {
+                    ...updated[idx],
+                    outputPath4k: data.url,
+                    statusRender4k: "success"
+                  };
+                  setTimeout(() => {
+                    alert(`Render 4K Selesai!\nFile tersimpan di: ${data.localPath}`);
+                  }, 100);
+                }
+                return updated;
+              });
+            } else if (data.status === "failed") {
+              clearInterval(interval);
+              setList(prevList => {
+                const idx = prevList.findIndex(item => item.id === itemId);
+                if (idx === -1) return prevList;
+                const updated = [...prevList];
+                if (renderType === "preview") {
+                  updated[idx] = { ...updated[idx], statusConvertTsx: "failed" };
+                } else {
+                  updated[idx] = { ...updated[idx], statusRender4k: "failed" };
+                }
+                return updated;
+              });
+              setTimeout(() => {
+                alert(`Render ${renderType} gagal: ${data.error}`);
+              }, 100);
+            }
+          } catch (error) {
+            console.error("Error polling render status:", error);
+          }
+        }, 5000);
+      };
+
+      const handleGenerate = async (index, isSavedSection = false) => {
+        const list = isSavedSection ? savedItems : results;
+        const setList = isSavedSection ? setSavedItems : setResults;
+        const item = list[index];
+        
+        const updated = [...list];
+        updated[index].statusConvertTsx = "processing-tsx"; // converting HTML -> TSX
+        setList(updated);
+
+        try {
+          // 1. Convert HTML to TSX
+          const convertResponse = await axios.post("http://localhost:5000/api/convert-html-to-tsx", { 
+            item
+          });
+          
+          if (!convertResponse.data || !convertResponse.data.success) {
+            throw new Error("Gagal mengonversi HTML ke TSX");
+          }
+          
+          const tsxCode = convertResponse.data.promptCode;
+          
+          // Update status to polling preview
+          const nextUpdate = [...list];
+          nextUpdate[index].promptCode = tsxCode;
+          nextUpdate[index].statusConvertTsx = "processing-preview";
+          setList(nextUpdate);
+
+          // 2. Trigger GitHub Actions Render
+          const triggerResponse = await axios.post("http://localhost:5000/api/trigger-github-render", {
+            item: { ...item, promptCode: tsxCode },
+            renderType: "preview"
+          });
+          
+          if (!triggerResponse.data || !triggerResponse.data.success) {
+            throw new Error("Gagal memicu render GitHub");
+          }
+          
+          // 3. Start polling for preview
+          startPolling(item.id, "preview", isSavedSection);
+          
+        } catch (error) {
+          console.error("Gagal memproses render:", error);
+          const finalUpdate = [...list];
+          finalUpdate[index].statusConvertTsx = "failed";
+          setList(finalUpdate);
+          alert(`Gagal memproses generate: ${error.message}`);
+        }
+      };
+
+      const handleRender4K = async (index, isSavedSection = false) => {
+        const list = isSavedSection ? savedItems : results;
+        const setList = isSavedSection ? setSavedItems : setResults;
+        const item = list[index];
+
+        const updated = [...list];
+        updated[index].statusRender4k = "processing";
+        setList(updated);
+
+        try {
+          const triggerResponse = await axios.post("http://localhost:5000/api/trigger-github-render", {
+            item,
+            renderType: "4k"
+          });
+          
+          if (!triggerResponse.data || !triggerResponse.data.success) {
+            throw new Error("Gagal memicu render 4K di GitHub");
+          }
+          
+          // Start polling for 4K render
+          startPolling(item.id, "4k", isSavedSection);
+        } catch (error) {
+          console.error("Gagal render 4K:", error);
+          const finalUpdate = [...list];
+          finalUpdate[index].statusRender4k = "failed";
+          setList(finalUpdate);
+          alert(`Gagal memproses render 4K: ${error.message}`);
+        }
+      };
+
+      const handleSaveItem = async (index, isSavedSection = false) => {
+        const list = isSavedSection ? savedItems : results;
+        const setList = isSavedSection ? setSavedItems : setResults;
+
+        const updated = [...list];
+        updated[index].statusSave = "processing";
+        setList(updated);
+
+        try {
+          const response = await axios.post("http://localhost:5000/api/save-item", {
+            item: list[index]
+          });
+          
+          const finalUpdate = [...list];
+          finalUpdate[index].statusSave = "success";
+          setList(finalUpdate);
+          
+          loadSavedItems();
+          alert("Item berhasil disimpan ke database lokal!");
+        } catch (error) {
+          console.error("Gagal menyimpan item:", error);
+          const finalUpdate = [...list];
+          finalUpdate[index].statusSave = "failed";
+          setList(finalUpdate);
+        }
+      };
+
+      const handleDeleteItem = async (id) => {
+        if (!confirm("Apakah Anda yakin ingin menghapus item ini dari database lokal?")) return;
+        try {
+          await axios.delete(`http://localhost:5000/api/delete-item/${id}`);
+          loadSavedItems();
+        } catch (error) {
+          console.error("Gagal menghapus item:", error);
+        }
+      };
+
+      const copyToClipboard = (text) => {
+        if (navigator && navigator.clipboard) {
+          navigator.clipboard.writeText(text);
+          alert("Teks berhasil disalin!");
+        }
+      };
+
+      const copySingleBadge = (tag) => {
+        if (navigator && navigator.clipboard) {
+          navigator.clipboard.writeText(tag.trim());
+          setCopiedBadge(tag.trim());
+          setTimeout(() => setCopiedBadge(null), 2000);
+        }
+      };
+
+      const openSidebar = (tab) => {
+        setSidebarTab(tab);
+        setShowGuide(true);
+      };
+
+      return (
+        <div style={{ minHeight: "100vh", backgroundColor: "#0b0f19", color: "#f3f4f6", padding: "30px", fontFamily: "sans-serif" }}>
+          {results.length === 0 ? (
+            <div style={{ maxWidth: "600px", margin: "100px auto", textAlign: "center" }}>
+              <h1 style={{ fontSize: "32px", marginBottom: "10px", background: "linear-gradient(to right, #38bdf8, #a855f7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: "bold" }}>
+                Adobe Stock Live-Scrape & Code Generator
+              </h1>
+              <p style={{ color: "#9ca3af", marginBottom: "30px", fontSize: "14px" }}>
+                Mata-matai kompetitor teratas di USA secara real-time dan edit langsung kodenya sebelum dirender di Cloud.
+              </p>
+              
+              <div style={{ backgroundColor: "#161f32", padding: "20px", borderRadius: "16px", border: "1px solid #1e293b" }}>
+                <textarea
+                  style={{ width: "100%", backgroundColor: "transparent", border: "none", outline: "none", color: "white", fontSize: "16px", resize: "none" }}
+                  placeholder="Masukkan kata kunci... (Contoh: Futuristic Digital Cyber Background)"
+                  rows={3}
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                />
+                <div style={{ textAlign: "right", marginTop: "15px", borderTop: "1px solid #1e293b", paddingTop: "10px" }}>
+                  <button
+                    onClick={handleSearch}
+                    disabled={loading}
+                    style={{ backgroundColor: "#38bdf8", color: "#0b0f19", padding: "10px 24px", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", opacity: loading ? 0.5 : 1 }}
+                  >
+                    {loading ? "Menyisir Data & Meracik Kode..." : "Cari Ide & Optimasi ATM"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ width: "100%", margin: "0 auto" }}>
+              <button onClick={() => setResults([])} style={{ background: "none", border: "none", color: "#38bdf8", cursor: "pointer", marginBottom: "20px", fontWeight: "bold" }}>← Cari Kata Kunci Lain</button>
+              <h2 style={{ fontSize: "20px", marginBottom: "20px" }}>Pusat Kendali Hasil Analisis Kompetitor & AI Code: <span style={{ color: "#38bdf8" }}>"{keyword}"</span></h2>
+              
+              <table style={{ width: "100%", borderCollapse: "collapse", backgroundColor: "#111827", borderRadius: "12px", overflow: "hidden", fontSize: "13px", border: "1px solid #1e293b" }}>
+                <thead>
+                  <tr style={{ backgroundColor: "#1f2937", color: "#e5e7eb", textAlign: "left" }}>
+                    <th style={{ padding: "12px", width: "40px" }}>No</th>
+                    <th style={{ padding: "12px", width: "220px" }}>Deskripsi Video (Bisa Diedit)</th>
+                    <th style={{ padding: "12px", width: "200px" }}>Rekomendasi Judul (Bisa Diedit)</th>
+                    <th style={{ padding: "12px", width: "230px" }}>Keywords (Tagging)</th>
+                    <th style={{ padding: "12px", width: "110px" }}>Kategori / Durasi</th>
+                    <th style={{ padding: "12px", width: "250px" }}>Upload HTML</th>
+                    <th style={{ padding: "12px", width: "150px" }}>Aksi</th>
+                    <th style={{ padding: "12px", width: "140px" }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((item, index) => (
+                    <React.Fragment key={item.id}>
+                      <tr style={{ borderBottom: "1px solid #1e293b", verticalAlign: "top" }}>
+                        <td style={{ padding: "12px", color: "#9ca3af" }}>{index + 1}</td>
+                        
+                        <td style={{ padding: "12px" }}>
+                          <textarea
+                            style={{ width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "12px", resize: "vertical" }}
+                            rows={4}
+                            value={item.deskripsi}
+                            onChange={(e) => handleInputChange(index, "deskripsi", e.target.value, false)}
+                          />
+                          <button onClick={() => copyToClipboard(item.deskripsi)} style={{ background: "none", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "11px", marginTop: "5px", padding: 0 }}>📋 Salin</button>
+                        </td>
+                        
+                        <td style={{ padding: "12px" }}>
+                          <input
+                            type="text"
+                            style={{ width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "12px" }}
+                            value={item.judul}
+                            onChange={(e) => handleInputChange(index, "judul", e.target.value, false)}
+                          />
+                          <button onClick={() => copyToClipboard(item.judul)} style={{ background: "none", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "11px", marginTop: "5px", padding: 0 }}>📋 Salin</button>
+                        </td>
+                        
+                        <td style={{ padding: "12px" }}>
+                          <textarea
+                            style={{ width: "100%", backgroundColor: "#1f2937", color: "#9ca3af", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "11px", resize: "vertical" }}
+                            rows={4}
+                            value={item.keywords}
+                            onChange={(e) => handleInputChange(index, "keywords", e.target.value, false)}
+                          />
+                          <button onClick={() => copyToClipboard(item.keywords)} style={{ background: "none", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "11px", marginTop: "5px", padding: 0 }}>📋 Salin Semua</button>
+                        </td>
+                        
+                        <td style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                          <span style={{ backgroundColor: "#1e1b4b", color: "#818cf8", padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", textAlign: "center" }}>{item.kategori}</span>
+                          <div style={{ fontSize: "11px", color: "#9ca3af" }}>
+                            Frames:
+                            <input 
+                              type="number" 
+                              style={{ width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "4px", marginTop: "2px" }}
+                              value={item.durationInFrames}
+                              onChange={(e) => handleInputChange(index, "durationInFrames", Number(e.target.value), false)}
+                            />
+                          </div>
+                        </td>
+                        
+                        <td style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                          <input
+                            type="file"
+                            accept=".html"
+                            style={{ display: "none" }}
+                            id={`upload-html-${item.id}`}
+                            onChange={(e) => handleHtmlUpload(index, e.target.files[0], false)}
+                          />
+                          <label
+                            htmlFor={`upload-html-${item.id}`}
+                            style={{
+                              backgroundColor: item.htmlPreview ? "rgba(16, 185, 129, 0.15)" : "rgba(56, 189, 248, 0.1)",
+                              color: item.htmlPreview ? "#10b981" : "#38bdf8",
+                              border: item.htmlPreview ? "1px solid #10b981" : "1px solid rgba(56, 189, 248, 0.4)",
+                              padding: "8px 12px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              display: "inline-block",
+                              fontSize: "12px",
+                              fontWeight: "bold",
+                              textAlign: "center",
+                              transition: "all 0.2s"
+                            }}
+                          >
+                            {item.htmlPreview ? "✓ HTML Loaded" : "📂 Upload HTML"}
+                          </label>
+                          {item.htmlPreview && (
+                            <div style={{ fontSize: "11px", color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              Size: {item.htmlPreview.length} chars
+                            </div>
+                          )}
+                        </td>
+                        
+                        <td style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <button
+                            onClick={() => handleGenerate(index, false)}
+                            disabled={!item.htmlPreview || item.statusConvertTsx === "processing-tsx" || item.statusConvertTsx === "processing-preview"}
+                            style={{
+                              backgroundColor: (!item.htmlPreview) ? "#374151" : (item.statusConvertTsx === "success" ? "#10b981" : "#38bdf8"),
+                              color: (!item.htmlPreview) ? "#9ca3af" : "#0b0f19",
+                              padding: "6px 10px",
+                              borderRadius: "4px",
+                              border: "none",
+                              cursor: (!item.htmlPreview) ? "not-allowed" : "pointer",
+                              fontSize: "11px",
+                              fontWeight: "bold",
+                              opacity: (!item.htmlPreview) ? 0.6 : 1
+                            }}
+                          >
+                            {item.statusConvertTsx === "processing-tsx" ? "⏳ Converting..." :
+                             item.statusConvertTsx === "processing-preview" ? "⏳ Rendering..." :
+                             item.statusConvertTsx === "success" ? "🔄 Regenerate" : "✨ Generate"}
+                          </button>
+                                  
+                          {(item.htmlPreview || item.previewUrl) && (
+                            <button
+                              onClick={() => setActivePreviewItem(item)}
+                              style={{ backgroundColor: "#06b6d4", color: "white", padding: "6px 10px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                            >
+                              👁️ Lihat Preview
+                            </button>
+                          )}
+
+                          {item.statusConvertTsx === "success" && (
+                            <button
+                              onClick={() => handleRender4K(index, false)}
+                              disabled={item.statusRender4k === "processing"}
+                              style={{ backgroundColor: "#ef4444", color: "white", padding: "6px 10px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                            >
+                              {item.statusRender4k === "processing" ? "⏳ Render 4K..." : "🚀 Render 4K"}
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => handleSaveItem(index, false)}
+                            disabled={item.statusSave === "processing"}
+                            style={{
+                              backgroundColor: item.statusSave === "success" ? "#047857" : "#4b5563",
+                              color: "white",
+                              padding: "6px 10px",
+                              borderRadius: "4px",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: "11px",
+                              fontWeight: "bold"
+                            }}
+                          >
+                            {item.statusSave === "processing" ? "⏳ Saving..." : item.statusSave === "success" ? "✓ Tersimpan" : "💾 Simpan"}
+                          </button>
+                        </td>
+                        
+                        <td style={{ padding: "12px", fontSize: "11px" }}>
+                          {item.statusHtmlPreview !== "success" && <span style={{ color: "#6b7280" }}>Menunggu HTML</span>}
+                          {item.statusHtmlPreview === "success" && item.statusConvertTsx !== "success" && item.statusConvertTsx !== "processing-tsx" && item.statusConvertTsx !== "processing-preview" && <span style={{ color: "#38bdf8" }}>HTML Siap, Tekan Generate</span>}
+                          {item.statusConvertTsx === "processing-tsx" && <span style={{ color: "#f59e0b", fontWeight: "bold" }}>{"⏳ Convert HTML -> TSX..."}</span>}
+                          {item.statusConvertTsx === "processing-preview" && <span style={{ color: "#f59e0b", fontWeight: "bold" }}>⏳ Render Preview MP4...</span>}
+                          {item.statusConvertTsx === "success" && <span style={{ color: "#34d399", fontWeight: "bold" }}>✅ Preview Ready</span>}
+                          {item.statusConvertTsx === "failed" && <span style={{ color: "#ef4444" }}>❌ Gagal Proses</span>}
+                          {item.statusRender4k === "processing" && <span style={{ color: "#f59e0b", fontWeight: "bold" }}>⏳ Rendering 4K ProRes...</span>}
+                          {item.statusRender4k === "success" && <span style={{ color: "#34d399", fontWeight: "bold" }}>✅ 4K Rendered</span>}
+                          {item.statusRender4k === "failed" && <span style={{ color: "#ef4444" }}>❌ Gagal Render 4K</span>}
+                          {item.previewUrl && (
+                            <div style={{ marginTop: "6px" }}>
+                              <a href={`http://localhost:5000${item.previewUrl}`} target="_blank" rel="noopener noreferrer" style={{ color: "#38bdf8", textDecoration: "underline", fontSize: "11px", fontWeight: "bold" }}>
+                                📥 Download Preview
+                              </a>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Saved Compositions List */}
+          <div style={{ marginTop: "40px", borderTop: "1px solid rgba(56, 189, 248, 0.2)", paddingTop: "30px" }}>
+            <h2 style={{ fontSize: "24px", marginBottom: "20px", background: "linear-gradient(to right, #10b981, #38bdf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: "bold" }}>
+              📂 Saved Compositions & Rendered Videos
+            </h2>
+            
+            {savedItems.length === 0 ? (
+              <div style={{ backgroundColor: "#161f32", padding: "20px", borderRadius: "12px", textAlign: "center", color: "#9ca3af", border: "1px solid #1e293b" }}>
+                Belum ada item yang disimpan. Jalankan generator atau upload HTML, lalu klik "Simpan" untuk memantau progress rendering 4K Anda di sini.
+              </div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", backgroundColor: "#111827", borderRadius: "12px", overflow: "hidden", fontSize: "13px", border: "1px solid #1e293b" }}>
+                <thead>
+                  <tr style={{ backgroundColor: "#1f2937", color: "#e5e7eb", textAlign: "left" }}>
+                    <th style={{ padding: "12px", width: "40px" }}>No</th>
+                    <th style={{ padding: "12px", width: "220px" }}>Deskripsi</th>
+                    <th style={{ padding: "12px", width: "200px" }}>Judul</th>
+                    <th style={{ padding: "12px", width: "200px" }}>Keywords</th>
+                    <th style={{ padding: "12px", width: "120px" }}>Kategori / Durasi</th>
+                    <th style={{ padding: "12px", width: "220px" }}>HTML File</th>
+                    <th style={{ padding: "12px", width: "180px" }}>Aksi</th>
+                    <th style={{ padding: "12px", width: "120px" }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {savedItems.map((item, index) => (
+                    <tr key={item.id} style={{ borderBottom: "1px solid #1e293b", verticalAlign: "top" }}>
+                      <td style={{ padding: "12px", color: "#9ca3af" }}>{index + 1}</td>
+                      <td style={{ padding: "12px" }}>
+                        <textarea
+                          style={{ width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "12px" }}
+                          rows={3}
+                          value={item.deskripsi}
+                          onChange={(e) => handleInputChange(index, "deskripsi", e.target.value, true)}
+                        />
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <input
+                          type="text"
+                          style={{ width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "12px" }}
+                          value={item.judul}
+                          onChange={(e) => handleInputChange(index, "judul", e.target.value, true)}
+                        />
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <textarea
+                          style={{ width: "100%", backgroundColor: "#1f2937", color: "#9ca3af", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "11px" }}
+                          rows={3}
+                          value={item.keywords}
+                          onChange={(e) => handleInputChange(index, "keywords", e.target.value, true)}
+                        />
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <span style={{ backgroundColor: "#065f46", color: "#a7f3d0", padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold" }}>{item.kategori}</span>
+                        <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "8px" }}>
+                          Frames:
+                          <input 
+                            type="number" 
+                            style={{ width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "4px", marginTop: "2px" }}
+                            value={item.durationInFrames}
+                            onChange={(e) => handleInputChange(index, "durationInFrames", Number(e.target.value), true)}
+                          />
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <input
+                          type="file"
+                          accept=".html"
+                          style={{ display: "none" }}
+                          id={`upload-html-saved-${item.id}`}
+                          onChange={(e) => handleHtmlUpload(index, e.target.files[0], true)}
+                        />
+                        <label
+                          htmlFor={`upload-html-saved-${item.id}`}
+                          style={{
+                            backgroundColor: item.htmlPreview ? "rgba(16, 185, 129, 0.15)" : "rgba(56, 189, 248, 0.1)",
+                            color: item.htmlPreview ? "#10b981" : "#38bdf8",
+                            border: item.htmlPreview ? "1px solid #10b981" : "1px solid rgba(56, 189, 248, 0.4)",
+                            padding: "6px 10px",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            display: "inline-block",
+                            fontSize: "11px",
+                            fontWeight: "bold"
+                          }}
+                        >
+                          {item.htmlPreview ? "✓ HTML Loaded" : "📂 Upload HTML"}
+                        </label>
+                        {item.previewUrl && (
+                          <div style={{ marginTop: "10px" }}>
+                            <video src={item.previewUrl} style={{ width: "120px", borderRadius: "4px" }} muted playsInline />
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <button
+                          onClick={() => handleGenerate(index, true)}
+                          disabled={!item.htmlPreview || item.statusConvertTsx === "processing-tsx" || item.statusConvertTsx === "processing-preview"}
+                          style={{ backgroundColor: "#38bdf8", color: "#0b0f19", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                        >
+                          {item.statusConvertTsx === "processing-tsx" ? "⏳ Convert..." :
+                           item.statusConvertTsx === "processing-preview" ? "⏳ Rendering..." : "✨ Generate Preview"}
+                        </button>
+                        
+                        {(item.htmlPreview || item.previewUrl) && (
+                          <button
+                            onClick={() => setActivePreviewItem(item)}
+                            style={{ backgroundColor: "#06b6d4", color: "white", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                          >
+                            👁️ Preview
+                          </button>
+                        )}
+
+                        {item.statusConvertTsx === "success" && (
+                          <button
+                            onClick={() => handleRender4K(index, true)}
+                            disabled={item.statusRender4k === "processing"}
+                            style={{ backgroundColor: "#ef4444", color: "white", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                          >
+                            {item.statusRender4k === "processing" ? "⏳ Render 4K..." : "🚀 Render 4K"}
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleSaveItem(index, true)}
+                          style={{ backgroundColor: "#047857", color: "white", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                        >
+                          💾 Simpan Perubahan
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteItem(item.id)}
+                          style={{ backgroundColor: "#ef4444", color: "white", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" }}
+                        >
+                          🗑️ Hapus
+                        </button>
+                      </td>
+                      <td style={{ padding: "12px", fontSize: "11px" }}>
+                        {item.statusConvertTsx === "processing-tsx" && <span style={{ color: "#f59e0b" }}>Converting...</span>}
+                        {item.statusConvertTsx === "processing-preview" && <span style={{ color: "#f59e0b" }}>Rendering...</span>}
+                        {item.statusConvertTsx === "success" && <span style={{ color: "#34d399" }}>✅ Ready</span>}
+                        {item.statusRender4k === "processing" && <span style={{ color: "#f59e0b" }}>Rendering 4K...</span>}
+                        {item.statusRender4k === "success" && <span style={{ color: "#34d399" }}>✅ 4K Done</span>}
+                        {item.outputPath4k && <div style={{ fontSize: "10px", color: "#9ca3af", marginTop: "4px" }}>File: {item.outputPath4k.split(/[\\/]/).pop()}</div>}
+                        {item.previewUrl && (
+                          <div style={{ marginTop: "6px" }}>
+                            <a href={`http://localhost:5000${item.previewUrl}`} target="_blank" rel="noopener noreferrer" style={{ color: "#38bdf8", textDecoration: "underline", fontSize: "11px", fontWeight: "bold" }}>
+                              📥 Download Preview
+                            </a>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Floating/Sliding Guide Panel */}
+          {/* Floating/Sliding Sidebar Panel */}
+          <div style={{
+            position: "fixed",
+            top: 0,
+            right: showGuide ? 0 : "-480px",
+            width: "460px",
+            height: "100vh",
+            backgroundColor: "rgba(11, 15, 25, 0.97)",
+            backdropFilter: "blur(20px)",
+            borderLeft: "1px solid rgba(56, 189, 248, 0.25)",
+            boxShadow: showGuide ? "-15px 0 40px rgba(0, 0, 0, 0.8)" : "none",
+            transition: "right 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+            zIndex: 1000,
+            display: "flex",
+            flexDirection: "column",
+            color: "#f3f4f6"
+          }}>
+            {/* Sidebar Header */}
+            <div style={{ padding: "20px 24px 0", borderBottom: "1px solid rgba(56, 189, 248, 0.15)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <h3 style={{ fontSize: "16px", color: "#f3f4f6", fontWeight: "bold" }}>Stock Video Tools</h3>
+                <button onClick={() => setShowGuide(false)} style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: "22px", lineHeight: 1 }}>×</button>
+              </div>
+              {/* Tab Navigation */}
+              <div style={{ display: "flex", gap: "4px", marginBottom: "0" }}>
+                <button
+                  onClick={() => setSidebarTab("keywords")}
+                  style={{
+                    flex: 1, padding: "8px 12px", border: "none", borderRadius: "8px 8px 0 0",
+                    fontSize: "12px", fontWeight: "bold", cursor: "pointer", transition: "all 0.2s",
+                    backgroundColor: sidebarTab === "keywords" ? "rgba(16, 185, 129, 0.2)" : "transparent",
+                    color: sidebarTab === "keywords" ? "#10b981" : "#6b7280",
+                    borderBottom: sidebarTab === "keywords" ? "2px solid #10b981" : "2px solid transparent"
+                  }}
+                >📋 Menu Keyword</button>
+                <button
+                  onClick={() => setSidebarTab("guide")}
+                  style={{
+                    flex: 1, padding: "8px 12px", border: "none", borderRadius: "8px 8px 0 0",
+                    fontSize: "12px", fontWeight: "bold", cursor: "pointer", transition: "all 0.2s",
+                    backgroundColor: sidebarTab === "guide" ? "rgba(56, 189, 248, 0.15)" : "transparent",
+                    color: sidebarTab === "guide" ? "#38bdf8" : "#6b7280",
+                    borderBottom: sidebarTab === "guide" ? "2px solid #38bdf8" : "2px solid transparent"
+                  }}
+                >📖 SEO Guide</button>
+              </div>
+            </div>
+
+            {/* Tab Content */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
+
+              {/* ===== TAB: MENU KEYWORD ===== */}
+              {sidebarTab === "keywords" && (
+                <div>
+                  <p style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "14px", lineHeight: 1.5 }}>
+                    Klik badge keyword untuk menyalin satu keyword. Klik <strong style={{ color: "#10b981" }}>Salin Semua</strong> untuk menyalin seluruh daftar.
+                  </p>
+                  <div style={{ position: "relative", marginBottom: "16px" }}>
+                    <input
+                      type="text"
+                      placeholder="🔍 Cari judul atau keyword..."
+                      value={keywordSearch}
+                      onChange={(e) => setKeywordSearch(e.target.value)}
+                      style={{
+                        width: "100%", backgroundColor: "#161f32",
+                        border: "1px solid rgba(56, 189, 248, 0.3)", borderRadius: "8px",
+                        padding: "9px 12px", color: "#f3f4f6", fontSize: "12px", outline: "none"
+                      }}
+                    />
+                  </div>
+                  {savedItems.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "40px 20px", color: "#4b5563" }}>
+                      <div style={{ fontSize: "32px", marginBottom: "10px" }}>📭</div>
+                      <p style={{ fontSize: "13px" }}>Belum ada keyword tersimpan.</p>
+                      <p style={{ fontSize: "11px", marginTop: "6px" }}>Klik "Simpan" pada baris tabel untuk melihat keyword di sini.</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+                      {savedItems
+                        .filter(item =>
+                          keywordSearch === "" ||
+                          item.judul.toLowerCase().includes(keywordSearch.toLowerCase()) ||
+                          item.keywords.toLowerCase().includes(keywordSearch.toLowerCase())
+                        )
+                        .map((item, index) => (
+                          <div key={item.id} style={{
+                            backgroundColor: "rgba(17, 24, 39, 0.8)",
+                            border: "1px solid rgba(255, 255, 255, 0.07)",
+                            borderRadius: "10px", padding: "14px"
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "8px" }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ fontSize: "10px", color: "#6b7280", display: "block", marginBottom: "2px" }}>#{index + 1} · {item.kategori}</span>
+                                <strong style={{ fontSize: "12px", color: "#e5e7eb", display: "block", lineHeight: 1.3 }} title={item.judul}>{item.judul}</strong>
+                              </div>
+                              <button
+                                onClick={() => copyToClipboard(item.keywords)}
+                                style={{
+                                  backgroundColor: "rgba(16, 185, 129, 0.15)",
+                                  border: "1px solid rgba(16, 185, 129, 0.4)",
+                                  color: "#10b981", padding: "4px 10px", borderRadius: "6px",
+                                  fontSize: "10px", fontWeight: "bold", cursor: "pointer",
+                                  whiteSpace: "nowrap", flexShrink: 0
+                                }}
+                              >📋 Salin Semua</button>
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                              {item.keywords.split(",").map((tag, i) => (
+                                tag.trim() && (
+                                  <button
+                                    key={i}
+                                    onClick={() => copySingleBadge(tag)}
+                                    title={`Klik untuk salin: ${tag.trim()}`}
+                                    style={{
+                                      backgroundColor: copiedBadge === tag.trim() ? "rgba(16, 185, 129, 0.35)" : "rgba(56, 189, 248, 0.08)",
+                                      border: copiedBadge === tag.trim() ? "1px solid rgba(16, 185, 129, 0.7)" : "1px solid rgba(56, 189, 248, 0.2)",
+                                      color: copiedBadge === tag.trim() ? "#10b981" : "#93c5fd",
+                                      padding: "3px 8px", borderRadius: "20px", fontSize: "10px",
+                                      cursor: "pointer", transition: "all 0.2s",
+                                      fontWeight: copiedBadge === tag.trim() ? "bold" : "normal"
+                                    }}
+                                  >
+                                    {copiedBadge === tag.trim() ? "✓ " : ""}{tag.trim()}
+                                  </button>
+                                )
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      }
+                      {savedItems.filter(item =>
+                        keywordSearch === "" ||
+                        item.judul.toLowerCase().includes(keywordSearch.toLowerCase()) ||
+                        item.keywords.toLowerCase().includes(keywordSearch.toLowerCase())
+                      ).length === 0 && (
+                        <div style={{ textAlign: "center", padding: "30px", color: "#4b5563" }}>
+                          <p style={{ fontSize: "13px" }}>Tidak ada hasil untuk "{keywordSearch}"</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ===== TAB: SEO GUIDE ===== */}
+              {sidebarTab === "guide" && (
+                <div>
+                  <p style={{ fontSize: "13px", color: "#9ca3af", marginBottom: "18px", lineHeight: "1.5" }}>
+                    Pembeli di Adobe Stock mencari hasil visual, bukan istilah teknis kode. Konversikan istilah kode dan gunakan 3 Pilar Keyword.
+                  </p>
+                  <div style={{ backgroundColor: "rgba(30, 41, 59, 0.5)", border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", padding: "15px", marginBottom: "16px" }}>
+                    <h4 style={{ fontSize: "13px", color: "#a855f7", marginBottom: "10px", fontWeight: "bold" }}>🔄 Code → Visual Translation</h4>
+                    <table style={{ width: "100%", fontSize: "11px", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.1)", color: "#9ca3af", textAlign: "left" }}>
+                          <th style={{ padding: "4px" }}>Istilah Kode</th>
+                          <th style={{ padding: "4px" }}>Istilah Visual Stock</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}><td style={{ padding: "6px 4px", color: "#f87171" }}>Keyframes, Easing</td><td style={{ padding: "6px 4px", color: "#34d399", fontWeight: "bold" }}>smooth animation, fluid movement</td></tr>
+                        <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}><td style={{ padding: "6px 4px", color: "#f87171" }}>UI Components</td><td style={{ padding: "6px 4px", color: "#34d399", fontWeight: "bold" }}>web overlay, app interface template</td></tr>
+                        <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}><td style={{ padding: "6px 4px", color: "#f87171" }}>SVG Animation</td><td style={{ padding: "6px 4px", color: "#34d399", fontWeight: "bold" }}>shape morphing, vector motion</td></tr>
+                        <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}><td style={{ padding: "6px 4px", color: "#f87171" }}>Canvas Particle</td><td style={{ padding: "6px 4px", color: "#34d399", fontWeight: "bold" }}>abstract particles, tech overlay</td></tr>
+                        <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}><td style={{ padding: "6px 4px", color: "#f87171" }}>Looping Animation</td><td style={{ padding: "6px 4px", color: "#34d399", fontWeight: "bold" }}>seamless loop, infinite loop</td></tr>
+                        <tr style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }}><td style={{ padding: "6px 4px", color: "#f87171" }}>Math/Data logic</td><td style={{ padding: "6px 4px", color: "#34d399", fontWeight: "bold" }}>data visualization, animated infographics</td></tr>
+                        <tr><td style={{ padding: "6px 4px", color: "#f87171" }}>Web Interaction</td><td style={{ padding: "6px 4px", color: "#34d399", fontWeight: "bold" }}>interactive design concept, motion template</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ backgroundColor: "rgba(30, 41, 59, 0.5)", border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", padding: "15px" }}>
+                    <h4 style={{ fontSize: "13px", color: "#a855f7", marginBottom: "12px", fontWeight: "bold" }}>🧱 3-Pillar Keyword Strategy</h4>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "12px" }}>
+                      <div style={{ padding: "10px", backgroundColor: "rgba(56, 189, 248, 0.08)", borderRadius: "8px", borderLeft: "3px solid #38bdf8" }}>
+                        <strong style={{ color: "#38bdf8" }}>Pilar 1: What (Isi/Aksi)</strong>
+                        <p style={{ color: "#9ca3af", fontSize: "11px", marginTop: "4px" }}>Objek utama. Contoh: <code style={{ color: "#34d399" }}>mouse click, subscribe button, loading bar</code></p>
+                      </div>
+                      <div style={{ padding: "10px", backgroundColor: "rgba(168, 85, 247, 0.08)", borderRadius: "8px", borderLeft: "3px solid #a855f7" }}>
+                        <strong style={{ color: "#a855f7" }}>Pilar 2: Visual Style & Format</strong>
+                        <p style={{ color: "#9ca3af", fontSize: "11px", marginTop: "4px" }}>Estetika. Contoh: <code style={{ color: "#34d399" }}>minimalist, flat design, alpha channel, 4k</code></p>
+                      </div>
+                      <div style={{ padding: "10px", backgroundColor: "rgba(16, 185, 129, 0.08)", borderRadius: "8px", borderLeft: "3px solid #10b981" }}>
+                        <strong style={{ color: "#10b981" }}>Pilar 3: Conceptual/Context</strong>
+                        <p style={{ color: "#9ca3af", fontSize: "11px", marginTop: "4px" }}>Mengapa dibeli. Contoh: <code style={{ color: "#34d399" }}>website promo, social media asset</code></p>
+                      </div>
+                      <div style={{ padding: "8px 12px", backgroundColor: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "8px", fontSize: "11px" }}>
+                        ⭐ <strong>Pro-tip:</strong> 7-10 keyword pertama paling menentukan ranking. Taruh <code style={{ color: "#38bdf8" }}>alpha channel</code> di awal jika video transparan.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Toggle Buttons — top right */}
+          <div style={{ position: "fixed", top: "20px", right: "20px", zIndex: 999, display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => openSidebar("keywords")}
+              style={{
+                backgroundColor: "rgba(16, 185, 129, 0.15)",
+                backdropFilter: "blur(12px)",
+                border: "1px solid rgba(16, 185, 129, 0.5)",
+                color: "#10b981", padding: "8px 16px", borderRadius: "20px",
+                fontSize: "12px", fontWeight: "bold", cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                display: "flex", alignItems: "center", gap: "6px", transition: "all 0.2s"
+              }}
+            >
+              📋 Menu Keyword {savedItems.length > 0 && <span style={{ backgroundColor: "#10b981", color: "#000", borderRadius: "10px", padding: "0 6px", fontSize: "10px" }}>{savedItems.length}</span>}
+            </button>
+            <button
+              onClick={() => openSidebar("guide")}
+              style={{
+                backgroundColor: "rgba(30, 41, 59, 0.75)",
+                backdropFilter: "blur(12px)",
+                border: "1px solid rgba(56, 189, 248, 0.4)",
+                color: "#38bdf8", padding: "8px 16px", borderRadius: "20px",
+                fontSize: "12px", fontWeight: "bold", cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                display: "flex", alignItems: "center", gap: "6px", transition: "all 0.2s"
+              }}
+            >
+              📖 SEO Guide
+            </button>
+          </div>
+
+          {/* Modal Overlay */}
+          {activePreviewItem !== null && (
+            <div style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              height: "100vh",
+              backgroundColor: "rgba(3, 7, 18, 0.85)",
+              backdropFilter: "blur(8px)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 2000,
+              padding: "20px"
+            }}>
+              <div style={{
+                width: "100%",
+                maxWidth: "1000px",
+                backgroundColor: "#0b0f19",
+                border: "1px solid rgba(56, 189, 248, 0.4)",
+                borderRadius: "16px",
+                boxShadow: "0 20px 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(56, 189, 248, 0.15)",
+                display: "flex",
+                flexDirection: "column",
+                maxHeight: "90vh",
+                overflow: "hidden"
+              }}>
+                {/* Modal Header */}
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "16px 24px",
+                  borderBottom: "1px solid rgba(56, 189, 248, 0.2)",
+                  backgroundColor: "#111827"
+                }}>
+                  <div>
+                    <h3 style={{ fontSize: "16px", color: "white", fontWeight: "bold" }}>
+                      📺 Live Preview: <span style={{ color: "#38bdf8" }}>{activePreviewItem.judul}</span>
+                    </h3>
+                    <p style={{ fontSize: "11px", color: "#9ca3af", marginTop: "2px" }}>ID: {activePreviewItem.id}</p>
+                  </div>
+                  <button
+                    onClick={() => setActivePreviewItem(null)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                      fontSize: "28px",
+                      lineHeight: "1",
+                      transition: "color 0.2s"
+                    }}
+                  >
+                    &times;
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div style={{ padding: "20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "15px", flex: 1 }}>
+                  
+                  {/* Widescreen Preview Container */}
+                  <div style={{ 
+                    backgroundColor: "#1e293b", 
+                    borderRadius: "8px", 
+                    overflow: "hidden", 
+                    border: "2px solid #1e293b", 
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+                    aspectRatio: "16/9",
+                    width: "100%",
+                    maxHeight: "450px",
+                    position: "relative"
+                  }}>
+                    {activePreviewItem.previewUrl ? (
+                      <video
+                        src={activePreviewItem.previewUrl}
+                        controls
+                        autoPlay
+                        style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                      />
+                    ) : (
+                      <iframe
+                        srcDoc={activePreviewItem.htmlPreview}
+                        style={{ width: "100%", height: "100%", border: "none" }}
+                        title={`Preview ${activePreviewItem.id}`}
+                      />
+                    )}
+                  </div>
+
+                  {/* Source Code & Actions */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "12px", color: "#34d399", fontWeight: "bold" }}>💻 HTML Source Code:</span>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button 
+                          onClick={() => copyToClipboard(activePreviewItem.htmlPreview)}
+                          style={{ backgroundColor: "rgba(56, 189, 248, 0.1)", border: "1px solid rgba(56, 189, 248, 0.3)", color: "#38bdf8", padding: "6px 12px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" }}
+                        >
+                          📋 Salin HTML
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      readOnly
+                      style={{ 
+                        width: "100%", 
+                        fontFamily: "monospace", 
+                        fontSize: "11px", 
+                        color: "#34d399", 
+                        backgroundColor: "#07130f", 
+                        border: "1px solid #10b981", 
+                        borderRadius: "6px", 
+                        padding: "10px", 
+                        resize: "vertical",
+                        minHeight: "120px"
+                      }}
+                      value={activePreviewItem.htmlPreview}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(Dashboard));
+  </script>
+</body>
+</html>

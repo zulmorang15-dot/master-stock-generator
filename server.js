@@ -19,12 +19,39 @@ app.use(express.static(path.join(__dirname, "public")));
 
 // Ensure necessary directories exist
 fs.mkdirSync(path.join(__dirname, "public", "previews"), { recursive: true });
+fs.mkdirSync(path.join(__dirname, "public", "saved-code"), { recursive: true });
 fs.mkdirSync(path.join(__dirname, "out"), { recursive: true });
 
 // Initialize database file if not exists
 const dbPath = path.join(__dirname, "saved-items.json");
 if (!fs.existsSync(dbPath)) {
   fs.writeFileSync(dbPath, JSON.stringify([]));
+} else {
+  // Scan and fix stale states on startup
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    let items = JSON.parse(data);
+    let changed = false;
+    items.forEach(item => {
+      if (item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx' || item.statusConvertTsx === 'processing-preview') {
+        item.statusConvertTsx = 'failed';
+        item.lastLogMessage = 'Server terhenti tak terduga (di-restart).';
+        if (!item.logs) item.logs = [];
+        item.logs.push({ message: 'Server terhenti tak terduga (di-restart).', type: 'error', time: new Date().toLocaleTimeString('id-ID') });
+        changed = true;
+      }
+      if (item.statusRender4k === 'processing') {
+        item.statusRender4k = 'failed';
+        changed = true;
+      }
+    });
+    if (changed) {
+      fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+      console.log("🧹 Berhasil membersihkan status gantung dari sesi sebelumnya.");
+    }
+  } catch (e) {
+    console.error("Gagal melakukan startup database cleanup:", e);
+  }
 }
 
 // Route for the dashboard
@@ -1089,8 +1116,18 @@ app.delete("/api/delete-item/:id", (req, res) => {
       return res.status(404).json({ error: `Item "${id}" tidak ditemukan` });
     }
 
+    // Hapus file HTML dan TSX lokal jika ada
+    const htmlLocalPath = path.join(__dirname, "public", "saved-code", `${id}.html`);
+    const tsxLocalPath = path.join(__dirname, "public", "saved-code", `${id}.tsx`);
+    try {
+      if (fs.existsSync(htmlLocalPath)) fs.unlinkSync(htmlLocalPath);
+      if (fs.existsSync(tsxLocalPath)) fs.unlinkSync(tsxLocalPath);
+    } catch (fileErr) {
+      console.warn(`Gagal menghapus file lokal untuk ${id}:`, fileErr.message);
+    }
+
     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
-    console.log(`🗑 Item "${id}" berhasil dihapus dari database`);
+    console.log(`🗑 Item "${id}" beserta kode lokalnya berhasil dihapus`);
     res.json({ success: true });
   } catch (error) {
     console.error("❌ Gagal hapus item:", error.message);
@@ -1215,6 +1252,38 @@ const gitRuns = {};
 // Global map to track batch render jobs and SSE streams
 const batchJobs = {};
 
+// Background task queue state
+const taskQueue = []; // Array of item IDs
+const activeTasks = new Set(); // Set of currently processing item IDs
+const MAX_CONCURRENT_TASKS = 5;
+const abortControllers = {}; // { itemId: AbortController }
+const taskLogs = {}; // { itemId: Array of log objects }
+const taskSseClients = {}; // { itemId: Array of SSE response objects }
+
+// Sequential Git operator lock (Mutex) to prevent local commit/push conflicts
+let gitMutex = Promise.resolve();
+async function runGitTask(fn) {
+  const next = gitMutex.then(() => fn());
+  gitMutex = next.catch(() => {});
+  return next;
+}
+
+// Helper: Wrap async function calls with an abortable listener
+async function runAbortable(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) throw new Error("Cancelled by user");
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      reject(new Error("Cancelled by user"));
+    };
+    signal.addEventListener('abort', onAbort);
+    promise.then(resolve).catch(reject).finally(() => {
+      signal.removeEventListener('abort', onAbort);
+    });
+  });
+}
+
 // Helper: Save or update item in database file
 function saveOrUpdateItem(item) {
   const dbPath = path.join(__dirname, "saved-items.json");
@@ -1229,7 +1298,48 @@ function saveOrUpdateItem(item) {
   fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
 }
 
-// Helper: Add logs for SSE batch rendering
+// Helper: Add logs for SSE task processing (per item)
+function addTaskLog(itemId, message, type = 'info') {
+  const time = new Date().toLocaleTimeString('id-ID');
+  const logEntry = { message, type, time };
+
+  if (!taskLogs[itemId]) {
+    taskLogs[itemId] = [];
+  }
+  taskLogs[itemId].push(logEntry);
+
+  if (taskLogs[itemId].length > 50) {
+    taskLogs[itemId].shift();
+  }
+
+  // Update logs and lastLogMessage in DB synchronously/persistently
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    if (fs.existsSync(dbPath)) {
+      const data = fs.readFileSync(dbPath, "utf-8");
+      let items = JSON.parse(data);
+      const index = items.findIndex(i => i.id === itemId);
+      if (index !== -1) {
+        items[index].logs = taskLogs[itemId];
+        items[index].lastLogMessage = message;
+        fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+      }
+    }
+  } catch (e) {
+    console.error("Gagal menyimpan log task ke DB:", e);
+  }
+
+  // Stream to item-specific connected SSE clients
+  if (taskSseClients[itemId]) {
+    taskSseClients[itemId].forEach(client => {
+      client.write(`data: ${JSON.stringify(logEntry)}\n\n`);
+    });
+  }
+
+  console.log(`[Task ${itemId}] [${type}] ${message}`);
+}
+
+// Helper: Add logs for SSE batch rendering (backward compatibility)
 function addLog(jobId, message, type = 'info') {
   const time = new Date().toLocaleTimeString('id-ID');
   const logEntry = { message, type, time };
@@ -1509,31 +1619,60 @@ function sanitizeKeywordsAndTitle(seoData) {
 }
 
 // Helper: Jalankan job batch di background secara sekuensial
-async function runBatchJob(jobId, files, loop, transparent, aiModel = 'auto', animationDuration = 10) {
-  addLog(jobId, `Mulai memproses batch dengan ${files.length} file...`, 'info');
+// Helper: Jalankan job batch di background secara sekuensial (Digantikan oleh sistem Queue)
+async function executeSingleTask(itemId) {
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    console.error("Gagal membaca DB untuk task execution:", e);
+  }
+  
+  const item = items.find(i => i.id === itemId);
+  if (!item) {
+    activeTasks.delete(itemId);
+    processQueue();
+    return;
+  }
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const stepNum = i + 1;
-    const totalFiles = files.length;
+  // Jika statusnya sudah cancelled sebelum mulai, langsung skip
+  if (item.statusConvertTsx === 'cancelled') {
+    activeTasks.delete(itemId);
+    processQueue();
+    return;
+  }
 
-    addLog(jobId, `[${stepNum}/${totalFiles}] Membaca file: ${file.name}`, 'info');
+  // Buat AbortController untuk task ini
+  const controller = new AbortController();
+  abortControllers[itemId] = controller;
+  const signal = controller.signal;
 
-    try {
-      // 1. Sanitasi ID (Mencegah command injection)
-      const baseName = path.basename(file.name, '.html');
-      const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+  try {
+    // 1. Update status ke processing-tsx
+    item.statusConvertTsx = 'processing-tsx';
+    saveOrUpdateItem(item);
+    
+    // Inisialisasi logs memori jika belum ada
+    if (!taskLogs[itemId]) {
+      taskLogs[itemId] = item.logs || [];
+    }
+    
+    addTaskLog(itemId, "Memulai pemrosesan task...", "info");
 
-      addLog(jobId, `Menggunakan ID tersanitasi: ${sanitizedId}`, 'info');
+    // Simpan file HTML asli ke lokal secara fisik
+    const htmlLocalPath = path.join(__dirname, "public", "saved-code", `${itemId}.html`);
+    fs.writeFileSync(htmlLocalPath, item.htmlPreview);
+    addTaskLog(itemId, `HTML asli disimpan secara lokal di /saved-code/${itemId}.html`, "info");
 
-      // 2. Generate SEO Metadata
-      addLog(jobId, `Menghasilkan metadata SEO via AI untuk ${sanitizedId}...`, 'info');
-
-      const seoPrompt = `Kamu adalah pakar Creative Director SEO Microstock USA.
+    // 2. Generate SEO Metadata
+    addTaskLog(itemId, "Menghasilkan metadata SEO via AI...", "info");
+    const seoPrompt = `Kamu adalah pakar Creative Director SEO Microstock USA.
 Analisis file HTML berikut dan buat metadata SEO yang luar biasa kreatif, visualnya mewah, dan bernilai jual tinggi untuk dipasarkan di Adobe Stock.
 
 HTML Content:
-${file.content}
+${item.htmlPreview}
 
 Keluarkan hasil dalam format JSON murni berbentuk objek tanpa teks pengantar/penutup apa pun.
 DILARANG menggunakan karakter double quote (") di dalam nilai string. Gunakan single quote (') jika perlu.
@@ -1545,53 +1684,38 @@ Struktur objek wajib persis seperti ini:
   "kategori": "Kategori Adobe Stock (Technology/Abstract/Business)"
 }`;
 
-      let aiResponse = "";
-      try {
-        // Gunakan callAIWithFallback yang sudah memiliki chain Groq -> Gemini -> DeepSeek -> OpenRouter
-        aiResponse = await callAIWithFallback(seoPrompt, { preferModel: aiModel });
-      } catch (err) {
-        throw new Error(`Semua provider AI gagal untuk SEO metadata: ${err.message}`);
-      }
+    // Jalankan callAI dengan pembatalan (abortable)
+    let aiResponse = "";
+    try {
+      aiResponse = await runAbortable(callAIWithFallback(seoPrompt, { preferModel: item.aiModel || 'auto', signal }), signal);
+    } catch (err) {
+      throw new Error(`Gagal menghasilkan metadata SEO: ${err.message}`);
+    }
 
-      let jsonText = aiResponse.trim();
-      if (jsonText.startsWith("```json")) {
-        jsonText = jsonText.split("```json")[1].split("```")[0].trim();
-      } else if (jsonText.includes("```")) {
-        jsonText = jsonText.split("```")[1].split("```")[0].trim();
-      }
+    let jsonText = aiResponse.trim();
+    if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+    } else if (jsonText.includes("```")) {
+      jsonText = jsonText.split("```")[1].split("```")[0].trim();
+    }
+    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+    let seoData = JSON.parse(jsonText);
+    seoData = sanitizeKeywordsAndTitle(seoData);
 
-      jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-      let seoData = JSON.parse(jsonText);
-      seoData = sanitizeKeywordsAndTitle(seoData);
-      addLog(jobId, `Metadata SEO berhasil didapat. Judul: "${seoData.judul}"`, 'success');
+    item.judul = seoData.judul;
+    item.keywords = seoData.keywords;
+    item.deskripsi = seoData.deskripsi;
+    item.kategori = seoData.kategori;
+    saveOrUpdateItem(item);
 
-      const durationFrames = (Number(animationDuration) || 10) * 30;
+    addTaskLog(itemId, `Metadata SEO berhasil didapat. Judul: "${seoData.judul}"`, "success");
 
-      // 3. Simpan state awal ke database
-      const itemData = {
-        id: sanitizedId,
-        fileName: file.name,
-        judul: seoData.judul,
-        keywords: seoData.keywords,
-        deskripsi: seoData.deskripsi,
-        kategori: seoData.kategori,
-        durationInFrames: durationFrames,
-        htmlPreview: file.content,
-        loop: !!loop,
-        transparent: !!transparent,
-        statusConvertTsx: 'processing-tsx',
-        statusRender4k: 'idle',
-        previewUrl: '',
-        outputPath4k: '',
-        createdAt: new Date().toISOString()
-      };
+    // 3. Konversi HTML ke TSX
+    addTaskLog(itemId, "Mengonversi HTML ke kode Remotion TSX...", "info");
+    const animationDuration = item.animationDuration || 10;
+    const durationFrames = item.durationInFrames || 300;
 
-      saveOrUpdateItem(itemData);
-
-      // 4. Konversi HTML ke TSX
-      addLog(jobId, `Mengonversi HTML ke kode Remotion TSX...`, 'info');
-
-      const conversionPrompt = `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
+    const conversionPrompt = `Act as a **Senior React & Remotion Developer** specializing in high-fidelity 4K video rendering for commercial microstock.
 You need to understand that Remotion renders videos frame-by-frame offline (using Puppeteer/Chrome). Therefore, any real-time browser features (like CSS @keyframes, transition, Date.now(), setInterval, or Math.random()) will cause severe synchronization bugs and frame-tearing in the final .mp4 export.
 
 **OBJECTIVE:**
@@ -1651,90 +1775,102 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 
 HERE IS THE HTML TO CONVERT:
 
-${file.content}
+${item.htmlPreview}
 
 OUTPUT: Start directly with the import line. No markdown. No explanation.`;
 
-      let tsxResponse = "";
-      let tsxAttempts = 0;
-      const MAX_TSX_ATTEMPTS = 3;
+    let tsxResponse = "";
+    let tsxAttempts = 0;
+    const MAX_TSX_ATTEMPTS = 3;
 
-      // Validator kuat: cek export default, END_OF_FILE marker, dan bracket balance
-      const tsxValidator = (text) => {
-        if (!text || !text.trim()) return false;
-        const trimmed = text.trim();
-        // Wajib ada export default
-        if (!trimmed.includes('export default')) return false;
-        // Lebih baik kalau ada // END_OF_FILE (artinya AI tidak terpotong)
-        // Cek bracket balance ({} dan <>)
-        let curly = 0;
-        let angle = 0;
-        for (const ch of trimmed) {
-          if (ch === '{') curly++;
-          else if (ch === '}') curly--;
-          else if (ch === '<') angle++;
-          else if (ch === '>') angle--;
-        }
-        // Harus balanced atau sangat dekat balanced (toleransi 1)
-        if (Math.abs(curly) > 2 || Math.abs(angle) > 5) return false;
-        return true;
-      };
+    const tsxValidator = (text) => {
+      if (!text || !text.trim()) return false;
+      const trimmed = text.trim();
+      if (!trimmed.includes('export default')) return false;
+      let curly = 0;
+      let angle = 0;
+      for (const ch of trimmed) {
+        if (ch === '{') curly++;
+        else if (ch === '}') curly--;
+        else if (ch === '<') angle++;
+        else if (ch === '>') angle--;
+      }
+      if (Math.abs(curly) > 2 || Math.abs(angle) > 5) return false;
+      return true;
+    };
 
-      while (tsxAttempts < MAX_TSX_ATTEMPTS) {
-        tsxAttempts++;
-        addLog(jobId, `Mencoba generate TSX (percobaan ke-${tsxAttempts})...`, 'info');
-        try {
-          // Gunakan callAIWithFallback yang sudah memiliki chain Groq -> Gemini -> DeepSeek -> OpenRouter
-          tsxResponse = await callAIWithFallback(conversionPrompt, { 
-            preferModel: aiModel,
+    while (tsxAttempts < MAX_TSX_ATTEMPTS) {
+      if (signal.aborted) throw new Error("Cancelled by user");
+      tsxAttempts++;
+      addTaskLog(itemId, `Mencoba generate TSX (percobaan ke-${tsxAttempts})...`, "info");
+      try {
+        tsxResponse = await runAbortable(
+          callAIWithFallback(conversionPrompt, { 
+            preferModel: item.aiModel || 'auto',
             validator: tsxValidator
-          });
-          break; // sukses, keluar loop
-        } catch (err) {
-          addLog(jobId, `Percobaan ${tsxAttempts} gagal: ${err.message?.substring(0,100)}`, 'warning');
-          if (tsxAttempts >= MAX_TSX_ATTEMPTS) {
-            throw new Error(`Semua ${MAX_TSX_ATTEMPTS} percobaan AI gagal untuk TSX Conversion: ${err.message}`);
-          }
-          await new Promise(r => setTimeout(r, 2000)); // tunggu 2 detik sebelum retry
+          }),
+          signal
+        );
+        break; // sukses
+      } catch (err) {
+        addTaskLog(itemId, `Percobaan ${tsxAttempts} gagal: ${err.message?.substring(0, 100)}`, "warning");
+        if (tsxAttempts >= MAX_TSX_ATTEMPTS) {
+          throw new Error(`Semua ${MAX_TSX_ATTEMPTS} percobaan AI gagal untuk TSX Conversion: ${err.message}`);
         }
+        await new Promise((r, reject) => {
+          const tm = setTimeout(r, 2000);
+          if (signal) {
+            signal.addEventListener('abort', () => {
+              clearTimeout(tm);
+              reject(new Error("Cancelled by user"));
+            });
+          }
+        });
       }
+    }
 
-      let tsxCode = tsxResponse.trim();
-      if (tsxCode.startsWith("```typescript") || tsxCode.startsWith("```tsx")) {
-        const parts = tsxCode.split("```");
-        tsxCode = parts[1].split("\n").slice(1).join("\n").split("```")[0].trim();
-      } else if (tsxCode.startsWith("```")) {
-        tsxCode = tsxCode.split("```")[1].split("```")[0].trim();
-      }
+    let tsxCode = tsxResponse.trim();
+    if (tsxCode.startsWith("```typescript") || tsxCode.startsWith("```tsx")) {
+      const parts = tsxCode.split("```");
+      tsxCode = parts[1].split("\n").slice(1).join("\n").split("```")[0].trim();
+    } else if (tsxCode.startsWith("```")) {
+      tsxCode = tsxCode.split("```")[1].split("```")[0].trim();
+    }
 
-      itemData.promptCode = tsxCode;
-      saveOrUpdateItem(itemData);
+    // Validasi lokal sebelum push
+    if (!tsxValidator(tsxCode)) {
+      throw new Error('TSX yang dihasilkan tidak valid (bracket tidak balance atau tidak ada export default). Batalkan.');
+    }
 
-      // Validasi lokal sebelum push ke GitHub
-      if (!tsxValidator(tsxCode)) {
-        throw new Error('TSX yang dihasilkan tidak valid (bracket tidak balance atau tidak ada export default). Batalkan push.');
-      }
-      addLog(jobId, `Konversi HTML ke TSX sukses (TSX tervalidasi)!`, 'success');
+    item.promptCode = tsxCode;
+    saveOrUpdateItem(item);
 
-      // 5. Tulis src/Composition.tsx lokal
-      addLog(jobId, `Menulis file src/Composition.tsx...`, 'info');
+    // Simpan file TSX lokal secara fisik di public/saved-code/<id>.tsx
+    const tsxLocalPath = path.join(__dirname, "public", "saved-code", `${itemId}.tsx`);
+    fs.writeFileSync(tsxLocalPath, tsxCode);
+    addTaskLog(itemId, `File TSX disimpan secara lokal di /saved-code/${itemId}.tsx`, "info");
+
+    // 4. Git Push & Trigger Render Cloud (menulis src/Composition.tsx sementara)
+    addTaskLog(itemId, "Mengantrekan operasi Git Push untuk sinkronisasi kode ke GitHub...", "info");
+    
+    await runGitTask(async () => {
+      if (signal.aborted) throw new Error("Cancelled by user");
+      addTaskLog(itemId, "Mulai menulis src/Composition.tsx dan git push...", "info");
       fs.writeFileSync("src/Composition.tsx", tsxCode);
 
-      // 6. Push ke GitHub
-      addLog(jobId, `Mendorong kode TSX ke repositori GitHub...`, 'info');
       execSync("git add src/Composition.tsx", { stdio: "inherit" });
       try {
-        execSync(`git commit -m "Batch HTML ke TSX: ${sanitizedId}"`, { stdio: "inherit" });
+        execSync(`git commit -m "Queue HTML ke TSX: ${itemId}"`, { stdio: "inherit" });
       } catch (e) {
         // No changes is fine
       }
       execSync("git push origin main", { stdio: "inherit" });
 
       const sha = execSync("git rev-parse HEAD").toString().trim();
-      addLog(jobId, `Kode berhasil didorong. Commit SHA: ${sha}`, 'success');
+      addTaskLog(itemId, `Kode berhasil didorong ke GitHub. Commit SHA: ${sha}`, "success");
 
-      // 7. Trigger GitHub Action
-      addLog(jobId, `Memicu GitHub Actions cloud rendering...`, 'info');
+      // Trigger GitHub Action
+      addTaskLog(itemId, "Memicu workflow rendering di GitHub Actions...", "info");
       const workflowFile = "render-preview.yml";
       const workflowDispatchUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`;
 
@@ -1743,10 +1879,10 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
         {
           ref: "main",
           inputs: {
-            composition_id: sanitizedId,
-            duration_frames: "150",
-            judul: itemData.judul || "Stock Video",
-            keywords: itemData.keywords || "motion, abstract, loop"
+            composition_id: itemId,
+            duration_frames: String(durationFrames),
+            judul: item.judul || "Stock Video",
+            keywords: item.keywords || "motion, abstract, loop"
           }
         },
         {
@@ -1757,7 +1893,7 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
         }
       );
 
-      const trackingKey = `${sanitizedId}_preview`;
+      const trackingKey = `${itemId}_preview`;
       gitRuns[trackingKey] = {
         sha: sha,
         status: "triggered",
@@ -1765,53 +1901,151 @@ OUTPUT: Start directly with the import line. No markdown. No explanation.`;
         triggeredAt: Date.now(),
         workflowFile: workflowFile
       };
+    });
 
-      itemData.statusConvertTsx = 'processing-preview';
-      saveOrUpdateItem(itemData);
-      addLog(jobId, `Workflow dispatch berhasil dikirim ke GitHub.`, 'success');
+    item.statusConvertTsx = 'processing-preview';
+    saveOrUpdateItem(item);
 
-      // 8. Tunggu rendering selesai & unduh hasilnya
-      const renderSuccess = await waitForRender(sanitizedId, 'preview', jobId);
-      if (renderSuccess) {
-        const fileUrl = `/previews/${sanitizedId}-preview.mp4`;
-        itemData.previewUrl = fileUrl;
-        itemData.statusConvertTsx = 'success';
-        saveOrUpdateItem(itemData);
-        addLog(jobId, `[Sukses] Video preview untuk ${sanitizedId} selesai diproses!`, 'success');
-      } else {
-        throw new Error(`Rendering gagal untuk ${sanitizedId}`);
-      }
-
-    } catch (err) {
-      addLog(jobId, `Gagal memproses ${file.name}: ${err.message}`, 'error');
-
-      // Simpan status failed
-      const baseName = path.basename(file.name, '.html');
-      const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-      try {
-        const dbPath = path.join(__dirname, "saved-items.json");
-        const data = fs.readFileSync(dbPath, "utf-8");
-        const items = JSON.parse(data);
-        const item = items.find(i => i.id === sanitizedId);
-        if (item) {
-          item.statusConvertTsx = 'failed';
-          fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
-        }
-      } catch (dbErr) {
-        console.error("Gagal update DB status failed:", dbErr);
-      }
+    // 5. Tunggu proses rendering cloud selesai
+    addTaskLog(itemId, "Menunggu proses rendering video preview di GitHub Actions...", "info");
+    const renderSuccess = await waitForRenderSingle(itemId, 'preview', signal);
+    if (renderSuccess) {
+      const fileUrl = `/previews/${itemId}-preview.mp4`;
+      item.previewUrl = fileUrl;
+      item.statusConvertTsx = 'success';
+      saveOrUpdateItem(item);
+      addTaskLog(itemId, "Video preview selesai diproses dan siap diunduh!", "success");
+    } else {
+      throw new Error("Rendering cloud gagal.");
     }
+
+  } catch (err) {
+    if (err.message === "Cancelled by user" || signal.aborted) {
+      item.statusConvertTsx = 'cancelled';
+      addTaskLog(itemId, "Proses dibatalkan oleh pengguna.", "warning");
+    } else {
+      item.statusConvertTsx = 'failed';
+      addTaskLog(itemId, `Gagal memproses task: ${err.message}`, "error");
+    }
+    saveOrUpdateItem(item);
+  } finally {
+    delete abortControllers[itemId];
+    activeTasks.delete(itemId);
+    
+    // Kirim event selesai ke SSE clients individual
+    if (taskSseClients[itemId]) {
+      taskSseClients[itemId].forEach(client => {
+        client.write(`data: ${JSON.stringify({ type: 'done', message: 'Task selesai' })}\n\n`);
+        client.end();
+      });
+      delete taskSseClients[itemId];
+    }
+
+    processQueue();
   }
+}
 
-  addLog(jobId, `Semua file dalam batch selesai diproses.`, 'success');
-  batchJobs[jobId].status = 'completed';
+async function waitForRenderSingle(id, renderType, signal) {
+  const startTime = Date.now();
+  const timeoutMs = 20 * 60 * 1000; // 20 menit timeout
 
-  // Kirim event selesai ke SSE clients
-  batchJobs[jobId].clients.forEach(client => {
-    client.write(`data: ${JSON.stringify({ type: 'done', message: 'Semua proses selesai' })}\n\n`);
-    client.end();
-  });
-  batchJobs[jobId].clients = [];
+  while (Date.now() - startTime < timeoutMs) {
+    if (signal && signal.aborted) return false;
+
+    const finalFilename = renderType === "preview" ? `${id}-preview.mp4` : `${id}-4k.mov`;
+    const legacyFilename = renderType === "preview" ? `${id}.mp4` : `${id}_4k.mov`;
+    const finalPath = renderType === "preview"
+      ? path.join(__dirname, "public", "previews", finalFilename)
+      : path.join(__dirname, "out", finalFilename);
+    const legacyPath = renderType === "preview"
+      ? path.join(__dirname, "public", "previews", legacyFilename)
+      : path.join(__dirname, "out", legacyFilename);
+
+    if (fs.existsSync(finalPath) || fs.existsSync(legacyPath)) {
+      addTaskLog(id, `Video preview untuk ${id} berhasil ditemukan secara lokal!`, 'success');
+      return true;
+    }
+
+    try {
+      const statusResult = await checkGithubRenderStatusInternal(id, renderType);
+      if (statusResult.status === 'success') {
+        addTaskLog(id, `Video preview untuk ${id} berhasil diunduh dari GitHub!`, 'success');
+        return true;
+      } else if (statusResult.status === 'failed') {
+        throw new Error(statusResult.error || 'Workflow failed');
+      } else {
+        addTaskLog(id, `Status render GitHub: ${statusResult.status} (${statusResult.progress || 'menunggu runner'})...`, 'info');
+      }
+    } catch (err) {
+      addTaskLog(id, `Informasi status render: ${err.message}`, 'info');
+    }
+
+    // Tunggu 15 detik sebelum mengecek ulang, dengan dukungan abort signal
+    await new Promise((resolve, reject) => {
+      const tm = setTimeout(resolve, 15000);
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          clearTimeout(tm);
+          reject(new Error("Cancelled by user"));
+        });
+      }
+    });
+  }
+  throw new Error("Timeout rendering video di GitHub Actions.");
+}
+
+function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, animationDuration }) {
+  const durationFrames = (Number(animationDuration) || 10) * 30;
+
+  const itemData = {
+    id: id,
+    fileName: fileName,
+    judul: "",
+    keywords: "",
+    deskripsi: "",
+    kategori: "",
+    durationInFrames: durationFrames,
+    animationDuration: Number(animationDuration) || 10,
+    htmlPreview: htmlContent,
+    loop: !!loop,
+    transparent: !!transparent,
+    aiModel: aiModel,
+    statusConvertTsx: 'queued', // status awal mengantre
+    statusRender4k: 'idle',
+    previewUrl: '',
+    outputPath4k: '',
+    createdAt: new Date().toISOString(),
+    logs: [{ message: "Masuk antrean...", type: "info", time: new Date().toLocaleTimeString('id-ID') }]
+  };
+
+  saveOrUpdateItem(itemData);
+
+  // Daftarkan ke memori logs
+  taskLogs[id] = [...itemData.logs];
+
+  // Masukkan ke antrean
+  taskQueue.push(id);
+
+  // Picu eksekusi antrean
+  processQueue();
+  
+  return id;
+}
+
+function processQueue() {
+  console.log(`[Queue] Checking queue... Active: ${activeTasks.size}/${MAX_CONCURRENT_TASKS}, Queue length: ${taskQueue.length}`);
+  
+  while (activeTasks.size < MAX_CONCURRENT_TASKS && taskQueue.length > 0) {
+    const nextItemId = taskQueue.shift();
+    activeTasks.add(nextItemId);
+    
+    console.log(`[Queue] Starting task: ${nextItemId}`);
+    
+    // Jalankan secara asinkron di latar belakang
+    executeSingleTask(nextItemId).catch(err => {
+      console.error(`[Queue] Fatal error executing task ${nextItemId}:`, err);
+    });
+  }
 }
 
 // POST: Trigger GitHub rendering dispatch (workflow_dispatch)
@@ -1891,23 +2125,222 @@ app.post("/api/process-html-batch", (req, res) => {
     return res.status(400).json({ error: "Data batch file tidak valid atau kosong" });
   }
 
-  const jobId = 'job_' + Date.now();
-  batchJobs[jobId] = {
-    logs: [],
-    clients: [],
-    status: 'running'
-  };
+  const enqueuedIds = [];
+  for (const file of files) {
+    const baseName = path.basename(file.name, '.html');
+    const sanitizedId = baseName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+    
+    enqueueTask({
+      id: sanitizedId,
+      fileName: file.name,
+      htmlContent: file.content,
+      loop,
+      transparent,
+      aiModel,
+      animationDuration
+    });
+    enqueuedIds.push(sanitizedId);
+  }
 
-  // Kirim respons langsung agar UI bisa langsung menginisiasi SSE stream
-  res.json({ jobId });
+  res.json({ success: true, ids: enqueuedIds });
+});
 
-  // Jalankan background job secara asinkron
-  runBatchJob(jobId, files, loop, transparent, aiModel, animationDuration).catch(err => {
-    console.error(`Eror fatal saat menjalankan batch ${jobId}:`, err);
+// POST: Generate dari paste kode HTML langsung
+app.post("/api/paste-html", (req, res) => {
+  const { id, htmlContent, loop, transparent, aiModel, animationDuration } = req.body;
+  if (!htmlContent || !htmlContent.trim()) {
+    return res.status(400).json({ error: "Konten HTML kosong" });
+  }
+
+  // Generate kustom ID jika tidak diisi
+  let targetId = id ? id.trim() : "";
+  if (!targetId) {
+    targetId = "paste_" + Math.random().toString(36).substring(2, 10);
+  }
+  const sanitizedId = targetId.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+
+  enqueueTask({
+    id: sanitizedId,
+    fileName: sanitizedId + ".html",
+    htmlContent,
+    loop,
+    transparent,
+    aiModel,
+    animationDuration
+  });
+
+  res.json({ success: true, id: sanitizedId });
+});
+
+// POST: Retry task yang gagal / dibatalkan
+app.post("/api/retry-task/:id", (req, res) => {
+  const { id } = req.params;
+  const { aiModel, animationDuration } = req.body;
+
+  // Baca item dari DB
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    return res.status(500).json({ error: "Gagal membaca database" });
+  }
+
+  const item = items.find(i => i.id === id);
+  if (!item) {
+    return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
+  }
+
+  // Hanya izinkan retry untuk status failed/cancelled
+  if (item.statusConvertTsx !== 'failed' && item.statusConvertTsx !== 'cancelled') {
+    return res.status(400).json({ error: "Hanya item yang gagal atau dibatalkan yang bisa di-retry" });
+  }
+
+  if (!item.htmlPreview) {
+    return res.status(400).json({ error: "Tidak ada konten HTML yang tersimpan untuk item ini" });
+  }
+
+  // Cek apakah sudah ada di antrian
+  if (taskQueue.includes(id) || activeTasks.has(id)) {
+    return res.status(400).json({ error: "Task sudah ada di antrian" });
+  }
+
+  console.log(`🔄 Mengantrekan ulang task: ${id}`);
+
+  // Reset status dan logs
+  item.statusConvertTsx = 'queued';
+  item.previewUrl = '';
+  item.promptCode = '';
+  item.logs = [{ message: "Dimasukkan ulang ke antrean (retry)...", type: "info", time: new Date().toLocaleTimeString('id-ID') }];
+  item.lastLogMessage = "Dimasukkan ulang ke antrean (retry)...";
+  if (aiModel) item.aiModel = aiModel;
+  if (animationDuration) {
+    item.animationDuration = Number(animationDuration);
+    item.durationInFrames = Number(animationDuration) * 30;
+  }
+
+  // Simpan ke DB
+  const index = items.findIndex(i => i.id === id);
+  items[index] = item;
+  fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+
+  // Inisialisasi logs memori
+  taskLogs[id] = [...item.logs];
+
+  // Masukkan ke antrean
+  taskQueue.push(id);
+  processQueue();
+
+  res.json({ success: true, id });
+});
+
+// POST: Batalkan task pemrosesan
+app.post("/api/cancel-task/:id", (req, res) => {
+  const { id } = req.params;
+  
+  // 1. Cek di database
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    return res.status(500).json({ error: "Gagal membaca database" });
+  }
+
+  const item = items.find(i => i.id === id);
+  if (!item) {
+    return res.status(404).json({ error: `Item ${id} tidak ditemukan` });
+  }
+
+  // Cek apakah item masih dalam status yang bisa dibatalkan
+  if (item.statusConvertTsx !== 'queued' && item.statusConvertTsx !== 'processing-tsx' && item.statusConvertTsx !== 'processing-preview') {
+    return res.status(400).json({ error: "Task tidak sedang berjalan atau mengantre" });
+  }
+
+  // 2. Jika di antrean pending
+  const queueIndex = taskQueue.indexOf(id);
+  if (queueIndex !== -1) {
+    taskQueue.splice(queueIndex, 1);
+    addTaskLog(id, "Dibatalkan saat berada di antrean pending.", "warning");
+    item.statusConvertTsx = 'cancelled';
+    saveOrUpdateItem(item);
+    return res.json({ success: true, message: "Task antrean berhasil dibatalkan" });
+  }
+
+  // 3. Jika sedang diproses secara aktif
+  if (activeTasks.has(id)) {
+    if (abortControllers[id]) {
+      abortControllers[id].abort(); // Picu abort signal
+      addTaskLog(id, "Meminta pembatalan proses...", "warning");
+      // executeSingleTask catch block akan mengurus perubahan status ke cancelled dan trigger processQueue
+      return res.json({ success: true, message: "Proses task sedang dibatalkan" });
+    }
+  }
+
+  // Fallback pengaman jika status gantung di DB
+  item.statusConvertTsx = 'cancelled';
+  saveOrUpdateItem(item);
+  res.json({ success: true, message: "Status task direset ke cancelled" });
+});
+
+// GET: Stream SSE log per task/item
+app.get("/api/task-logs/:id", (req, res) => {
+  const { id } = req.params;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  // Kirim log-log yang sudah ada di memori atau DB
+  let existingLogs = taskLogs[id] || [];
+  if (existingLogs.length === 0) {
+    try {
+      const dbPath = path.join(__dirname, "saved-items.json");
+      const data = fs.readFileSync(dbPath, "utf-8");
+      const items = JSON.parse(data);
+      const item = items.find(i => i.id === id);
+      if (item && item.logs) {
+        existingLogs = item.logs;
+        taskLogs[id] = [...item.logs];
+      }
+    } catch (e) {
+      console.error("Gagal mengambil histori log dari DB:", e);
+    }
+  }
+
+  existingLogs.forEach(log => {
+    res.write(`data: ${JSON.stringify(log)}\n\n`);
+  });
+
+  // Cek status pengerjaan saat ini. Jika sudah selesai, tutup stream
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    const data = fs.readFileSync(dbPath, "utf-8");
+    const items = JSON.parse(data);
+    const item = items.find(i => i.id === id);
+    if (item && (item.statusConvertTsx === 'success' || item.statusConvertTsx === 'failed' || item.statusConvertTsx === 'cancelled')) {
+      res.write(`data: ${JSON.stringify({ type: 'done', message: 'Task selesai' })}\n\n`);
+      res.end();
+      return;
+    }
+  } catch (e) {}
+
+  if (!taskSseClients[id]) {
+    taskSseClients[id] = [];
+  }
+  taskSseClients[id].push(res);
+
+  req.on('close', () => {
+    if (taskSseClients[id]) {
+      taskSseClients[id] = taskSseClients[id].filter(c => c !== res);
+    }
   });
 });
 
-// GET: Hubungkan stream SSE untuk log batch
+// GET: Hubungkan stream SSE untuk log batch (backward compatibility)
 app.get("/api/batch-logs/:jobId", (req, res) => {
   const { jobId } = req.params;
 

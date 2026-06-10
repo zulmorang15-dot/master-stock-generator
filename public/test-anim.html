@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cyber Punk Neon Ring Animation</title>
+  <style>
+    body {
+      background-color: #030008;
+      margin: 0;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+    .ring {
+      position: absolute;
+      border: 2px solid transparent;
+      border-radius: 50%;
+      animation: spin 8s linear infinite;
+    }
+    .ring-1 {
+      width: 200px;
+      height: 200px;
+      border-top-color: #ff007f;
+      border-bottom-color: #ff007f;
+      box-shadow: 0 0 15px #ff007f;
+      animation-duration: 6s;
+    }
+    .ring-2 {
+      width: 250px;
+      height: 250px;
+      border-left-color: #00f0ff;
+      border-right-color: #00f0ff;
+      box-shadow: 0 0 15px #00f0ff;
+      animation-duration: 8s;
+      animation-direction: reverse;
+    }
+    @keyframes spin {
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+    .text {
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 5px;
+      font-weight: bold;
+      text-shadow: 0 0 10px #00f0ff;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div class="ring ring-1"></div>
+  <div class="ring ring-2"></div>
+  <div class="text">Cyber Tech</div>
+</body>
+</html>
