@@ -3,7 +3,7 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const CyberpunkGamingEndscreen = () => {
+const PremiumCinematicYouTubeEndscreen = () => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
@@ -14,13 +14,18 @@ const CyberpunkGamingEndscreen = () => {
 
   const localFrame = frame % (fps * 10);
 
+  const progress = interpolate(localFrame, [0, fps * 10], [0, 100], { easing: Easing.linear });
+
   return (
     <div
       style={{
-        width: '100%',
-        height: '100%',
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
         transform: `scale(${scaleFactor})`,
         transformOrigin: 'center center',
+        overflow: 'hidden',
+        backgroundColor: '#030008',
+        boxShadow: '0 0 150px rgba(0,0,0,0.9)',
       }}
     >
       <div
@@ -30,110 +35,40 @@ const CyberpunkGamingEndscreen = () => {
           left: 0,
           width: ORIGINAL_WIDTH,
           height: ORIGINAL_HEIGHT,
-          background: 'radial-gradient(circle at center, transparent 0%, #030008 100%)',
+          boxShadow: 'inset 0 0 300px rgba(0, 0, 0, 0.95)',
+          background: `radial-gradient(circle at 20% 30%, rgba(255, 0, 127, 0.04) 0%, transparent 40%),
+            radial-gradient(circle at 80% 70%, rgba(0, 240, 255, 0.04) 0%, transparent 40%),
+            linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%)`,
+          backgroundSize: '100% 100%, 100% 100%, 100% 6px',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: ORIGINAL_WIDTH,
+          height: ORIGINAL_HEIGHT,
+          zIndex: 5,
         }}
       >
         <div
           style={{
             position: 'absolute',
-            top: 0,
-            left: 0,
-            width: ORIGINAL_WIDTH,
-            height: ORIGINAL_HEIGHT,
-            background: 'repeating-linear-gradient(to bottom, rgba(0, 243, 255, 0.03) 0px, rgba(0, 243, 255, 0.03) 2px, transparent 2px, transparent 4px)',
-            pointerEvents: 'none',
-            boxShadow: 'inset 0 0 150px rgba(188, 19, 254, 0.15)',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: 120,
-            left: 160,
-            width: 1600,
-            height: 1,
-            background: '#00f3ff',
-            boxShadow: '0 0 10px #00f3ff',
-            opacity: 0.6,
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 120,
-            left: 160,
-            width: 1600,
-            height: 1,
-            background: '#00f3ff',
-            boxShadow: '0 0 10px #00f3ff',
-            opacity: 0.6,
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: 118,
-            left: 160,
-            width: 4,
-            height: 4,
-            background: '#bc13fe',
-            boxShadow: '0 0 8px #bc13fe',
-            borderRadius: '50%',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: 118,
-            right: 160,
-            width: 4,
-            height: 4,
-            background: '#bc13fe',
-            boxShadow: '0 0 8px #bc13fe',
-            borderRadius: '50%',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 118,
-            left: 160,
-            width: 4,
-            height: 4,
-            background: '#bc13fe',
-            boxShadow: '0 0 8px #bc13fe',
-            borderRadius: '50%',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 118,
-            right: 160,
-            width: 4,
-            height: 4,
-            background: '#bc13fe',
-            boxShadow: '0 0 8px #bc13fe',
-            borderRadius: '50%',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            top: 360,
-            left: 160,
             width: 640,
             height: 360,
-            background: 'rgba(0, 15, 30, 0.6)',
-            border: '2px solid #00f3ff',
-            borderRadius: 12,
-            boxShadow: '0 0 25px rgba(0, 243, 255, 0.3), inset 0 0 25px rgba(0, 243, 255, 0.15)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            top: 360,
+            left: 150,
+            borderRadius: 20,
+            background: 'rgba(10, 5, 18, 0.45)',
+            border: '1px solid rgba(157, 78, 221, 0.25)',
+            backdropFilter: 'blur(25px)',
+            boxShadow: `0 30px 60px rgba(0, 0, 0, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1),
+              0 0 50px rgba(157, 78, 221, 0.05)`,
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            overflow: 'hidden',
           }}
         >
           <div
@@ -141,266 +76,236 @@ const CyberpunkGamingEndscreen = () => {
               position: 'absolute',
               width: '100%',
               height: '100%',
-              backgroundImage: 'linear-gradient(rgba(0, 243, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 243, 255, 0.1) 1px, transparent 1px)',
-              backgroundSize: '40px 40px',
-              backgroundPosition: 'center center',
-              opacity: 0.3,
+              top: 0,
+              left: 0,
+              pointerEvents: 'none',
             }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 30,
-              height: 30,
-              border: '2px solid #fff',
-              opacity: 0.8,
-              top: -2,
-              left: -2,
-              borderRight: 'none',
-              borderBottom: 'none',
-              borderRadius: '12px 0 0 0',
-              borderColor: '#bc13fe',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 30,
-              height: 30,
-              border: '2px solid #fff',
-              opacity: 0.8,
-              top: -2,
-              right: -2,
-              borderLeft: 'none',
-              borderBottom: 'none',
-              borderRadius: '0 12px 0 0',
-              borderColor: '#bc13fe',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 30,
-              height: 30,
-              border: '2px solid #fff',
-              opacity: 0.8,
-              bottom: -2,
-              left: -2,
-              borderRight: 'none',
-              borderTop: 'none',
-              borderRadius: '0 0 0 12px',
-              borderColor: '#bc13fe',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 30,
-              height: 30,
-              border: '2px solid #fff',
-              opacity: 0.8,
-              bottom: -2,
-              right: -2,
-              borderLeft: 'none',
-              borderTop: 'none',
-              borderRadius: '0 0 12px 0',
-              borderColor: '#bc13fe',
-            }}
-          />
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            top: 360,
-            right: 160,
-            width: 640,
-            height: 360,
-            background: 'rgba(0, 15, 30, 0.6)',
-            border: '2px solid #00f3ff',
-            borderRadius: 12,
-            boxShadow: '0 0 25px rgba(0, 243, 255, 0.3), inset 0 0 25px rgba(0, 243, 255, 0.15)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              width: '100%',
-              height: '100%',
-              backgroundImage: 'linear-gradient(rgba(0, 243, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 243, 255, 0.1) 1px, transparent 1px)',
-              backgroundSize: '40px 40px',
-              backgroundPosition: 'center center',
-              opacity: 0.3,
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 30,
-              height: 30,
-              border: '2px solid #fff',
-              opacity: 0.8,
-              top: -2,
-              left: -2,
-              borderRight: 'none',
-              borderBottom: 'none',
-              borderRadius: '12px 0 0 0',
-              borderColor: '#bc13fe',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 30,
-              height: 30,
-              border: '2px solid #fff',
-              opacity: 0.8,
-              top: -2,
-              right: -2,
-              borderLeft: 'none',
-              borderBottom: 'none',
-              borderRadius: '0 12px 0 0',
-              borderColor: '#bc13fe',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 30,
-              height: 30,
-              border: '2px solid #fff',
-              opacity: 0.8,
-              bottom: -2,
-              left: -2,
-              borderRight: 'none',
-              borderTop: 'none',
-              borderRadius: '0 0 0 12px',
-              borderColor: '#bc13fe',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 30,
-              height: 30,
-              border: '2px solid #fff',
-              opacity: 0.8,
-              bottom: -2,
-              right: -2,
-              borderLeft: 'none',
-              borderTop: 'none',
-              borderRadius: '0 0 12px 0',
-              borderColor: '#bc13fe',
-            }}
-          />
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            top: 415,
-            left: 835,
-            width: 250,
-            height: 250,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              width: 210,
-              height: 210,
-              borderRadius: '50%',
-              top: '50%',
-              left: '50%',
-              transform: `translate(-50%, -50%) rotate(${interpolate(localFrame, [0, 300], [0, 360], { easing: Easing.out(Easing.quad) })}deg)`,
-              border: '2px solid transparent',
-              borderTop: '2px solid #00f3ff',
-              borderBottom: '2px solid #00f3ff',
-              boxShadow: '0 10px 20px rgba(0, 243, 255, 0.2)',
-              zIndex: 19,
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 240,
-              height: 240,
-              borderRadius: '50%',
-              top: '50%',
-              left: '50%',
-              transform: `translate(-50%, -50%) rotate(${interpolate(localFrame, [0, 300], [0, -360], { easing: Easing.out(Easing.quad) })}deg)`,
-              border: '2px solid transparent',
-              borderLeft: '2px dashed #bc13fe',
-              borderRight: '2px dashed #bc13fe',
-              boxShadow: '-10px 0 20px rgba(188, 19, 254, 0.2)',
-              zIndex: 18,
-            }}
-          />
-          <div
-            style={{
-              width: 180,
-              height: 180,
-              background: 'rgba(20, 0, 40, 0.7)',
-              border: '2px solid #bc13fe',
-              borderRadius: '50%',
-              boxShadow: `0 0 40px rgba(188, 19, 254, ${interpolate(localFrame, [0, 300], [0.5, 0.8], { easing: Easing.out(Easing.quad) })})`,
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              position: 'relative',
-              zIndex: 20,
-            }}
-          />
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 20,
-            left: 20,
-            fontSize: 24,
-            fontFamily: 'sans-serif',
-            color: '#00f3ff',
-            opacity: interpolate(localFrame, [0, 100], [0, 1], { easing: Easing.out(Easing.quad) }),
-          }}
-        >
-          {judul}
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 60,
-            left: 20,
-            fontSize: 14,
-            fontFamily: 'sans-serif',
-            color: '#00f3ff',
-          }}
-        >
-          {keywordsList.map((keyword) => (
+          >
             <div
-              key={keyword}
               style={{
-                display: 'inline-block',
-                margin: '5px',
-                padding: '5px',
-                border: '1px solid #00f3ff',
-                borderRadius: '5px',
-                background: 'rgba(0, 243, 255, 0.1)',
+                position: 'absolute',
+                width: 30,
+                height: 30,
+                top: -1,
+                left: -1,
+                border: '3px solid #ff007f',
+                opacity: 0.8,
+                filter: 'drop-shadow(0 0 8px #ff007f)',
+                borderTopWidth: 3,
+                borderLeftWidth: 3,
+                borderTopStyle: 'solid',
+                borderLeftStyle: 'solid',
               }}
-            >
-              {keyword}
-            </div>
-          ))}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                width: 30,
+                height: 30,
+                bottom: -1,
+                right: -1,
+                border: '3px solid #ff007f',
+                opacity: 0.8,
+                filter: 'drop-shadow(0 0 8px #ff007f)',
+                borderBottomWidth: 3,
+                borderRightWidth: 3,
+                borderBottomStyle: 'solid',
+                borderRightStyle: 'solid',
+              }}
+            />
+          </div>
         </div>
+        <div
+          style={{
+            position: 'absolute',
+            width: 300,
+            height: 300,
+            top: 390,
+            left: 810,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              width: 270,
+              height: 270,
+              borderRadius: 50,
+              border: '2px dashed #00f0ff',
+              opacity: 0.3,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 236,
+              height: 236,
+              borderRadius: 50,
+              border: '3px solid transparent',
+              borderTop: '3px solid #ff007f',
+              borderBottom: '3px solid #9d4edd',
+              filter: 'drop-shadow(0 0 12px #ff007f)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 200,
+              height: 200,
+              borderRadius: 50,
+              background: 'radial-gradient(circle at 35% 35%, #1a0b2e 0%, #07020f 100%)',
+              border: '2px solid rgba(157, 78, 221, 0.4)',
+              boxShadow: `0 20px 50px rgba(0,0,0,0.6),
+                inset 0 0 30px rgba(157, 78, 221, 0.3),
+                0 0 60px rgba(157, 78, 221, 0.1)`,
+              backdropFilter: 'blur(20px)',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                width: 170,
+                height: 170,
+                borderRadius: 50,
+                border: '1px dashed rgba(255, 0, 127, 0.3)',
+              }}
+            />
+          </div>
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            width: 640,
+            height: 360,
+            top: 360,
+            right: 150,
+            borderRadius: 20,
+            background: 'rgba(10, 5, 18, 0.45)',
+            border: '1px solid rgba(157, 78, 221, 0.25)',
+            backdropFilter: 'blur(25px)',
+            boxShadow: `0 30px 60px rgba(0, 0, 0, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1),
+              0 0 50px rgba(157, 78, 221, 0.05)`,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              width: '100%',
+              height: '100%',
+              top: 0,
+              left: 0,
+              pointerEvents: 'none',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                width: 30,
+                height: 30,
+                top: -1,
+                left: -1,
+                border: '3px solid #ff007f',
+                opacity: 0.8,
+                filter: 'drop-shadow(0 0 8px #ff007f)',
+                borderTopWidth: 3,
+                borderLeftWidth: 3,
+                borderTopStyle: 'solid',
+                borderLeftStyle: 'solid',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                width: 30,
+                height: 30,
+                bottom: -1,
+                right: -1,
+                border: '3px solid #ff007f',
+                opacity: 0.8,
+                filter: 'drop-shadow(0 0 8px #ff007f)',
+                borderBottomWidth: 3,
+                borderRightWidth: 3,
+                borderBottomStyle: 'solid',
+                borderRightStyle: 'solid',
+              }}
+            />
+          </div>
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 80,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 700,
+            height: 3,
+            background: 'rgba(255, 255, 255, 0.05)',
+            borderRadius: 10,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              height: '100%',
+              width: `${progress}%`,
+              background: 'linear-gradient(90deg, #9d4edd, #ff007f)',
+              boxShadow: '0 0 15px #ff007f',
+            }}
+          />
+        </div>
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 20,
+          left: 20,
+          fontSize: 24,
+          fontWeight: 'bold',
+          color: 'white',
+          opacity: interpolate(localFrame, [0, fps], [0, 1], { easing: Easing.out(Easing.quad) }),
+        }}
+      >
+        {judul}
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 60,
+          left: 20,
+          fontSize: 14,
+          color: 'white',
+          opacity: interpolate(localFrame, [0, fps], [0, 1], { easing: Easing.out(Easing.quad) }),
+        }}
+      >
+        {keywordsList.map((keyword, index) => (
+          <div
+            key={index}
+            style={{
+              display: 'inline-block',
+              padding: '5px 10px',
+              margin: '5px',
+              borderRadius: 10,
+              background: 'rgba(10, 5, 18, 0.45)',
+              border: '1px solid rgba(157, 78, 221, 0.25)',
+              backdropFilter: 'blur(25px)',
+            }}
+          >
+            {keyword}
+          </div>
+        ))}
       </div>
     </div>
   );
 };
 
-export default CyberpunkGamingEndscreen;
+export default PremiumCinematicYouTubeEndscreen;
 // END_OF_FILE
