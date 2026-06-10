@@ -38,14 +38,14 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Browser Dependencies (Chrome headless)
+      - name: Install Browser Dependencies (Chrome headless) & FFmpeg
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
             libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
             libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
             libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 \
-            libcairo2 libxshmfence1 libgl1
+            libcairo2 libxshmfence1 libgl1 ffmpeg
 
       - name: Install Project Dependencies
         run: npm ci
