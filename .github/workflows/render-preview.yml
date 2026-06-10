@@ -95,10 +95,10 @@ jobs:
         run: |
           echo "=== Uploading video to BashUpload Cloud ==="
           FILENAME="${{ github.event.inputs.composition_id }}-preview.mp4"
-          curl -k -s https://bashupload.com/$FILENAME --upload-file out/$FILENAME > bashupload_res.txt || \
-          curl --insecure -s https://bashupload.com/$FILENAME --upload-file out/$FILENAME > bashupload_res.txt
+          curl -k -s https://bashupload.app/$FILENAME --upload-file out/$FILENAME > bashupload_res.txt || \
+          curl --insecure -s https://bashupload.app/$FILENAME --upload-file out/$FILENAME > bashupload_res.txt
           cat bashupload_res.txt
-          LINK=$(cat bashupload_res.txt | grep -o 'https://bashupload.com/[^ ]*')
+          LINK=$(cat bashupload_res.txt | grep -o -E 'https?://bashupload.app/[^ ]*')
           echo "Cloud Link: $LINK"
           echo "$LINK" > cloud-link.txt
 
