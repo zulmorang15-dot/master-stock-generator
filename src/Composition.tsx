@@ -236,6 +236,26 @@ const CyberpunkGamingEndscreen = () => {
         zIndex: 5,
     };
 
+    const subscribeAreaStyle: React.CSSProperties = {
+        position: 'absolute',
+        width: 360,
+        height: 360,
+        left: 780,
+        top: 360,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: '50%',
+        zIndex: 15,
+    };
+
+    const ringBaseStyle: React.CSSProperties = {
+        position: 'absolute',
+        borderRadius: '50%',
+        left: '50%',
+        top: '50%',
+    };
+
     return (
         <div style={mainWrapperStyle}>
             {/* Ambient Background & Grids */}
