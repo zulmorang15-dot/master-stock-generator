@@ -3,169 +3,70 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-// Deterministic particles pre-calculated outside the component to guarantee seamless frame render
-const PARTICLE_COUNT = 100;
-const PARTICLES = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
-  // Use deterministic math (sine of indices) instead of Math.random
-  const angleSeed = Math.sin(i * 123.456) * Math.PI * 2;
-  const radiusSeedX = 300 + Math.abs(Math.sin(i * 456.789)) * 600;
-  const radiusSeedY = 150 + Math.abs(Math.cos(i * 789.123)) * 300;
-  const speed = 1 + Math.abs(Math.sin(i * 987.654)) * 2;
-  const size = 2 + Math.abs(Math.sin(i * 321.098)) * 5;
-  const colorIndex = i % 3;
-  const color = colorIndex === 0 ? '#ff007f' : colorIndex === 1 ? '#9d4edd' : '#00f0ff';
-
-  return {
-    id: i,
-    angleSeed,
-    radiusSeedX,
-    radiusSeedY,
-    speed,
-    size,
-    color,
-  };
+// Deterministic particles pre-computed to avoid Math.random() in render loop
+const PARTICLE_COUNT = 150;
+const PARTICLES = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+  const seedX = Math.sin(i * 12.9898 + 43758.5453);
+  const seedY = Math.cos(i * 78.233 + 43758.5453);
+  const seedSize = Math.sin(i * 45.123 + 12345.6789);
+  
+  const x = Math.abs(seedX) * 1920;
+  const y = Math.abs(seedY) * 1080;
+  const size = 2 + Math.abs(seedSize) * 5;
+  const colors = ['#ff007f', '#9d4edd', '#00f0ff'];
+  const color = colors[Math.abs(Math.floor(seedX * 100)) % colors.length];
+  const speedX = (seedX * 2) % 0.5 - 0.25;
+  const speedY = (seedY * 2) % 0.5 - 0.25;
+  
+  return { x, y, size, color, speedX, speedY, phase: i };
 });
 
-// Deterministic grid points mapping for wave effect
-const GRID_COLS = 21;
-const GRID_ROWS = 12;
-
-export const PremiumEndscreen = () => {
-  const frame = useCurrentFrame();
+export const CinematicEndscreen = () => {
   const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
 
-  // Dynamic Text Overlay setup
-  const inputProps = (getInputProps() as any) || {};
-  const judul = inputProps.judul || 'CINEMATIC ENDSCREEN';
-  const keywordsList = (inputProps.keywords || 'Neon Loop, Ultra 4K, Cyberpunk, Premium').split(',');
-
-  // Scale computation to fit standard 1920x1080 design workspace beautifully into 4K or target container
+  // Scale engine for auto-fit 4K
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
 
-  // Global looping duration logic (10s @ 30fps = 300 frames)
-  const totalDuration = 300;
-  const localFrame = frame % totalDuration;
+  // 10s Seamless loop system
+  const cycleDuration = 10;
+  const totalFrames = fps * cycleDuration;
+  const localFrame = frame % totalFrames;
 
-  // Floating animations for placeholders
-  // Symmetrical loops using sine of progress (0 to 2*PI)
-  const leftFloatY = interpolate(
-    Math.sin((localFrame / totalDuration) * Math.PI * 4), 
-    [-1, 1], 
-    [-12, 12]
-  );
-  const leftFloatRot = interpolate(
-    Math.sin((localFrame / totalDuration) * Math.PI * 4), 
-    [-1, 1], 
-    [-1, 1]
-  );
+  // Safe Dynamic Text Props
+  const inputProps = (getInputProps() as any) || {};
+  const judul = inputProps.judul || 'THANKS FOR WATCHING';
+  const keywordsList = (inputProps.keywords || 'CYBERPUNK, NEXT VIDEO, SUBSCRIBE, NEON').split(',');
 
-  const rightFloatY = interpolate(
-    Math.cos((localFrame / totalDuration) * Math.PI * 4), 
-    [-1, 1], 
-    [-12, 12]
-  );
-  const rightFloatRot = interpolate(
-    Math.cos((localFrame / totalDuration) * Math.PI * 4), 
-    [-1, 1], 
-    [-1, 1]
-  );
+  // Float Animations (Symmetrical loops)
+  const leftCardY = interpolate(localFrame, [0, 150, 300], [0, -15, 0], {
+    ease: Easing.inOut(Easing.quad),
+  });
+  const leftCardRotate = interpolate(localFrame, [0, 150, 300], [0, -0.8, 0], {
+    ease: Easing.inOut(Easing.quad),
+  });
 
-  // Subscribe core pulse animation
-  const pulseScale = interpolate(
-    Math.sin((localFrame / totalDuration) * Math.PI * 6),
-    [-1, 1],
-    [0.97, 1.03]
-  );
+  const rightCardY = interpolate(localFrame, [0, 150, 300], [-10, 5, -10], {
+    ease: Easing.inOut(Easing.quad),
+  });
+  const rightCardRotate = interpolate(localFrame, [0, 150, 300], [0.5, -0.3, 0.5], {
+    ease: Easing.inOut(Easing.quad),
+  });
 
-  const glowIntensity = interpolate(
-    Math.sin((localFrame / totalDuration) * Math.PI * 6),
-    [-1, 1],
-    [0.3, 0.7]
-  );
+  // Subscribe Pulsing and Rotation
+  const pulseGlow = interpolate(localFrame, [0, 150, 300], [1, 1.05, 1], {
+    ease: Easing.inOut(Easing.quad),
+  });
+  const outerRotation = interpolate(localFrame, [0, 300], [0, 360]);
+  const innerRotation = interpolate(localFrame, [0, 300], [360, 0]);
 
-  // Tech Ring Rotation (perfect 360 loops over 10 seconds)
-  const outerRingRot = interpolate(localFrame, [0, totalDuration], [0, 360]);
-  const innerRingRot = interpolate(localFrame, [0, totalDuration], [0, -360]);
+  // Traveling glow for cinematic progress bar (Seamless sweeping)
+  const activeProgressLeft = interpolate(localFrame, [0, 300], [-300, 1000]);
 
-  // Video Placeholder Neon Glow pulsing colors
-  const neonPulseColor = interpolate(
-    Math.sin((localFrame / totalDuration) * Math.PI * 4),
-    [-1, 1],
-    [0.15, 0.45]
-  );
-
-  // Dynamic progress line (0% to 100% loop)
-  const progressPercent = (localFrame / totalDuration) * 100;
-
-  // Dynamic Title fade-in sequence
-  const titleOpacity = interpolate(
-    localFrame,
-    [0, 30],
-    [0, 1],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-  );
-  
-  const titleTranslateY = interpolate(
-    localFrame,
-    [0, 30],
-    [15, 0],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) }
-  );
-
-  // Grid wave simulation calculation (Deterministic 2D projection)
-  const gridLines: string[] = [];
-  // Generate horizontal flowing wave lines
-  for (let r = 0; r < GRID_ROWS; r++) {
-    const rRatio = r / (GRID_ROWS - 1);
-    // Exponential vertical distribution to simulate 3D projection/horizon perspective
-    const y = 480 + Math.pow(rRatio, 1.8) * 450;
-    let path = '';
-    
-    for (let c = 0; c < GRID_COLS; c++) {
-      const cRatio = c / (GRID_COLS - 1);
-      const x = 1920 * cRatio;
-      
-      // Dynamic sine-wave rippling based on column index and loop frame
-      const wavePhase = (cRatio * Math.PI * 3) + ((localFrame / totalDuration) * Math.PI * 2);
-      const waveHeight = Math.sin(wavePhase) * (15 * rRatio); // Deeper wave amplitude in foreground
-      const finalY = y + waveHeight;
-
-      if (c === 0) {
-        path += `M ${x} ${finalY}`;
-      } else {
-        path += ` L ${x} ${finalY}`;
-      }
-    }
-    gridLines.push(path);
-  }
-
-  // Vertical perspective projection lines fanning out
-  const verticalGridPaths: string[] = [];
-  for (let c = 0; c < GRID_COLS; c++) {
-    const cRatio = c / (GRID_COLS - 1);
-    let path = '';
-    
-    for (let r = 0; r < GRID_ROWS; r++) {
-      const rRatio = r / (GRID_ROWS - 1);
-      const y = 480 + Math.pow(rRatio, 1.8) * 450;
-      
-      // Keep x converging at horizon (center 960) and spreading out at foreground
-      const xOrigin = 960 + (cRatio - 0.5) * 500;
-      const xForeground = 960 + (cRatio - 0.5) * 2200;
-      const x = interpolate(rRatio, [0, 1], [xOrigin, xForeground]);
-
-      const wavePhase = (cRatio * Math.PI * 3) + ((localFrame / totalDuration) * Math.PI * 2);
-      const waveHeight = Math.sin(wavePhase) * (15 * rRatio);
-      const finalY = y + waveHeight;
-
-      if (r === 0) {
-        path += `M ${x} ${finalY}`;
-      } else {
-        path += ` L ${x} ${finalY}`;
-      }
-    }
-    verticalGridPaths.push(path);
-  }
+  // Title Elegant Fade and Float
+  const titleGlow = interpolate(localFrame, [0, 150, 300], [10, 25, 10], {
+    ease: Easing.inOut(Easing.quad),
+  });
 
   return (
     <div
@@ -179,187 +80,188 @@ export const PremiumEndscreen = () => {
         overflow: 'hidden',
       }}
     >
-      {/* Master 1920x1080 Container scaled to fit any output resolution automatically */}
       <div
         style={{
-          position: 'absolute',
+          position: 'relative',
           width: ORIGINAL_WIDTH,
           height: ORIGINAL_HEIGHT,
           transform: `scale(${scaleFactor})`,
           transformOrigin: 'center center',
           background: 'radial-gradient(circle at center, #0c051a 0%, #020005 100%)',
+          boxShadow: '0 0 150px rgba(0,0,0,0.9)',
           overflow: 'hidden',
-          boxShadow: '0 0 150px rgba(0, 0, 0, 0.9)',
         }}
       >
-        {/* Dynamic 2D Wave Grid Layer (Alternative to Three.js) */}
+        {/* Dynamic Vector Wave Grid (Alternative to WebGL Grid) */}
         <svg
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
-            width: ORIGINAL_WIDTH,
-            height: ORIGINAL_HEIGHT,
+            width: '100%',
+            height: '100%',
             pointerEvents: 'none',
-            opacity: 0.25,
+            zIndex: 1,
+            opacity: 0.6,
           }}
         >
-          {gridLines.map((d, idx) => (
-            <path
-              key={`h-${idx}`}
-              d={d}
-              fill="none"
-              stroke="#9d4edd"
-              strokeWidth={1.5}
-            />
-          ))}
-          {verticalGridPaths.map((d, idx) => (
-            <path
-              key={`v-${idx}`}
-              d={d}
-              fill="none"
-              stroke="#9d4edd"
-              strokeWidth={1.2}
-            />
-          ))}
+          {/* Horizontal waving perspective lines */}
+          {Array.from({ length: 16 }).map((_, i) => {
+            const progress = (i + (localFrame / totalFrames)) / 16;
+            const y = 500 + progress * 580;
+            const scale = progress;
+            const widthAtY = 2800 * scale;
+            const leftX = 960 - widthAtY / 2;
+            const rightX = 960 + widthAtY / 2;
+            
+            const waveAmp = 25 * (1 - Math.cos(progress * Math.PI));
+            let d = `M ${leftX} ${y}`;
+            const steps = 30;
+            for (let step = 1; step <= steps; step++) {
+              const ratio = step / steps;
+              const x = leftX + (rightX - leftX) * ratio;
+              const waveX = Math.sin(ratio * Math.PI * 4 + (localFrame / totalFrames) * Math.PI * 2) * waveAmp;
+              d += ` L ${x} ${y + waveX}`;
+            }
+
+            return (
+              <path
+                key={`h-${i}`}
+                d={d}
+                fill="none"
+                stroke="#9d4edd"
+                strokeWidth={1.5 * progress}
+                opacity={0.15 + progress * 0.45}
+              />
+            );
+          })}
+
+          {/* Perspective rays radiating from center */}
+          {Array.from({ length: 21 }).map((_, i) => {
+            const ratio = i / 20;
+            const startX = 960;
+            const startY = 500;
+            const endX = -400 + ratio * 2720;
+            const endY = 1080;
+
+            let d = `M ${startX} ${startY}`;
+            const steps = 10;
+            for (let step = 1; step <= steps; step++) {
+              const stepRatio = step / steps;
+              const x = startX + (endX - startX) * stepRatio;
+              const y = startY + (endY - startY) * stepRatio;
+              const waveAmp = 15 * stepRatio;
+              const waveX = Math.sin(stepRatio * Math.PI * 2 + (localFrame / totalFrames) * Math.PI * 2) * waveAmp;
+              d += ` L ${x + waveX} ${y}`;
+            }
+
+            return (
+              <path
+                key={`p-${i}`}
+                d={d}
+                fill="none"
+                stroke="#00f0ff"
+                strokeWidth={1}
+                opacity={0.15}
+              />
+            );
+          })}
         </svg>
 
-        {/* Deterministic Cosmic Nebula Particles Rendering */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: ORIGINAL_WIDTH,
-            height: ORIGINAL_HEIGHT,
-            pointerEvents: 'none',
-          }}
-        >
+        {/* Floating Nebula Particles */}
+        <div style={{ position: 'absolute', width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' }}>
           {PARTICLES.map((p) => {
-            // Safe looping orbit calculations
-            const angle = p.angleSeed + ((localFrame / totalDuration) * Math.PI * 2 * p.speed);
-            const posX = 960 + Math.cos(angle) * p.radiusSeedX;
-            const posY = 540 + Math.sin(angle) * p.radiusSeedY;
+            // Symmetrical float looping
+            const wave = Math.sin((localFrame / totalFrames) * Math.PI * 2);
+            const px = p.x + p.speedX * wave * 80;
+            const py = p.y + p.speedY * wave * 80;
+            const opacity = interpolate(wave, [-1, 1], [0.3, 0.8]);
 
             return (
               <div
-                key={p.id}
+                key={p.phase}
                 style={{
                   position: 'absolute',
-                  left: posX,
-                  top: posY,
+                  left: px,
+                  top: py,
                   width: p.size,
                   height: p.size,
                   borderRadius: '50%',
                   backgroundColor: p.color,
-                  boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
-                  opacity: 0.65,
-                  transform: 'translate(-50%, -50%)',
+                  boxShadow: `0 0 ${p.size * 2}px ${p.color}`,
+                  opacity: opacity,
                 }}
               />
             );
           })}
         </div>
 
-        {/* Cinematic Vignette Overlay */}
+        {/* Cinematic Vignette and Color Grading Overlay */}
         <div
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
-            width: ORIGINAL_WIDTH,
-            height: ORIGINAL_HEIGHT,
+            width: '100%',
+            height: '100%',
             boxShadow: 'inset 0 0 300px rgba(0, 0, 0, 0.95)',
             background: `
-              radial-gradient(circle at 20% 30%, rgba(255, 0, 127, 0.04) 0%, transparent 40%),
-              radial-gradient(circle at 80% 70%, rgba(0, 240, 255, 0.04) 0%, transparent 40%),
+              radial-gradient(circle at 20% 30%, rgba(255, 0, 127, 0.05) 0%, transparent 40%),
+              radial-gradient(circle at 80% 70%, rgba(0, 240, 255, 0.05) 0%, transparent 40%),
               linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%)
             `,
             backgroundSize: '100% 100%, 100% 100%, 100% 6px',
-            pointerEvents: 'none',
             zIndex: 2,
+            pointerEvents: 'none',
           }}
         />
 
-        {/* Ambient Glow Strips */}
+        {/* Ambient Lighting Strips */}
         <div
           style={{
             position: 'absolute',
-            width: 1200,
-            height: 2,
-            left: 360,
-            top: 180,
+            width: '1200px',
+            height: '2px',
+            left: '360px',
             background: 'linear-gradient(90deg, transparent, #9d4edd, #00f0ff, #9d4edd, transparent)',
-            opacity: 0.4,
-            filter: 'blur(1px)',
+            opacity: 0.5,
+            filter: 'blur(2px)',
+            top: '180px',
+            zIndex: 3,
           }}
         />
         <div
           style={{
             position: 'absolute',
-            width: 1200,
-            height: 2,
-            left: 360,
-            bottom: 180,
+            width: '1200px',
+            height: '2px',
+            left: '360px',
             background: 'linear-gradient(90deg, transparent, #9d4edd, #00f0ff, #9d4edd, transparent)',
-            opacity: 0.4,
-            filter: 'blur(1px)',
+            opacity: 0.5,
+            filter: 'blur(2px)',
+            bottom: '180px',
+            zIndex: 3,
           }}
         />
 
-        {/* Cinematic Progress Line */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 80,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 700,
-            height: 3,
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            borderRadius: 10,
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              height: '100%',
-              width: `${progressPercent}%`,
-              background: 'linear-gradient(90deg, #9d4edd, #ff007f)',
-              boxShadow: '0 0 15px #ff007f',
-            }}
-          />
-        </div>
-
-        {/* UI Elements Layer */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: ORIGINAL_WIDTH,
-            height: ORIGINAL_HEIGHT,
-            zIndex: 5,
-          }}
-        >
+        {/* UI Layer */}
+        <div style={{ position: 'absolute', width: '100%', height: '100%', zIndex: 5 }}>
+          
           {/* Section Labels */}
           <div
             style={{
               position: 'absolute',
               color: '#ffffff',
-              fontSize: 14,
+              fontSize: '14px',
               fontWeight: 700,
-              letterSpacing: 6,
+              letterSpacing: '6px',
               textTransform: 'uppercase',
-              opacity: 0.5,
-              width: 640,
+              opacity: 0.6,
+              width: '640px',
               textAlign: 'center',
-              left: 150,
-              top: 315,
-              fontFamily: 'Segoe UI, Roboto, sans-serif',
+              left: '150px',
+              top: '315px',
+              fontFamily: '"Segoe UI", Roboto, sans-serif',
             }}
           >
             Recommended Video
@@ -369,16 +271,16 @@ export const PremiumEndscreen = () => {
             style={{
               position: 'absolute',
               color: '#ffffff',
-              fontSize: 14,
+              fontSize: '14px',
               fontWeight: 700,
-              letterSpacing: 6,
+              letterSpacing: '6px',
               textTransform: 'uppercase',
-              opacity: 0.5,
-              width: 640,
+              opacity: 0.6,
+              width: '640px',
               textAlign: 'center',
-              right: 150,
-              top: 315,
-              fontFamily: 'Segoe UI, Roboto, sans-serif',
+              right: '150px',
+              top: '315px',
+              fontFamily: '"Segoe UI", Roboto, sans-serif',
             }}
           >
             Best for Viewer
@@ -388,205 +290,302 @@ export const PremiumEndscreen = () => {
           <div
             style={{
               position: 'absolute',
-              width: 640,
-              height: 360,
-              left: 150,
-              top: 360,
-              borderRadius: 20,
+              width: '640px',
+              height: '360px',
+              top: '360px',
+              left: '150px',
+              borderRadius: '20px',
               backgroundColor: 'rgba(10, 5, 18, 0.45)',
-              border: `1px solid rgba(0, 240, 255, ${neonPulseColor})`,
+              border: '1px solid rgba(157, 78, 221, 0.3)',
               backdropFilter: 'blur(25px)',
               WebkitBackdropFilter: 'blur(25px)',
-              boxShadow: `0 30px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 40px rgba(0, 240, 255, ${neonPulseColor * 0.5})`,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
+              boxShadow: '0 30px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 50px rgba(157, 78, 221, 0.08)',
               overflow: 'hidden',
-              transform: `translateY(${leftFloatY}px) rotate(${leftFloatRot}deg)`,
-            }}
-          >
-            {/* Tech Corners */}
-            <div style={{ position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }}>
-              <div style={{ position: 'absolute', width: 30, height: 30, top: -1, left: -1, borderStyle: 'solid', borderColor: '#ff007f', borderWidth: '3px 0 0 3px', borderRadius: '20px 0 0 0', filter: 'drop-shadow(0 0 8px #ff007f)' }} />
-              <div style={{ position: 'absolute', width: 30, height: 30, bottom: -1, right: -1, borderStyle: 'solid', borderColor: '#ff007f', borderWidth: '0 3px 3px 0', borderRadius: '0 0 20px 0', filter: 'drop-shadow(0 0 8px #ff007f)' }} />
-            </div>
-            {/* Glassmorphic Play Icon Accent */}
-            <div style={{ width: 80, height: 80, borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="#ffffff">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </div>
-          </div>
-
-          {/* Center Subscribe System */}
-          <div
-            style={{
-              position: 'absolute',
-              width: 300,
-              height: 300,
-              top: 390,
-              left: 810,
+              transform: `translateY(${leftCardY}px) rotate(${leftCardRotate}deg)`,
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
             }}
           >
-            {/* Outer dashed ring rotating */}
-            <div
-              style={{
-                position: 'absolute',
-                width: 270,
-                height: 270,
-                borderRadius: '50%',
-                border: '2px dashed #00f0ff',
-                opacity: 0.3,
-                zIndex: 1,
-                transform: `rotate(${outerRingRot}deg)`,
-              }}
-            />
-
-            {/* Inner dynamic color solid border ring rotating back */}
-            <div
-              style={{
-                position: 'absolute',
-                width: 236,
-                height: 236,
-                borderRadius: '50%',
-                border: '3px solid transparent',
-                borderTop: '3px solid #ff007f',
-                borderBottom: '3px solid #9d4edd',
-                filter: 'drop-shadow(0 0 12px #ff007f)',
-                zIndex: 2,
-                transform: `rotate(${innerRingRot}deg)`,
-              }}
-            />
-
-            {/* Core subscribe background pulsating in scale and glow */}
-            <div
-              style={{
-                position: 'absolute',
-                width: 200,
-                height: 200,
-                borderRadius: '50%',
-                background: 'radial-gradient(circle at 35% 35%, #1a0b2e 0%, #07020f 100%)',
-                border: `2px solid rgba(255, 0, 127, ${glowIntensity})`,
-                boxShadow: `0 25px 60px rgba(0,0,0,0.7), inset 0 0 40px rgba(255, 0, 127, ${glowIntensity * 0.6}), 0 0 70px rgba(157, 78, 221, ${glowIntensity * 0.4})`,
-                backdropFilter: 'blur(20px)',
-                zIndex: 3,
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                transform: `scale(${pulseScale})`,
-              }}
-            >
-              {/* Core design graphic inner ring */}
+            {/* Tech Corner Accents */}
+            <div style={{ position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }}>
               <div
                 style={{
-                  width: 170,
-                  height: 170,
-                  borderRadius: '50%',
-                  border: '1px dashed rgba(255, 0, 127, 0.3)',
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
+                  position: 'absolute',
+                  width: '30px',
+                  height: '30px',
+                  borderColor: '#ff007f',
+                  borderStyle: 'solid',
+                  opacity: 0.8,
+                  top: '-1px',
+                  left: '-1px',
+                  borderWidth: '3px 0 0 3px',
+                  borderRadius: '20px 0 0 0',
                 }}
-              >
-                {/* Elegant Play/Bell icon at the center */}
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="#ff007f" style={{ filter: 'drop-shadow(0 0 8px #ff007f)' }}>
-                  <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z" />
-                </svg>
-              </div>
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  width: '30px',
+                  height: '30px',
+                  borderColor: '#ff007f',
+                  borderStyle: 'solid',
+                  opacity: 0.8,
+                  bottom: '-1px',
+                  right: '-1px',
+                  borderWidth: '0 3px 3px 0',
+                  borderRadius: '0 0 20px 0',
+                }}
+              />
             </div>
+            {/* Elegant Neon Scanning Effect Inside Placeholder */}
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                background: 'linear-gradient(45deg, rgba(255, 0, 127, 0.02), rgba(0, 240, 255, 0.02))',
+              }}
+            />
           </div>
 
           {/* Right Video Placeholder */}
           <div
             style={{
               position: 'absolute',
-              width: 640,
-              height: 360,
-              right: 150,
-              top: 360,
-              borderRadius: 20,
+              width: '640px',
+              height: '360px',
+              top: '360px',
+              right: '150px',
+              borderRadius: '20px',
               backgroundColor: 'rgba(10, 5, 18, 0.45)',
-              border: `1px solid rgba(0, 240, 255, ${neonPulseColor})`,
+              border: '1px solid rgba(0, 240, 255, 0.3)',
               backdropFilter: 'blur(25px)',
               WebkitBackdropFilter: 'blur(25px)',
-              boxShadow: `0 30px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 40px rgba(0, 240, 255, ${neonPulseColor * 0.5})`,
+              boxShadow: '0 30px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 50px rgba(0, 240, 255, 0.08)',
+              overflow: 'hidden',
+              transform: `translateY(${rightCardY}px) rotate(${rightCardRotate}deg)`,
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              overflow: 'hidden',
-              transform: `translateY(${rightFloatY}px) rotate(${rightFloatRot}deg)`,
             }}
           >
-            {/* Tech Corners */}
+            {/* Tech Corner Accents */}
             <div style={{ position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }}>
-              <div style={{ position: 'absolute', width: 30, height: 30, top: -1, left: -1, borderStyle: 'solid', borderColor: '#ff007f', borderWidth: '3px 0 0 3px', borderRadius: '20px 0 0 0', filter: 'drop-shadow(0 0 8px #ff007f)' }} />
-              <div style={{ position: 'absolute', width: 30, height: 30, bottom: -1, right: -1, borderStyle: 'solid', borderColor: '#ff007f', borderWidth: '0 3px 3px 0', borderRadius: '0 0 20px 0', filter: 'drop-shadow(0 0 8px #ff007f)' }} />
+              <div
+                style={{
+                  position: 'absolute',
+                  width: '30px',
+                  height: '30px',
+                  borderColor: '#00f0ff',
+                  borderStyle: 'solid',
+                  opacity: 0.8,
+                  top: '-1px',
+                  left: '-1px',
+                  borderWidth: '3px 0 0 3px',
+                  borderRadius: '20px 0 0 0',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  width: '30px',
+                  height: '30px',
+                  borderColor: '#00f0ff',
+                  borderStyle: 'solid',
+                  opacity: 0.8,
+                  bottom: '-1px',
+                  right: '-1px',
+                  borderWidth: '0 3px 3px 0',
+                  borderRadius: '0 0 20px 0',
+                }}
+              />
             </div>
-            {/* Glassmorphic Play Icon Accent */}
-            <div style={{ width: 80, height: 80, borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="#ffffff">
-                <path d="M8 5v14l11-7z" />
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                background: 'linear-gradient(-45deg, rgba(255, 0, 127, 0.02), rgba(0, 240, 255, 0.02))',
+              }}
+            />
+          </div>
+
+          {/* Center Subscribe Ring System */}
+          <div
+            style={{
+              position: 'absolute',
+              width: '300px',
+              height: '300px',
+              top: '390px',
+              left: '810px',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              transform: `scale(${pulseGlow})`,
+            }}
+          >
+            {/* Outer Cyan Dashed Ring */}
+            <div
+              style={{
+                position: 'absolute',
+                width: '270px',
+                height: '270px',
+                borderRadius: '50%',
+                border: '2px dashed #00f0ff',
+                opacity: 0.4,
+                transform: `rotate(${outerRotation}deg)`,
+              }}
+            />
+            
+            {/* Inner Neon Gradiation Ring */}
+            <div
+              style={{
+                position: 'absolute',
+                width: '236px',
+                height: '236px',
+                borderRadius: '50%',
+                border: '3px solid transparent',
+                borderTop: '3px solid #ff007f',
+                borderBottom: '3px solid #9d4edd',
+                filter: 'drop-shadow(0 0 12px #ff007f)',
+                transform: `rotate(${innerRotation}deg)`,
+              }}
+            />
+
+            {/* Subscribe Core Element */}
+            <div
+              style={{
+                position: 'absolute',
+                width: '200px',
+                height: '200px',
+                borderRadius: '50%',
+                background: 'radial-gradient(circle at 35% 35%, #1a0b2e 0%, #07020f 100%)',
+                border: '2px solid rgba(255, 0, 127, 0.5)',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.7), inset 0 0 30px rgba(157, 78, 221, 0.4), 0 0 60px rgba(255, 0, 127, 0.3)',
+                backdropFilter: 'blur(20px)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              {/* Inner dashed detail */}
+              <div
+                style={{
+                  width: '170px',
+                  height: '170px',
+                  borderRadius: '50%',
+                  border: '1px dashed rgba(255, 0, 127, 0.4)',
+                  position: 'absolute',
+                }}
+              />
+              
+              {/* Profile Icon / Logo Graphic */}
+              <svg
+                viewBox="0 0 100 100"
+                style={{
+                  width: '60px',
+                  height: '60px',
+                  fill: 'none',
+                  stroke: '#ffffff',
+                  strokeWidth: 3,
+                  strokeLinecap: 'round',
+                  strokeLinejoin: 'round',
+                  filter: 'drop-shadow(0 0 8px #ff007f)',
+                  zIndex: 10,
+                }}
+              >
+                <path d="M50 20 C35 20, 25 35, 25 50 C25 65, 50 80, 50 80 C50 80, 75 65, 75 50 C75 35, 65 20, 50 20 Z" />
+                <circle cx="50" cy="45" r="12" stroke="#00f0ff" />
               </svg>
             </div>
           </div>
-        </div>
 
-        {/* Dynamic Glowing Text Overlay (Safe pattern implementation) */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 110,
-            left: 150,
-            zIndex: 10,
-            fontFamily: 'Segoe UI, Roboto, sans-serif',
-            opacity: titleOpacity,
-            transform: `translateY(${titleTranslateY}px)`,
-          }}
-        >
+          {/* Sweep Laser Progress Line */}
           <div
             style={{
-              fontSize: 32,
-              fontWeight: 800,
-              letterSpacing: 2,
-              color: '#ffffff',
-              textTransform: 'uppercase',
-              textShadow: '0 0 10px rgba(255, 0, 127, 0.5), 0 0 20px rgba(157, 78, 221, 0.3)',
-              marginBottom: 12,
+              position: 'absolute',
+              bottom: '80px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '700px',
+              height: '3px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '10px',
+              overflow: 'hidden',
             }}
           >
-            {judul}
+            {/* Seamless Laser Sweep */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: activeProgressLeft,
+                height: '100%',
+                width: '300px',
+                background: 'linear-gradient(90deg, transparent, #9d4edd, #ff007f, #00f0ff, transparent)',
+                boxShadow: '0 0 15px #ff007f, 0 0 25px #00f0ff',
+              }}
+            />
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {keywordsList.map((tag, idx) => (
-              <span
-                key={idx}
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: 1.5,
-                  color: '#00f0ff',
-                  backgroundColor: 'rgba(10, 5, 18, 0.6)',
-                  border: '1px solid rgba(157, 78, 221, 0.3)',
-                  padding: '4px 12px',
-                  borderRadius: 12,
-                  backdropFilter: 'blur(5px)',
-                  WebkitBackdropFilter: 'blur(5px)',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-                }}
-              >
-                {tag.trim()}
-              </span>
-            ))}
+
+          {/* Dynamic Title and Tags Overlay */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '120px',
+              left: '150px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '15px',
+              fontFamily: '"Segoe UI", Roboto, sans-serif',
+            }}
+          >
+            {/* Glow Title */}
+            <h1
+              style={{
+                margin: 0,
+                color: '#ffffff',
+                fontSize: '36px',
+                fontWeight: 900,
+                letterSpacing: '4px',
+                textTransform: 'uppercase',
+                textShadow: `0 0 ${titleGlow}px rgba(255, 0, 127, 0.8), 0 0 5px rgba(0, 240, 255, 0.5)`,
+              }}
+            >
+              {judul}
+            </h1>
+            
+            {/* Glassmorphic Keyword Badges */}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {keywordsList.map((tag, idx) => (
+                <span
+                  key={idx}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    letterSpacing: '2px',
+                    textTransform: 'uppercase',
+                    color: '#00f0ff',
+                    backgroundColor: 'rgba(10, 5, 18, 0.6)',
+                    border: '1px solid rgba(0, 240, 255, 0.3)',
+                    borderRadius: '30px',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+                    textShadow: '0 0 4px rgba(0, 240, 255, 0.5)',
+                  }}
+                >
+                  {tag.trim()}
+                </span>
+              ))}
+            </div>
           </div>
+
         </div>
       </div>
     </div>
   );
 };
 
-export default PremiumEndscreen;
+export default CinematicEndscreen;
 // END_OF_FILE
