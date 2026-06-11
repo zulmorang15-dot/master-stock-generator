@@ -1001,6 +1001,11 @@
           <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub Repository</label>
           <input type="text" class="input-text-field" id="githubRepo" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="master-stock-generator" />
         </div>
+        <!-- OpenInbox API Key -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">OpenInbox.io API Key (untuk OTP otomatis)</label>
+          <input type="password" class="input-text-field" id="openInboxKey" style="margin-bottom:8px; border-color:rgba(16,185,129,0.3);" placeholder="tmp_xxxxx (beli di openinbox.io/premium)" />
+        </div>
         <!-- Syntx Account Pool Status -->
         <div style="grid-column: 1 / -1; margin-top: 10px; padding: 12px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 8px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -2310,6 +2315,7 @@
       document.getElementById('githubToken').value = data.githubToken || '';
       document.getElementById('githubUsername').value = data.githubUsername || '';
       document.getElementById('githubRepo').value = data.githubRepo || '';
+      document.getElementById('openInboxKey').value = data.openInboxKey || '';
     } catch (err) {
       showToast('❌ Gagal memuat API Keys: ' + err.message, 'error');
     }
@@ -2325,6 +2331,7 @@
     const githubToken = document.getElementById('githubToken').value;
     const githubUsername = document.getElementById('githubUsername').value;
     const githubRepo = document.getElementById('githubRepo').value;
+    const openInboxKey = document.getElementById('openInboxKey').value;
 
     try {
       const resp = await fetch('/api/keys', {
@@ -2339,7 +2346,8 @@
           syntxEmailIndex,
           githubToken,
           githubUsername,
-          githubRepo
+          githubRepo,
+          openInboxKey
         })
       });
       const data = await resp.json();

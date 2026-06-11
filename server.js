@@ -3239,7 +3239,7 @@ app.post("/api/start-task/:id", (req, res) => {
 });
 
 // Fungsi untuk memperbarui file .env dan memory variables
-function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo }) {
+function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey }) {
   const envPath = path.join(__dirname, ".env");
   let content = "";
   if (fs.existsSync(envPath)) {
@@ -3270,6 +3270,7 @@ function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBa
   if (githubToken !== undefined) keyValues["GITHUB_TOKEN"] = githubToken;
   if (githubUsername !== undefined) keyValues["GITHUB_USERNAME"] = githubUsername;
   if (githubRepo !== undefined) keyValues["GITHUB_REPO"] = githubRepo;
+  if (openInboxKey !== undefined) keyValues["OPENINBOX_API_KEY"] = openInboxKey;
 
   // Build new content preserving original lines/formatting
   const newLines = [];
@@ -3354,15 +3355,16 @@ app.get("/api/keys", (req, res) => {
     syntxEmailIndex: process.env.SYNTX_EMAIL_INDEX || "0",
     githubToken: process.env.GITHUB_TOKEN || "",
     githubUsername: process.env.GITHUB_USERNAME || "",
-    githubRepo: process.env.GITHUB_REPO || ""
+    githubRepo: process.env.GITHUB_REPO || "",
+    openInboxKey: process.env.OPENINBOX_API_KEY || ""
   });
 });
 
 // POST: Simpan API Keys baru
 app.post("/api/keys", (req, res) => {
-  const { groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo } = req.body;
+  const { groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey } = req.body;
   try {
-    updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo });
+    updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey });
     console.log("🔑 API Keys & Config GitHub berhasil diperbarui di server runtime.");
     res.json({ success: true });
   } catch (err) {

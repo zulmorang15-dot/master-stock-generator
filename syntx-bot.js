@@ -114,6 +114,86 @@ function logToTask(options, message, type = 'info') {
 }
 
 // ─────────────────────────────────────────────
+// OPENINBOX: Create inbox + fetch OTP
+// ─────────────────────────────────────────────
+const OPENINBOX_API = 'https://api.openinbox.io/api';
+
+async function createOpenInboxEmail(options) {
+  const apiKey = process.env.OPENINBOX_API_KEY;
+  if (!apiKey) throw new Error('OPENINBOX_API_KEY tidak dikonfigurasi');
+
+  logToTask(options, '📧 [syntx-bot] Membuat inbox via OpenInbox.io...', 'info');
+
+  const res = await axios.post(`${OPENINBOX_API}/v1/inboxes`, {}, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': apiKey
+    },
+    timeout: 15000
+  });
+
+  const inboxId = res.data.id;
+  const email = res.data.email;
+  if (!email || !inboxId) {
+    throw new Error('OpenInbox gagal membuat inbox: ' + JSON.stringify(res.data));
+  }
+
+  logToTask(options, `✅ [syntx-bot] OpenInbox dibuat: ${email} (ID: ${inboxId})`, 'success');
+  return { email, inboxId };
+}
+
+async function fetchOTPFromOpenInbox(apiKey, inboxId, maxWaitMs = 60000, options) {
+  logToTask(options, `🔍 [syntx-bot] Menunggu OTP di OpenInbox (${inboxId})...`, 'info');
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWaitMs) {
+    await sleep(5000);
+
+    try {
+      const listRes = await axios.get(`${OPENINBOX_API}/v1/inboxes/${inboxId}/emails`, {
+        headers: { 'X-API-Key': apiKey },
+        timeout: 15000
+      });
+
+      const emails = listRes.data.emails || listRes.data.data || listRes.data || [];
+      if (emails.length === 0) {
+        logToTask(options, `   ⏳ OpenInbox masih kosong, tunggu 5s... (${Math.floor((Date.now() - startTime)/1000)}s)`, 'info');
+        continue;
+      }
+
+      // Read the first email's full content
+      const firstEmail = emails[0];
+      const emailId = firstEmail.id || firstEmail.emailId;
+      let body = firstEmail.body || firstEmail.text || firstEmail.html || '';
+      let subject = firstEmail.subject || '';
+
+      if (emailId && !body) {
+        const detailRes = await axios.get(`${OPENINBOX_API}/v1/emails/${emailId}`, {
+          headers: { 'X-API-Key': apiKey },
+          timeout: 15000
+        });
+        body = detailRes.data.body || detailRes.data.text || detailRes.data.html || '';
+        subject = detailRes.data.subject || subject;
+      }
+
+      // Extract 6-digit OTP
+      const otpMatch = body.match(/\b(\d{6})\b/) || subject.match(/\b(\d{6})\b/);
+      if (otpMatch) {
+        const otp = otpMatch[1];
+        logToTask(options, `🎯 [syntx-bot] OTP ditemukan via OpenInbox: ${otp}`, 'success');
+        return otp;
+      }
+
+      logToTask(options, `⚠️ [syntx-bot] Email masuk tapi OTP tidak ditemukan di body/subject`, 'warning');
+    } catch (err) {
+      logToTask(options, `⚠️ [syntx-bot] Error cek OpenInbox: ${err.message}`, 'warning');
+    }
+  }
+
+  throw new Error('Timeout: OTP tidak diterima via OpenInbox dalam ' + Math.floor(maxWaitMs / 1000) + ' detik');
+}
+
+// ─────────────────────────────────────────────
 // STEP 1: Buat akun email temporer di mail.tm
 // ─────────────────────────────────────────────
 async function createTempEmail(options) {
@@ -793,16 +873,31 @@ function registerOtpProvider(fn) {
 async function loginAndGetToken(options = {}) {
   logToTask(options, '\n🔄 [syntx-bot] Memulai proses login syntx.ai...', 'info');
   
-  // Prioritas: 1) dot-variant base email (tercepat), 2) Emailnator (gratis), 3) Gmailnator RapidAPI, 4) Mail.tm
+  // Prioritas: 1) OpenInbox (API, stabil), 2) dot-variant, 3) Emailnator, 4) Gmailnator, 5) Mail.tm
   const rapidApiKey = process.env.RAPIDAPI_KEY;
   const baseEmail = process.env.SYNTX_BASE_EMAIL;
+  const openInboxApiKey = process.env.OPENINBOX_API_KEY;
   let email;
   let syntxToken;
   let emailnatorCookies = null;
   let emailnatorXsrf = null;
+  let openInboxId = null; // track jika pakai OpenInbox
 
-  // === OPSI 1: Gmail dot-variant (tercepat jika SYNTX_BASE_EMAIL ada) ===
-  if (baseEmail && baseEmail.includes('@')) {
+  // === OPSI 1: OpenInbox.io (paling stabil, butuh API key) ===
+  if (openInboxApiKey) {
+    try {
+      logToTask(options, '📧 [syntx-bot] Mencoba OpenInbox.io...', 'info');
+      const { email: oiEmail, inboxId } = await createOpenInboxEmail(options);
+      email = oiEmail;
+      openInboxId = inboxId;
+    } catch (oiErr) {
+      logToTask(options, `⚠️ [syntx-bot] OpenInbox gagal: ${oiErr.message}`, 'warning');
+      openInboxId = null;
+    }
+  }
+
+  // === OPSI 2: Gmail dot-variant (jika OpenInbox gagal & ada base email) ===
+  if (!email && baseEmail && baseEmail.includes('@')) {
     const currentIndex = parseInt(process.env.SYNTX_EMAIL_INDEX || '0', 10);
     email = getDotVariant(baseEmail, currentIndex);
     logToTask(options, `📧 [syntx-bot] Menggunakan Gmail dot-variant (${currentIndex}): ${email}`, 'info');
@@ -810,8 +905,8 @@ async function loginAndGetToken(options = {}) {
       options.onEmailGenerated(currentIndex + 1);
     }
   }
-  // === OPSI 2: Emailnator Web (jika tidak ada base email) ===
-  else {
+  // === OPSI 3: Emailnator Web ===
+  else if (!email) {
     try {
       logToTask(options, '🌐 [syntx-bot] Mencoba Emailnator Web API (gratis, tanpa key)...', 'info');
       const { email: enEmail, cookies: enCookies, xsrfToken: enXsrf } = await createEmailnatorGmail(options);
@@ -821,12 +916,12 @@ async function loginAndGetToken(options = {}) {
     } catch (enErr) {
       logToTask(options, `⚠️ [syntx-bot] Emailnator gagal: ${enErr.message}`, 'warning');
 
-      // === OPSI 3: Gmailnator RapidAPI ===
+      // === OPSI 4: Gmailnator RapidAPI ===
       if (rapidApiKey) {
         logToTask(options, '🔑 [syntx-bot] Fallback ke Gmailnator (RapidAPI)...', 'info');
         email = await createGmailnatorEmail(rapidApiKey, options);
       }
-      // === OPSI 4: Mail.tm (terakhir - sering diblokir Syntx) ===
+      // === OPSI 5: Mail.tm ===
       else {
         logToTask(options, '⚠️ [syntx-bot] Fallback ke Mail.tm...', 'warning');
         const { email: tempEmail, mailToken, accountId } = await createTempEmail(options);
@@ -837,31 +932,38 @@ async function loginAndGetToken(options = {}) {
     }
   }
 
+  if (!email) {
+    throw new Error('Gagal membuat email untuk registrasi Syntx.ai');
+  }
+
   // Send OTP
   await requestSyntxOTP(email, options);
 
   // Retrieve OTP sesuai sumber email
   let otp;
-  if (emailnatorCookies) {
+  if (openInboxId && openInboxApiKey) {
+    // OpenInbox inbox
+    try {
+      otp = await fetchOTPFromOpenInbox(openInboxApiKey, openInboxId, 60000, options);
+    } catch (err) {
+      logToTask(options, `⚠️ Gagal mengambil OTP dari OpenInbox: ${err.message}`, 'warning');
+    }
+  } else if (emailnatorCookies) {
     // Emailnator inbox
     try {
       otp = await fetchOTPFromEmailnator(email, emailnatorCookies, emailnatorXsrf, 90000, options);
     } catch (err) {
       logToTask(options, `⚠️ Gagal mengambil OTP dari Emailnator: ${err.message}`, 'warning');
     }
-  } else if (baseEmail && baseEmail.includes('@') && rapidApiKey) {
+  } else if (rapidApiKey) {
+    // Gmailnator (RapidAPI) - for dot-variant or Gmailnator email
     try {
-      otp = await fetchOTPFromGmailnator(rapidApiKey, email, 20000, options);
-    } catch (err) {
-      logToTask(options, `⚠️ Gagal mengambil OTP dari Gmailnator: ${err.message}`, 'warning');
-    }
-  } else if (rapidApiKey && !baseEmail) {
-    try {
-      otp = await fetchOTPFromGmailnator(rapidApiKey, email, 90000, options);
+      otp = await fetchOTPFromGmailnator(rapidApiKey, email, 60000, options);
     } catch (err) {
       logToTask(options, `⚠️ Gagal mengambil OTP dari Gmailnator: ${err.message}`, 'warning');
     }
   } else if (sessionState.mailToken) {
+    // Mail.tm
     try {
       otp = await fetchOTPFromMailTm(sessionState.mailToken, 60000, options);
     } catch (err) {
