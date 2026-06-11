@@ -1070,7 +1070,7 @@ async function callSyntx(prompt, model = 'claude-sonnet-4-5', options = {}, imag
     return result;
   } catch (err) {
     const status = err.response?.status;
-    const isAuthError = status === 401 || err.message === 'TOKEN_EXPIRED';
+    const isAuthError = status === 401 || status === 400 || err.message === 'TOKEN_EXPIRED';
     const isLimitError = status === 402 || status === 403 || status === 429 ||
                          err.message?.toLowerCase().includes('limit') ||
                          err.message?.toLowerCase().includes('quota') ||
