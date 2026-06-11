@@ -851,7 +851,7 @@ async function loginAndGetToken(options = {}) {
     }
   } else if (baseEmail && baseEmail.includes('@') && rapidApiKey) {
     try {
-      otp = await fetchOTPFromGmailnator(rapidApiKey, email, 60000, options);
+      otp = await fetchOTPFromGmailnator(rapidApiKey, email, 20000, options);
     } catch (err) {
       logToTask(options, `⚠️ Gagal mengambil OTP dari Gmailnator: ${err.message}`, 'warning');
     }
