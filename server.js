@@ -4010,7 +4010,7 @@ app.post("/api/chat/sessions/:id/message/:messageIndex/edit", async (req, res) =
   }
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`Server Jembatan Kode Bebas aktif di port ${PORT}`);
 });
