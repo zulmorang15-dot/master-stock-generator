@@ -328,7 +328,7 @@ async function callAIWithFallback(prompt, options = {}) {
       }
       throw new Error("Groq returned invalid response");
     } else if (preferModel === 'syntx-claude') {
-      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-5', syntxOptions);
+      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
       if (isValid(result, 'Syntx Claude')) {
         log(`✅ Sukses menggunakan Syntx Claude!`, 'success');
         return result;
@@ -390,7 +390,7 @@ async function callAIWithFallback(prompt, options = {}) {
   if (preferModel !== 'syntx-claude') {
     try {
       log("📡 [2/6] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
-      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-5', syntxOptions);
+      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
       if (isValid(result, "Syntx Claude")) {
         log("✅ Sukses menggunakan Syntx Claude!", "success");
         return result;
@@ -3732,7 +3732,7 @@ app.get("/api/chat/sessions", (req, res) => {
 // POST /api/chat/sessions → create new session
 app.post("/api/chat/sessions", (req, res) => {
   try {
-    const { model = "claude-sonnet-4-5", title = "Percakapan Baru" } = req.body || {};
+    const { model = "claude-sonnet-4-6", title = "Percakapan Baru" } = req.body || {};
     const sessions = loadChatHistory();
     const newSession = {
       id: `session_${Date.now()}`,

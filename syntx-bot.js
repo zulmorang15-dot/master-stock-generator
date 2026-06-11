@@ -411,7 +411,7 @@ function getAiName(model) {
   return 'claude'; // default
 }
 
-async function sendPromptToSyntx(token, prompt, model = 'claude-sonnet-4-5', options = {}, imageUrl = null) {
+async function sendPromptToSyntx(token, prompt, model = 'claude-sonnet-4-6', options = {}, imageUrl = null) {
   const aiName = getAiName(model);
   const label = aiName.charAt(0).toUpperCase() + aiName.slice(1);
 
@@ -456,17 +456,23 @@ async function sendPromptToSyntx(token, prompt, model = 'claude-sonnet-4-5', opt
   
   logToTask(options, `   📡 Mengirim ke: /api/v1/chats/${chatUuid}/messages?ai_name=${aiName}`, 'info');
   
-  await axios.post(
-    `${SYNTX_API_V1}/chats/${chatUuid}/messages?ai_name=${aiName}`,
-    messagePayload,
-    {
-      headers: {
-        ...authHeaders,
-        'Referer': `https://syntx.ai/text/${aiName}/${chatUuid}`
-      },
-      timeout: 60000
-    }
-  );
+  try {
+    await axios.post(
+      `${SYNTX_API_V1}/chats/${chatUuid}/messages?ai_name=${aiName}`,
+      messagePayload,
+      {
+        headers: {
+          ...authHeaders,
+          'Referer': `https://syntx.ai/text/${aiName}/${chatUuid}`
+        },
+        timeout: 60000
+      }
+    );
+  } catch (sendErr) {
+    const errData = sendErr.response?.data;
+    logToTask(options, `❌ [syntx-bot] Send message error: status=${sendErr.response?.status}, body=${JSON.stringify(errData)}`, 'error');
+    throw sendErr;
+  }
   
   logToTask(options, `   ⏳ Pesan terkirim! Polling untuk respons ${label}...`, 'info');
   
@@ -1018,7 +1024,7 @@ async function loginAndGetToken(options = {}) {
 // PUBLIC API: callSyntx(prompt)
 // Auto-rotate akun saat mendekati/melebihi limit pesan
 // ─────────────────────────────────────────────
-async function callSyntx(prompt, model = 'claude-sonnet-4-5', options = {}, imageUrl = null, _retryCount = 0) {
+async function callSyntx(prompt, model = 'claude-sonnet-4-6', options = {}, imageUrl = null, _retryCount = 0) {
   const MAX_RETRIES = 5;
   if (_retryCount >= MAX_RETRIES) {
     throw new Error(`Gagal setelah ${MAX_RETRIES} percobaan: semua akun Syntx rate-limited atau expired. Coba lagi nanti atau tambahkan akun baru.`);
