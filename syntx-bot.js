@@ -793,7 +793,7 @@ function registerOtpProvider(fn) {
 async function loginAndGetToken(options = {}) {
   logToTask(options, '\n🔄 [syntx-bot] Memulai proses login syntx.ai...', 'info');
   
-  // Prioritas: 1) Emailnator (gratis, tanpa key), 2) dot-variant base email, 3) Gmailnator RapidAPI, 4) Mail.tm
+  // Prioritas: 1) dot-variant base email (tercepat), 2) Emailnator (gratis), 3) Gmailnator RapidAPI, 4) Mail.tm
   const rapidApiKey = process.env.RAPIDAPI_KEY;
   const baseEmail = process.env.SYNTX_BASE_EMAIL;
   let email;
@@ -801,37 +801,39 @@ async function loginAndGetToken(options = {}) {
   let emailnatorCookies = null;
   let emailnatorXsrf = null;
 
-  // === OPSI 1: Emailnator Web (PRIORITAS UTAMA - Gratis & Otomatis) ===
-  try {
-    logToTask(options, '🌐 [syntx-bot] Mencoba Emailnator Web API (gratis, tanpa key)...', 'info');
-    const { email: enEmail, cookies: enCookies, xsrfToken: enXsrf } = await createEmailnatorGmail(options);
-    email = enEmail;
-    emailnatorCookies = enCookies;
-    emailnatorXsrf = enXsrf;
-  } catch (enErr) {
-    logToTask(options, `⚠️ [syntx-bot] Emailnator gagal: ${enErr.message}`, 'warning');
+  // === OPSI 1: Gmail dot-variant (tercepat jika SYNTX_BASE_EMAIL ada) ===
+  if (baseEmail && baseEmail.includes('@')) {
+    const currentIndex = parseInt(process.env.SYNTX_EMAIL_INDEX || '0', 10);
+    email = getDotVariant(baseEmail, currentIndex);
+    logToTask(options, `📧 [syntx-bot] Menggunakan Gmail dot-variant (${currentIndex}): ${email}`, 'info');
+    if (options.onEmailGenerated) {
+      options.onEmailGenerated(currentIndex + 1);
+    }
+  }
+  // === OPSI 2: Emailnator Web (jika tidak ada base email) ===
+  else {
+    try {
+      logToTask(options, '🌐 [syntx-bot] Mencoba Emailnator Web API (gratis, tanpa key)...', 'info');
+      const { email: enEmail, cookies: enCookies, xsrfToken: enXsrf } = await createEmailnatorGmail(options);
+      email = enEmail;
+      emailnatorCookies = enCookies;
+      emailnatorXsrf = enXsrf;
+    } catch (enErr) {
+      logToTask(options, `⚠️ [syntx-bot] Emailnator gagal: ${enErr.message}`, 'warning');
 
-    // === OPSI 2: Gmail dot-variant (jika SYNTX_BASE_EMAIL dikonfigurasi) ===
-    if (baseEmail && baseEmail.includes('@')) {
-      const currentIndex = parseInt(process.env.SYNTX_EMAIL_INDEX || '0', 10);
-      email = getDotVariant(baseEmail, currentIndex);
-      logToTask(options, `📧 [syntx-bot] Fallback ke Gmail dot-variant (${currentIndex}): ${email}`, 'info');
-      if (options.onEmailGenerated) {
-        options.onEmailGenerated(currentIndex + 1);
+      // === OPSI 3: Gmailnator RapidAPI ===
+      if (rapidApiKey) {
+        logToTask(options, '🔑 [syntx-bot] Fallback ke Gmailnator (RapidAPI)...', 'info');
+        email = await createGmailnatorEmail(rapidApiKey, options);
       }
-    }
-    // === OPSI 3: Gmailnator RapidAPI ===
-    else if (rapidApiKey) {
-      logToTask(options, '🔑 [syntx-bot] Fallback ke Gmailnator (RapidAPI)...', 'info');
-      email = await createGmailnatorEmail(rapidApiKey, options);
-    }
-    // === OPSI 4: Mail.tm (terakhir - sering diblokir Syntx) ===
-    else {
-      logToTask(options, '⚠️ [syntx-bot] Fallback ke Mail.tm...', 'warning');
-      const { email: tempEmail, mailToken, accountId } = await createTempEmail(options);
-      email = tempEmail;
-      sessionState.mailToken = mailToken;
-      sessionState.mailId = accountId;
+      // === OPSI 4: Mail.tm (terakhir - sering diblokir Syntx) ===
+      else {
+        logToTask(options, '⚠️ [syntx-bot] Fallback ke Mail.tm...', 'warning');
+        const { email: tempEmail, mailToken, accountId } = await createTempEmail(options);
+        email = tempEmail;
+        sessionState.mailToken = mailToken;
+        sessionState.mailId = accountId;
+      }
     }
   }
 
