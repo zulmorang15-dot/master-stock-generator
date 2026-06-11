@@ -12,6 +12,11 @@ on:
         required: false
         default: '150'
         type: string
+      fps:
+        description: 'FPS (default: 30)'
+        required: false
+        default: '30'
+        type: string
       judul:
         description: 'Video title to embed as text overlay'
         required: false
@@ -61,10 +66,12 @@ jobs:
           JUDUL: ${{ github.event.inputs.judul }}
           KEYWORDS: ${{ github.event.inputs.keywords }}
           DURATION: ${{ github.event.inputs.duration_frames }}
+          FPS: ${{ github.event.inputs.fps }}
         run: |
           node -e "
             const props = {
               durationInFrames: parseInt(process.env.DURATION) || 150,
+              fps: parseInt(process.env.FPS) || 30,
               judul: process.env.JUDUL || 'Stock Video',
               keywords: process.env.KEYWORDS || 'motion, abstract, loop'
             };
@@ -80,13 +87,14 @@ jobs:
             "out/${{ github.event.inputs.composition_id }}-4k.mov" \
             --props=temp-props.json \
             --codec=prores \
+            --muted \
             --log=verbose
 
       - name: Embed Metadata via FFmpeg
         run: |
           echo "=== Embedding metadata into output video ==="
           FILENAME="${{ github.event.inputs.composition_id }}-4k.mov"
-          ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata description="${{ github.event.inputs.judul }}" -metadata comment="${{ github.event.inputs.keywords }}" -metadata keywords="${{ github.event.inputs.keywords }}" -codec copy out/temp_$FILENAME
+          ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata description="${{ github.event.inputs.judul }}" -metadata keywords="${{ github.event.inputs.keywords }}" -an -codec copy out/temp_$FILENAME
           mv out/temp_$FILENAME out/$FILENAME
 
       - name: Install ExifTool

@@ -64,6 +64,7 @@ jobs:
               --props=temp-props.json \
               --codec=h264 \
               --scale=0.5 \
+              --muted \
               --log=verbose
           else
             echo "=== Rendering ProRes 4K MOV ==="
@@ -71,7 +72,23 @@ jobs:
               "out/${{ github.event.client_payload.item.id }}.mov" \
               --props=temp-props.json \
               --codec=prores4444 \
+              --muted \
               --log=verbose
+          fi
+
+      - name: Embed Metadata via FFmpeg
+        run: |
+          echo "=== Embedding metadata into output video ==="
+          ID="${{ github.event.client_payload.item.id }}"
+          JUDUL="${{ github.event.client_payload.item.judul }}"
+          KEYWORDS="${{ github.event.client_payload.item.keywords }}"
+          if [ -f "out/${ID}.mp4" ]; then
+            ffmpeg -y -i "out/${ID}.mp4" -metadata title="$JUDUL" -metadata description="$JUDUL" -metadata keywords="$KEYWORDS" -an -codec copy "out/temp_${ID}.mp4"
+            mv "out/temp_${ID}.mp4" "out/${ID}.mp4"
+          fi
+          if [ -f "out/${ID}.mov" ]; then
+            ffmpeg -y -i "out/${ID}.mov" -metadata title="$JUDUL" -metadata description="$JUDUL" -metadata keywords="$KEYWORDS" -an -codec copy "out/temp_${ID}.mov"
+            mv "out/temp_${ID}.mov" "out/${ID}.mov"
           fi
 
       # 9. Amankan hasil video agar bisa diunduh
