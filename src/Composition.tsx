@@ -1,237 +1,414 @@
 import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
 
+// Constant dimensions
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const VERTEX_SHADER_SOURCE = `
-  attribute vec2 position;
-  varying vec2 vUv;
-  void main() {
-    vUv = position * 0.5 + 0.5;
-    gl_Position = vec4(position, 0.0, 1.0);
-  }
-`;
+// Deterministic particle generation for perfect 3D ambient particle loop
+interface Particle {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+  speed: number;
+  drift: number;
+  opacity: number;
+}
 
-const FRAGMENT_SHADER_SOURCE = `
-  precision highp float;
-  uniform vec2 u_resolution;
-  uniform float u_cos_time;
-  uniform float u_sin_time;
-  uniform float u_noise_scale;
+const PARTICLE_COUNT = 120;
+const PARTICLES: Particle[] = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
+  // Use pseudo-random values generated with a deterministic sine-based hash
+  const pseudoRandom = (seed: number) => {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  };
 
-  uniform vec3 u_color_bg;
-  uniform vec3 u_color_violet;
-  uniform vec3 u_color_magenta;
-  uniform vec3 u_color_cyan;
-  uniform vec3 u_color_gold;
+  return {
+    id: i,
+    x: pseudoRandom(i * 1.5) * ORIGINAL_WIDTH,
+    y: pseudoRandom(i * 2.5) * ORIGINAL_HEIGHT,
+    size: pseudoRandom(i * 3.5) * 4 + 2, // Sizes 2px to 6px
+    speed: pseudoRandom(i * 4.5) * 1.2 + 0.6, // Vertical float speed
+    drift: pseudoRandom(i * 5.5) * Math.PI * 2, // Phase offset for horizontal sway
+    opacity: pseudoRandom(i * 6.5) * 0.5 + 0.3,
+  };
+});
 
-  varying vec2 vUv;
-
-  float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-  }
-
-  float noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    vec2 u = f*f*(3.0-2.0*f);
-    return mix(mix(hash(i + vec2(0.0,0.0)), hash(i + vec2(1.0,0.0)), u.x),
-               mix(hash(i + vec2(0.0,1.0)), hash(i + vec2(1.0,1.0)), u.x), u.y);
-  }
-
-  float fbm(vec2 p) {
-    float v = 0.0;
-    float a = 0.5;
-    vec2 shift = vec2(100.0);
-    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-    for (int i = 0; i < 5; ++i) {
-      v += a * noise(p);
-      p = rot * p * 2.0 + shift;
-      a *= 0.5;
-    }
-    return v;
-  }
-
-  void main() {
-    vec2 p = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / u_resolution.y;
-    vec2 loopOffset = vec2(u_cos_time, u_sin_time) * 1.2;
-
-    vec2 q = vec2(0.0);
-    q.x = fbm(p * u_noise_scale + loopOffset * 0.4);
-    q.y = fbm(p * u_noise_scale + loopOffset.yx * 0.5);
-
-    vec2 r = vec2(0.0);
-    r.x = fbm(p * (u_noise_scale * 1.3) + q * 1.8 + loopOffset * 0.2 + vec2(2.4, 5.7));
-    r.y = fbm(p * (u_noise_scale * 1.3) + q * 1.5 + loopOffset.yx * 0.3 + vec2(8.3, 1.1));
-
-    float f = fbm(p * u_noise_scale + r * 2.0);
-
-    vec3 color = mix(u_color_bg, u_color_violet, clamp(f * 2.5, 0.0, 1.0));
-    color = mix(color, u_color_magenta, clamp(length(q) * 0.7, 0.0, 1.0) * 0.65);
-    color = mix(color, u_color_cyan, clamp(r.x * 1.1, 0.0, 1.0) * 0.45);
-
-    float goldMask = pow(clamp(f * 1.4, 0.0, 1.0), 4.5);
-    color = mix(color, u_color_gold, goldMask * 0.55);
-
-    color = color * 1.15;
-
-    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-    vec2 d = uv * (1.0 - uv.yx);
-    float vignette = d.x * d.y * 15.0;
-    vignette = clamp(pow(vignette, 0.25), 0.0, 1.0);
-    color *= vignette;
-
-    float grain = hash(uv + vec2(u_cos_time, u_sin_time)) * 0.025;
-    color += vec3(grain);
-
-    gl_FragColor = vec4(color, 1.0);
-  }
-`;
-
-const FluidAuroraLoop = () => {
-  const frame = useCurrentFrame();
+const LuxuryEndscreen = () => {
   const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
 
-  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
-  const glRef = React.useRef<WebGLRenderingContext | null>(null);
-  const programRef = React.useRef<WebGLProgram | null>(null);
-  const uniformsRef = React.useRef<Record<string, WebGLUniformLocation | null>>({});
+  // 10-second loop duration (300 frames at 30fps)
+  const loopDuration = 300;
+  const localFrame = frame % loopDuration;
 
-  // Establish standard 10-second loop
-  const totalDurationFrames = fps * 10;
-  const localFrame = frame % totalDurationFrames;
-  const progress = localFrame / totalDurationFrames;
-  const angle = progress * Math.PI * 2.0;
-  const cosTime = Math.cos(angle);
-  const sinTime = Math.sin(angle);
-
-  // Auto-Fit Scaling calculation
+  // 4K Auto-Fit Landscape Scaling
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
 
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // 1. Continuous Ambient Floating for Video Boxes (Phase staggered)
+  const leftFloatY = Math.sin((localFrame / loopDuration) * Math.PI * 4) * 8;
+  const rightFloatY = Math.sin(((localFrame + 75) / loopDuration) * Math.PI * 4) * 8;
 
-    let gl = glRef.current;
-    if (!gl) {
-      gl = canvas.getContext('webgl', { antialias: true, powerPreference: 'high-performance' });
-      if (!gl) return;
-      glRef.current = gl;
+  // 2. Subscribe Circle Breathing (Perfect seamless sine loop)
+  const breatheScale = interpolate(
+    Math.sin((localFrame / loopDuration) * Math.PI * 8),
+    [-1, 1],
+    [1.0, 1.03]
+  );
+  
+  const breatheGlow = interpolate(
+    Math.sin((localFrame / loopDuration) * Math.PI * 8),
+    [-1, 1],
+    [40, 65]
+  );
 
-      // Compile Vertex Shader
-      const vs = gl.createShader(gl.VERTEX_SHADER);
-      if (!vs) return;
-      gl.shaderSource(vs, VERTEX_SHADER_SOURCE);
-      gl.compileShader(vs);
+  // 3. Rotating Inner Ring (Completes 1 full turn per loop for seamlessness)
+  const ringRotation = interpolate(localFrame, [0, loopDuration], [0, 360]);
 
-      // Compile Fragment Shader
-      const fs = gl.createShader(gl.FRAGMENT_SHADER);
-      if (!fs) return;
-      gl.shaderSource(fs, FRAGMENT_SHADER_SOURCE);
-      gl.compileShader(fs);
+  // 4. Cinematic Spotlights Shimmer (replicating Three.js movement)
+  const light1X = interpolate(
+    Math.sin((localFrame / loopDuration) * Math.PI * 2),
+    [-1, 1],
+    [200, 800]
+  );
+  const light1Y = interpolate(
+    Math.cos((localFrame / loopDuration) * Math.PI * 2),
+    [-1, 1],
+    [100, 500]
+  );
+  const light2X = interpolate(
+    Math.cos((localFrame / loopDuration) * Math.PI * 4),
+    [-1, 1],
+    [1100, 1700]
+  );
+  const light2Y = interpolate(
+    Math.sin((localFrame / loopDuration) * Math.PI * 4),
+    [-1, 1],
+    [300, 800]
+  );
 
-      // Program Setup
-      const program = gl.createProgram();
-      if (!program) return;
-      gl.attachShader(program, vs);
-      gl.attachShader(program, fs);
-      gl.linkProgram(program);
-      programRef.current = program;
-
-      // Uniform Locations Cache
-      uniformsRef.current = {
-        u_resolution: gl.getUniformLocation(program, 'u_resolution'),
-        u_cos_time: gl.getUniformLocation(program, 'u_cos_time'),
-        u_sin_time: gl.getUniformLocation(program, 'u_sin_time'),
-        u_noise_scale: gl.getUniformLocation(program, 'u_noise_scale'),
-        u_color_bg: gl.getUniformLocation(program, 'u_color_bg'),
-        u_color_violet: gl.getUniformLocation(program, 'u_color_violet'),
-        u_color_magenta: gl.getUniformLocation(program, 'u_color_magenta'),
-        u_color_cyan: gl.getUniformLocation(program, 'u_color_cyan'),
-        u_color_gold: gl.getUniformLocation(program, 'u_color_gold'),
-      };
-
-      // Fullscreen Quad Geometry setup
-      const vertices = new Float32Array([
-        -1.0, -1.0,
-         1.0, -1.0,
-        -1.0,  1.0,
-        -1.0,  1.0,
-         1.0, -1.0,
-         1.0,  1.0,
-      ]);
-
-      const buffer = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
-      const positionLocation = gl.getAttribLocation(program, 'position');
-      gl.enableVertexAttribArray(positionLocation);
-      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+  // 5. CSS Light Sweep over video placeholders (starts at frame 30, ends at frame 135)
+  // Both start/end values are off-screen (-100% to 250%) to ensure absolute seamless loops
+  const sweepX = interpolate(
+    localFrame,
+    [30, 135],
+    [-100, 250],
+    {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.inOut(Easing.quad),
     }
-
-    const program = programRef.current;
-    const locs = uniformsRef.current;
-    if (!gl || !program) return;
-
-    // Viewport setup
-    gl.viewport(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-    gl.useProgram(program);
-
-    // Color Configurations (R, G, B normalized to 0.0 - 1.0)
-    gl.uniform2f(locs.u_resolution, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-    gl.uniform1f(locs.u_cos_time, cosTime);
-    gl.uniform1f(locs.u_sin_time, sinTime);
-    gl.uniform1f(locs.u_noise_scale, 1.8);
-    gl.uniform3f(locs.u_color_bg, 10 / 255, 11 / 255, 30 / 255);
-    gl.uniform3f(locs.u_color_violet, 59 / 255, 28 / 255, 99 / 255);
-    gl.uniform3f(locs.u_color_magenta, 255 / 255, 0 / 255, 127 / 255);
-    gl.uniform3f(locs.u_color_cyan, 0 / 255, 243 / 255, 255 / 255);
-    gl.uniform3f(locs.u_color_gold, 255 / 255, 215 / 255, 0 / 255);
-
-    // Draw frame
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-  }, [cosTime, sinTime]);
-
-  const containerStyle: React.CSSProperties = {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#0a0b1e',
-    position: 'relative',
-    overflow: 'hidden',
-  };
-
-  const wrapperStyle: React.CSSProperties = {
-    width: ORIGINAL_WIDTH,
-    height: ORIGINAL_HEIGHT,
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-    transformOrigin: 'center center',
-    backgroundColor: '#0a0b1e',
-    overflow: 'hidden',
-  };
-
-  const canvasStyle: React.CSSProperties = {
-    width: '100%',
-    height: '100%',
-    display: 'block',
-  };
+  );
 
   return (
-    <div style={containerStyle}>
-      <div style={wrapperStyle}>
-        <canvas
-          ref={canvasRef}
-          width={ORIGINAL_WIDTH}
-          height={ORIGINAL_HEIGHT}
-          style={canvasStyle}
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#050505',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        id="endscreen-container"
+        style={{
+          width: ORIGINAL_WIDTH,
+          height: ORIGINAL_HEIGHT,
+          backgroundColor: '#000000',
+          position: 'absolute',
+          overflow: 'hidden',
+          transform: `scale(${scaleFactor})`,
+          transformOrigin: 'center center',
+        }}
+      >
+        {/* Cinematic WebGL Replica Background (HTML5 Canvas/SVG Hybrid Spotlights & Floor) */}
+        <div
+          id="webgl-canvas"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 1,
+            background: 'radial-gradient(circle at 50% 120%, #151005 0%, #000000 70%)',
+          }}
+        >
+          {/* Animated Cinematic Lights */}
+          <div
+            style={{
+              position: 'absolute',
+              width: 1000,
+              height: 1000,
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(212, 175, 55, 0.08) 0%, rgba(0,0,0,0) 70%)',
+              left: light1X - 500,
+              top: light1Y - 500,
+              pointerEvents: 'none',
+              mixBlendMode: 'screen',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 900,
+              height: 900,
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(255, 215, 0, 0.06) 0%, rgba(0,0,0,0) 70%)',
+              left: light2X - 450,
+              top: light2Y - 450,
+              pointerEvents: 'none',
+              mixBlendMode: 'screen',
+            }}
+          />
+
+          {/* 3D Glossy Reflective Floor (Bottom perspective) */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              width: '100%',
+              height: 400,
+              background: 'linear-gradient(to top, rgba(15, 12, 5, 0.5) 0%, rgba(0,0,0,0) 100%)',
+              borderTop: '1px solid rgba(212, 175, 55, 0.08)',
+              perspective: '500px',
+              transform: 'rotateX(60deg)',
+              transformOrigin: 'bottom center',
+              zIndex: 1,
+            }}
+          />
+
+          {/* Luxury Floating Particles */}
+          <svg
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              zIndex: 2,
+              pointerEvents: 'none',
+            }}
+          >
+            <defs>
+              <radialGradient id="particleGrad" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="#ffd700" stopOpacity="1" />
+                <stop offset="30%" stopColor="#d4af37" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#d4af37" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            {PARTICLES.map((p) => {
+              // Calculate upward vertical movement loop
+              const yOffset = (localFrame * p.speed) % ORIGINAL_HEIGHT;
+              const currentY = (p.y - yOffset + ORIGINAL_HEIGHT) % ORIGINAL_HEIGHT;
+
+              // Left-right horizontal sway loop
+              const swayProgress = (localFrame / loopDuration) * Math.PI * 2;
+              const currentX = (p.x + Math.sin(swayProgress + p.drift) * 40) % ORIGINAL_WIDTH;
+
+              // Symmetrical edge fading to guarantee seamless loop pops avoidance
+              const topFadeRange = 150;
+              const bottomFadeRange = 150;
+              let edgeOpacity = 1;
+              if (currentY < topFadeRange) {
+                edgeOpacity = currentY / topFadeRange;
+              } else if (currentY > ORIGINAL_HEIGHT - bottomFadeRange) {
+                edgeOpacity = (ORIGINAL_HEIGHT - currentY) / bottomFadeRange;
+              }
+
+              const finalOpacity = p.opacity * edgeOpacity;
+
+              return (
+                <circle
+                  key={p.id}
+                  cx={currentX}
+                  cy={currentY}
+                  r={p.size}
+                  fill="url(#particleGrad)"
+                  opacity={finalOpacity}
+                />
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Cinematic Vignette Overlay */}
+        <div
+          className="vignette"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'radial-gradient(circle at center, transparent 30%, rgba(0, 0, 0, 0.85) 80%, #000000 100%)',
+            zIndex: 2,
+            pointerEvents: 'none',
+          }}
         />
+
+        {/* Dynamic UI Layer */}
+        <div
+          id="ui-layer"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            zIndex: 3,
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Left Video Box */}
+          <div
+            className="video-box left"
+            style={{
+              position: 'absolute',
+              width: 610,
+              height: 343,
+              top: 368,
+              left: 160,
+              borderRadius: 12,
+              backgroundColor: 'rgba(10, 8, 5, 0.45)',
+              border: '1.5px solid rgba(212, 175, 55, 0.5)',
+              boxShadow: '0 0 30px rgba(212, 175, 55, 0.15), inset 0 0 20px rgba(212, 175, 55, 0.1)',
+              backdropFilter: 'blur(8px)',
+              overflow: 'hidden',
+              transform: `translateY(${leftFloatY}px)`,
+            }}
+          >
+            {/* Glossy Light Sweep */}
+            <div
+              className="sweep"
+              style={{
+                position: 'absolute',
+                top: '-50%',
+                left: '-50%',
+                width: '200%',
+                height: '200%',
+                background: 'linear-gradient(to right, transparent 45%, rgba(212, 175, 55, 0.25) 50%, transparent 55%)',
+                transform: `rotate(45deg) translateX(${sweepX}%)`,
+                zIndex: 4,
+              }}
+            />
+          </div>
+
+          {/* Centered Subscribe Circle */}
+          <div
+            className="subscribe-circle"
+            style={{
+              position: 'absolute',
+              width: 240,
+              height: 240,
+              top: 420,
+              left: 840,
+              borderRadius: '50%',
+              background: 'radial-gradient(circle at center, rgba(212, 175, 55, 0.15) 0%, rgba(5, 5, 5, 0.85) 75%)',
+              border: '2px solid rgba(212, 175, 55, 0.8)',
+              boxShadow: `0 0 ${breatheGlow}px rgba(212, 175, 55, 0.4), inset 0 0 30px rgba(212, 175, 55, 0.25)`,
+              transform: `scale(${breatheScale})`,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            {/* Rotating Decorative Inner Ring */}
+            <div
+              className="subscribe-inner-ring"
+              style={{
+                position: 'absolute',
+                top: 10,
+                left: 10,
+                right: 10,
+                bottom: 10,
+                borderRadius: '50%',
+                border: '1px dashed rgba(212, 175, 55, 0.4)',
+                transform: `rotate(${ringRotation}deg)`,
+              }}
+            />
+            
+            {/* Luxury Minimalist Crown Icon / Centerpiece Emblem */}
+            <svg
+              viewBox="0 0 24 24"
+              style={{
+                width: 55,
+                height: 55,
+                fill: 'none',
+                stroke: 'rgba(212, 175, 55, 0.95)',
+                strokeWidth: 1.5,
+                strokeLinecap: 'round',
+                strokeLinejoin: 'round',
+                zIndex: 5,
+                filter: 'drop-shadow(0px 0px 8px rgba(212, 175, 55, 0.6))',
+              }}
+            >
+              <path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7z" />
+              <path d="M3 20h18" />
+            </svg>
+          </div>
+
+          {/* Right Video Box */}
+          <div
+            className="video-box right"
+            style={{
+              position: 'absolute',
+              width: 610,
+              height: 343,
+              top: 368,
+              right: 160,
+              borderRadius: 12,
+              backgroundColor: 'rgba(10, 8, 5, 0.45)',
+              border: '1.5px solid rgba(212, 175, 55, 0.5)',
+              boxShadow: '0 0 30px rgba(212, 175, 55, 0.15), inset 0 0 20px rgba(212, 175, 55, 0.1)',
+              backdropFilter: 'blur(8px)',
+              overflow: 'hidden',
+              transform: `translateY(${rightFloatY}px)`,
+            }}
+          >
+            {/* Glossy Light Sweep */}
+            <div
+              className="sweep"
+              style={{
+                position: 'absolute',
+                top: '-50%',
+                left: '-50%',
+                width: '200%',
+                height: '200%',
+                background: 'linear-gradient(to right, transparent 45%, rgba(212, 175, 55, 0.25) 50%, transparent 55%)',
+                transform: `rotate(45deg) translateX(${sweepX}%)`,
+                zIndex: 4,
+              }}
+            />
+          </div>
+
+          {/* Glowing Premium Ambient Hint Text (Standardized minimal lettering for commercial look) */}
+          <div
+            className="hint-text"
+            style={{
+              position: 'absolute',
+              bottom: 120,
+              width: '100%',
+              textAlign: 'center',
+              color: 'rgba(212, 175, 55, 0.75)',
+              fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+              fontSize: 14,
+              fontWeight: 300,
+              letterSpacing: 8,
+              textTransform: 'uppercase',
+              filter: 'drop-shadow(0px 0px 10px rgba(212, 175, 55, 0.3))',
+            }}
+          >
+            Thank You For Watching
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
-export default FluidAuroraLoop;
+export default LuxuryEndscreen;
 // END_OF_FILE
