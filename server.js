@@ -3879,7 +3879,20 @@ app.post("/api/chat/sessions/:id/message", async (req, res) => {
 
     // Call Syntx AI (account rotation is handled automatically by syntx-bot)
     // Pass publicImageUrl if successfully generated, otherwise fallback to imageUrl
-    const aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl || imageUrl);
+    let aiResponse;
+    try {
+      aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl || imageUrl);
+    } catch (syntxErr) {
+      console.error("⚠️ Syntx gagal:", syntxErr.message, "→ mencoba fallback Gemini langsung...");
+      // Fallback: gunakan Gemini API langsung jika model Gemini & key tersedia
+      if (genAI && activeModel.includes('gemini')) {
+        const geminiModelName = activeModel.includes('3.5') ? 'gemini-2.0-flash' : 'gemini-2.0-flash';
+        aiResponse = await callGemini(contextPrompt.trim(), geminiModelName);
+        aiResponse = "📡 (via Gemini langsung)\n\n" + aiResponse;
+      } else {
+        throw syntxErr; // re-throw jika bukan Gemini atau tidak ada key
+      }
+    }
 
     // Save assistant message
     const assistantMsg = {
@@ -3980,7 +3993,19 @@ app.post("/api/chat/sessions/:id/message/:messageIndex/edit", async (req, res) =
     }
 
     // Call Syntx AI
-    const aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl || imageUrl);
+    let aiResponse;
+    try {
+      aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl || imageUrl);
+    } catch (syntxErr) {
+      console.error("⚠️ Syntx gagal:", syntxErr.message, "→ mencoba fallback Gemini langsung...");
+      if (genAI && activeModel.includes('gemini')) {
+        const geminiModelName = activeModel.includes('3.5') ? 'gemini-2.0-flash' : 'gemini-2.0-flash';
+        aiResponse = await callGemini(contextPrompt.trim(), geminiModelName);
+        aiResponse = "📡 (via Gemini langsung)\n\n" + aiResponse;
+      } else {
+        throw syntxErr;
+      }
+    }
 
     // Save assistant message
     const assistantMsg = {
