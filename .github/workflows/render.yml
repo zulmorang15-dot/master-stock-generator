@@ -1,0 +1,103 @@
+name: Cloud Remotion Render
+
+on:
+  repository_dispatch:
+    types: [target-render-cloud]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Ambil kode template Remotion dari repositori
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Siapkan lingkungan Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 3. Install dependensi browser untuk rendering headless (Puppeteer/Chrome)
+      - name: Install Browser Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+            libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 \
+            libcairo2 libxshmfence1 libgl1
+
+      # 4. Instal semua dependensi proyek (Remotion, React, dll)
+      - name: Install Dependencies
+        run: npm ci
+
+      # 5. Install paket opsional yang mungkin dipakai oleh AI-generated Composition
+      - name: Install Optional AI Packages
+        run: |
+          npm install three gsap --no-save || true
+
+      # 6. Buat folder output agar render tidak error
+      - name: Create Output Directory
+        run: mkdir -p out
+
+      # 7. Tulis parameter visual ke file props
+      - name: Create Temp Props
+        env:
+          CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload.item) }}
+        run: |
+          echo "$CLIENT_PAYLOAD" > temp-props.json
+          echo "=== Props yang dikirim ==="
+          cat temp-props.json
+
+      # 8. Eksekusi render video
+      # CATATAN: --duration BUKAN flag Remotion yang valid.
+      # Durasi dikontrol via getInputProps() di Root.tsx yang membaca durationInFrames dari props.
+      - name: Execute Remotion Render
+        run: |
+          if [ "${{ github.event.client_payload.item.renderType }}" = "preview" ]; then
+            echo "=== Rendering MP4 Preview (skala 0.5) ==="
+            npx remotion render Composition \
+              "out/${{ github.event.client_payload.item.id }}.mp4" \
+              --props=temp-props.json \
+              --codec=h264 \
+              --scale=0.5 \
+              --muted \
+              --log=verbose
+          else
+            echo "=== Rendering ProRes 4K MOV ==="
+            npx remotion render Composition \
+              "out/${{ github.event.client_payload.item.id }}.mov" \
+              --props=temp-props.json \
+              --codec=prores4444 \
+              --muted \
+              --log=verbose
+          fi
+
+      - name: Embed Metadata via FFmpeg
+        run: |
+          echo "=== Embedding metadata into output video ==="
+          ID="${{ github.event.client_payload.item.id }}"
+          JUDUL="${{ github.event.client_payload.item.judul }}"
+          KEYWORDS="${{ github.event.client_payload.item.keywords }}"
+          if [ -f "out/${ID}.mp4" ]; then
+            ffmpeg -y -i "out/${ID}.mp4" -metadata title="$JUDUL" -metadata description="$JUDUL" -metadata keywords="$KEYWORDS" -an -codec copy "out/temp_${ID}.mp4"
+            mv "out/temp_${ID}.mp4" "out/${ID}.mp4"
+          fi
+          if [ -f "out/${ID}.mov" ]; then
+            ffmpeg -y -i "out/${ID}.mov" -metadata title="$JUDUL" -metadata description="$JUDUL" -metadata keywords="$KEYWORDS" -an -codec copy "out/temp_${ID}.mov"
+            mv "out/temp_${ID}.mov" "out/${ID}.mov"
+          fi
+
+      # 9. Amankan hasil video agar bisa diunduh
+      - name: Upload Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.client_payload.item.id }}-${{ github.event.client_payload.item.renderType }}-video
+          path: |
+            out/${{ github.event.client_payload.item.id }}.mov
+            out/${{ github.event.client_payload.item.id }}.mp4
+          retention-days: 3
+          if-no-files-found: error

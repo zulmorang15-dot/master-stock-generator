@@ -1,0 +1,42 @@
+node_modules
+dist
+.DS_Store
+.env
+out
+build
+
+# Data files
+saved-items.json
+chat-history.json
+syntx-accounts.json
+ideas.json
+props.json
+all-paths.json
+api-endpoints.json
+
+# Uploads & previews
+public/chat-uploads/
+public/previews/
+public/saved-code/
+
+# Test & debug files
+test*.txt
+test*.html
+diff.txt
+progress.md
+*.csv
+syntx-screenshot.png
+
+# Debug/probe scripts
+debug-*.js
+deep-search-*.js
+find-*.js
+intercept-*.js
+playwright-*.js
+probe-*.js
+search-*.js
+test-chat-api.js
+test-gemini.js
+test-groq-detailed.js
+test-openrouter.js
+generate-ideas.js

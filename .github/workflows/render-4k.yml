@@ -1,0 +1,144 @@
+name: Render 4K ProRes MOV
+
+on:
+  workflow_dispatch:
+    inputs:
+      composition_id:
+        description: 'Remotion composition ID (e.g. my_animation_001)'
+        required: true
+        type: string
+      duration_frames:
+        description: 'Duration in frames (default: 150 = 5s at 30fps)'
+        required: false
+        default: '150'
+        type: string
+      fps:
+        description: 'FPS (default: 30)'
+        required: false
+        default: '30'
+        type: string
+      judul:
+        description: 'Video title to embed as text overlay'
+        required: false
+        default: 'Stock Video'
+        type: string
+      keywords:
+        description: 'Comma-separated keywords for text overlay'
+        required: false
+        default: 'motion, abstract, loop'
+        type: string
+
+jobs:
+  render-4k:
+    name: Render 4K ProRes MOV
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Browser Dependencies (Chrome headless) & FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
+            libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 \
+            libcairo2 libxshmfence1 libgl1 ffmpeg
+
+      - name: Install Project Dependencies
+        run: npm ci
+
+      - name: Install Optional AI-Generated Packages
+        run: npm install three gsap --no-save || true
+
+      - name: Create Output Directory
+        run: mkdir -p out
+
+      - name: Write Render Props File
+        env:
+          JUDUL: ${{ github.event.inputs.judul }}
+          KEYWORDS: ${{ github.event.inputs.keywords }}
+          DURATION: ${{ github.event.inputs.duration_frames }}
+          FPS: ${{ github.event.inputs.fps }}
+        run: |
+          node -e "
+            const props = {
+              durationInFrames: parseInt(process.env.DURATION) || 150,
+              fps: parseInt(process.env.FPS) || 30,
+              judul: process.env.JUDUL || 'Stock Video',
+              keywords: process.env.KEYWORDS || 'motion, abstract, loop'
+            };
+            require('fs').writeFileSync('temp-props.json', JSON.stringify(props, null, 2));
+          "
+          echo "=== Props being used ==="
+          cat temp-props.json
+
+      - name: Render 4K ProRes MOV
+        run: |
+          echo "=== Rendering 4K ProRes for composition: ${{ github.event.inputs.composition_id }} ==="
+          npx remotion render Composition \
+            "out/${{ github.event.inputs.composition_id }}-4k.mov" \
+            --props=temp-props.json \
+            --codec=prores \
+            --muted \
+            --log=verbose
+
+      - name: Embed Metadata via FFmpeg
+        run: |
+          echo "=== Embedding metadata into output video ==="
+          FILENAME="${{ github.event.inputs.composition_id }}-4k.mov"
+          ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata description="${{ github.event.inputs.judul }}" -metadata keywords="${{ github.event.inputs.keywords }}" -an -codec copy out/temp_$FILENAME
+          mv out/temp_$FILENAME out/$FILENAME
+
+      - name: Install ExifTool
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y exiftool
+
+      - name: Embed XMP/IPTC/QuickTime Metadata via ExifTool
+        run: |
+          echo "=== Embedding stock metadata via ExifTool ==="
+          FILENAME="${{ github.event.inputs.composition_id }}-4k.mov"
+          # Normalize keywords format to guarantee consistent spacing and split them cleanly into lists
+          KEYWORDS_NORMALIZED=$(echo "${{ github.event.inputs.keywords }}" | sed 's/, */, /g')
+          exiftool -overwrite_original -sep ", " \
+            -Title="${{ github.event.inputs.judul }}" \
+            -Description="${{ github.event.inputs.judul }}" \
+            -Keywords="$KEYWORDS_NORMALIZED" \
+            -XMP-dc:Title="${{ github.event.inputs.judul }}" \
+            -XMP-dc:Description="${{ github.event.inputs.judul }}" \
+            -XMP-dc:Subject="$KEYWORDS_NORMALIZED" \
+            out/$FILENAME
+
+      - name: Upload to x0.at Cloud
+        id: upload_cloud
+        run: |
+          echo "=== Uploading video to x0.at Cloud ==="
+          FILENAME="${{ github.event.inputs.composition_id }}-4k.mov"
+          curl -s -F "file=@out/$FILENAME" https://x0.at/ > x0_res.txt
+          cat x0_res.txt
+          LINK=$(cat x0_res.txt | tr -d '\r\n')
+          echo "Cloud Link: $LINK"
+          echo "$LINK" > cloud-link.txt
+
+      - name: Upload Link Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.composition_id }}-4k-cloud-link
+          path: cloud-link.txt
+          retention-days: 7
+
+      - name: Upload 4K Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.composition_id }}-4k-video
+          path: out/${{ github.event.inputs.composition_id }}-4k.mov
+          retention-days: 7
+          if-no-files-found: error

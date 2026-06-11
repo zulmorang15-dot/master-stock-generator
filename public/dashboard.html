@@ -1,0 +1,2440 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remotion Stock Generator</title>
+  <meta name="description" content="Otomasi pipeline produksi video stock Remotion — upload HTML, generate, render di GitHub Actions." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #070b14;
+      --bg2: #0d1424;
+      --bg3: #131d30;
+      --border: rgba(56,189,248,0.12);
+      --border-hover: rgba(56,189,248,0.35);
+      --cyan: #38bdf8;
+      --cyan-dim: rgba(56,189,248,0.15);
+      --green: #10b981;
+      --green-dim: rgba(16,185,129,0.15);
+      --red: #ef4444;
+      --red-dim: rgba(239,68,68,0.15);
+      --amber: #f59e0b;
+      --text: #e2e8f0;
+      --text-dim: #64748b;
+      --text-mid: #94a3b8;
+      --purple: #a855f7;
+      --blue: #3b82f6;
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+    /* ── LIGHT MODE ─────────────────────────────── */
+    body.light-mode {
+      --bg: #f0f4f8;
+      --bg2: #ffffff;
+      --bg3: #e8eef5;
+      --border: rgba(56,100,160,0.18);
+      --border-hover: rgba(56,100,160,0.45);
+      --cyan: #0284c7;
+      --cyan-dim: rgba(2,132,199,0.12);
+      --green: #059669;
+      --green-dim: rgba(5,150,105,0.12);
+      --red: #dc2626;
+      --red-dim: rgba(220,38,38,0.1);
+      --amber: #d97706;
+      --text: #1e293b;
+      --text-dim: #64748b;
+      --text-mid: #475569;
+      --purple: #7c3aed;
+      --blue: #2563eb;
+    }
+    body.light-mode .log-panel,
+    body.light-mode .log-body { background: #f8fafc; border-color: rgba(2,132,199,0.2); }
+    body.light-mode .code-editor-textarea { background: #f8fafc; color: #047857; border-color: rgba(2,132,199,0.25); }
+    body.light-mode .mini-log-box { background: rgba(0,0,0,0.04); }
+    body.light-mode .header { background: linear-gradient(180deg, rgba(2,132,199,0.06) 0%, transparent 100%); }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    /* ── HEADER ─────────────────────────────────── */
+    .header {
+      background: linear-gradient(180deg, rgba(56,189,248,0.06) 0%, transparent 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 22px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-icon { font-size: 28px; }
+    .header-title {
+      font-size: 22px;
+      font-weight: 800;
+      background: linear-gradient(90deg, #38bdf8, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .header-sub { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+    /* ── MAIN LAYOUT ───────────────────────────── */
+    .main { max-width: 1200px; margin: 0 auto; padding: 36px 24px 60px; }
+    /* ── INPUT CARD ────────────────────────────── */
+    .input-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .input-card::before {
+      content: '';
+      position: absolute;
+      top: -60px; right: -60px;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    /* ── DROP ZONE ─────────────────────────────── */
+    .drop-zone {
+      border: 2px dashed rgba(56,189,248,0.25);
+      border-radius: var(--radius-sm);
+      padding: 36px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      position: relative;
+      background: rgba(56,189,248,0.03);
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+    }
+    .drop-zone.drag-over { transform: scale(1.01); }
+    .drop-icon {
+      font-size: 44px;
+      margin-bottom: 14px;
+      filter: drop-shadow(0 0 12px rgba(56,189,248,0.4));
+    }
+    .drop-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .drop-sub { font-size: 13px; color: var(--text-dim); margin-bottom: 18px; }
+    .btn-browse {
+      display: inline-block;
+      padding: 9px 22px;
+      background: var(--cyan-dim);
+      border: 1px solid rgba(56,189,248,0.4);
+      color: var(--cyan);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-browse:hover { background: rgba(56,189,248,0.25); }
+    /* ── FILE LIST ─────────────────────────────── */
+    .file-list { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      animation: slideIn 0.2s ease;
+    }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+    .file-name { flex: 1; font-family: 'JetBrains Mono', monospace; color: var(--cyan); }
+    .file-size { color: var(--text-dim); font-size: 11px; }
+    .file-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1; }
+    .file-remove:hover { color: var(--red); }
+    /* ── OPTIONS ROW ───────────────────────────── */
+    .options-row {
+      display: flex;
+      gap: 24px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+    .option-group { display: flex; align-items: center; gap: 12px; }
+    .option-label { font-size: 13px; font-weight: 500; color: var(--text-mid); white-space: nowrap; }
+    .toggle-group { display: flex; gap: 4px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 4px; }
+    .toggle-btn {
+      padding: 7px 18px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: transparent;
+      color: var(--text-dim);
+    }
+    .toggle-btn.active {
+      background: var(--cyan);
+      color: #070b14;
+      box-shadow: 0 2px 8px rgba(56,189,248,0.3);
+    }
+    .toggle-btn.active.green { background: var(--green); box-shadow: 0 2px 8px rgba(16,185,129,0.3); }
+    .select-input, .number-input {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 12px;
+      outline: none;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .select-input:focus, .number-input:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 8px rgba(56,189,248,0.2);
+    }
+    .select-input option {
+      background: var(--bg2);
+      color: var(--text);
+    }
+    /* ── GENERATE BUTTON ───────────────────────── */
+    .btn-generate {
+      width: 100%;
+      margin-top: 28px;
+      padding: 18px;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.25s ease;
+      background: linear-gradient(135deg, #0ea5e9, #6366f1, #a855f7);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(56,189,248,0.2);
+    }
+    .btn-generate:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(56,189,248,0.35);
+    }
+    .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-generate::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
+      transform: translateX(-100%);
+      transition: transform 0.5s ease;
+    }
+    .btn-generate:hover::before { transform: translateX(100%); }
+    /* ── LOG TERMINAL ──────────────────────────── */
+    .log-panel {
+      background: #050810;
+      border: 1px solid rgba(56,189,248,0.2);
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+      background: rgba(56,189,248,0.05);
+      border-bottom: 1px solid rgba(56,189,248,0.12);
+    }
+    .log-title { font-size: 13px; font-weight: 600; color: var(--cyan); display: flex; align-items: center; gap: 8px; }
+    .log-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); animation: blink 1.2s ease-in-out infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .log-dot.idle { background: var(--text-dim); box-shadow: none; animation: none; }
+    .log-status { font-size: 12px; color: var(--text-dim); }
+    .log-body {
+      padding: 16px 20px;
+      min-height: 120px;
+      max-height: 280px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.7;
+    }
+    .log-body::-webkit-scrollbar { width: 6px; }
+    .log-body::-webkit-scrollbar-track { background: transparent; }
+    .log-body::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.2); border-radius: 3px; }
+    .log-line { display: flex; gap: 10px; align-items: flex-start; }
+    .log-time { color: var(--text-dim); flex-shrink: 0; font-size: 11px; margin-top: 1px; }
+    .log-msg { flex: 1; white-space: pre-wrap; word-break: break-word; }
+    .log-msg.info { color: #cbd5e1; }
+    .log-msg.success { color: var(--green); }
+    .log-msg.error { color: var(--red); }
+    /* ── RESULTS SECTION ───────────────────────── */
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .results-title {
+      font-size: 20px;
+      font-weight: 700;
+      background: linear-gradient(90deg, #10b981, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .btn-refresh {
+      padding: 8px 16px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text-mid);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .btn-refresh:hover { border-color: var(--cyan); color: var(--cyan); }
+    /* ── TABLE ─────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      font-size: 13px;
+    }
+    thead tr { background: var(--bg3); }
+    th {
+      padding: 14px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-bottom: 1px solid rgba(30,41,59,0.8);
+      transition: background 0.15s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(56,189,248,0.03); }
+    td { padding: 14px 16px; vertical-align: top; }
+    .td-no { color: var(--text-dim); font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .td-file { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cyan); }
+    /* ── EDITABLE FIELDS ───────────────────────── */
+    .edit-wrap { position: relative; }
+    .edit-field {
+      width: 100%;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      resize: none;
+      line-height: 1.5;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .edit-field:focus { border-color: rgba(56,189,248,0.4); background: rgba(56,189,248,0.04); }
+    .btn-copy {
+      position: absolute;
+      top: 4px; right: 4px;
+      padding: 3px 8px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      border-radius: 4px;
+      font-size: 10px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .edit-wrap:hover .btn-copy { opacity: 1; }
+    .btn-copy:hover { color: var(--cyan); border-color: var(--cyan); }
+    .btn-copy.copied { color: var(--green); border-color: var(--green); }
+    /* ── VIDEO PREVIEW CELL ────────────────────── */
+    .preview-cell { min-width: 180px; }
+    .preview-video {
+      width: 160px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: block;
+      background: #000;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-queued { background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+    .badge-converting { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid rgba(245,158,11,0.3); }
+    .badge-rendering { background: rgba(56,189,248,0.1); color: var(--cyan); border: 1px solid rgba(56,189,248,0.3); }
+    .badge-success { background: var(--green-dim); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .badge-error { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    .spin { display: inline-block; animation: spin 1.2s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* ── ACTION BUTTONS ────────────────────────── */
+    .actions { display: flex; flex-direction: column; gap: 7px; min-width: 130px; }
+    .btn-action {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .btn-4k { background: linear-gradient(135deg, #7c3aed, #6366f1); color: #fff; }
+    .btn-4k:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(124,58,237,0.4); }
+    .btn-dl { background: var(--green-dim); border: 1px solid rgba(16,185,129,0.4); color: var(--green); }
+    .btn-dl:hover { background: rgba(16,185,129,0.25); }
+    .btn-del { background: var(--red-dim); border: 1px solid rgba(239,68,68,0.3); color: var(--red); }
+    .btn-del:hover { background: rgba(239,68,68,0.25); }
+    .btn-action:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+    /* ── EMPTY STATE ────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--text-dim);
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+    .empty-text { font-size: 15px; margin-bottom: 8px; }
+    .empty-sub { font-size: 13px; opacity: 0.6; }
+    /* ── TOAST ──────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 28px; right: 28px;
+      padding: 12px 20px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      z-index: 1000;
+      animation: toastIn 0.25s ease;
+      max-width: 320px;
+    }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    .toast.success { border-color: rgba(16,185,129,0.5); color: var(--green); }
+    .toast.error { border-color: rgba(239,68,68,0.5); color: var(--red); }
+    .toast.fade-out { animation: toastOut 0.35s ease forwards; }
+    @keyframes toastOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(10px); } }
+    /* ── TABS & CODE EDITOR ──────────────────────── */
+    .input-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+    .tab-btn {
+      padding: 8px 16px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-dim);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      background: var(--cyan-dim);
+      border-color: rgba(56,189,248,0.4);
+      color: var(--cyan);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .code-editor-textarea {
+      width: 100%;
+      min-height: 200px;
+      background: #050810;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: #22c55e;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      padding: 16px;
+      outline: none;
+      transition: border-color 0.2s;
+      resize: vertical;
+    }
+    .code-editor-textarea:focus { border-color: var(--cyan); }
+    .input-text-field {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      padding: 10px 14px;
+      outline: none;
+      margin-bottom: 14px;
+      font-family: inherit;
+    }
+    .input-text-field:focus { border-color: var(--cyan); }
+    
+    /* ── BADGES & LOGS ───────────────────────────── */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-queued { background: rgba(148, 163, 184, 0.12); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+    .badge-converting { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.2); }
+    .badge-rendering { background: rgba(168, 85, 247, 0.12); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.2); }
+    .badge-cancelled { background: rgba(245, 158, 11, 0.12); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.2); }
+    .badge-error { background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+    .badge-success { background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); }
+    
+    .mini-log-box {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      line-height: 1.5;
+      color: var(--text-mid);
+      max-height: 180px;
+      min-height: 60px;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(56,189,248,0.06);
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-top: 8px;
+      word-break: break-all;
+    }
+    .mini-log-line { display: flex; gap: 6px; margin-bottom: 3px; align-items: flex-start; }
+    .mini-log-time { color: var(--text-dim); flex-shrink: 0; font-size: 9.5px; }
+    .mini-log-msg { word-break: break-word; }
+    .mini-log-msg.error { color: var(--red); }
+    .mini-log-msg.success { color: var(--green); }
+    .mini-log-msg.warning { color: var(--amber); }
+
+    .btn-action.btn-cancel {
+      background: var(--red-dim);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: var(--red);
+    }
+    .btn-action.btn-cancel:hover { background: rgba(239,68,68,0.25); }
+    .btn-action.btn-cancel:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .btn-action.btn-retry {
+      background: rgba(245,158,11,0.12);
+      border: 1px solid rgba(245,158,11,0.35);
+      color: var(--amber);
+    }
+    .btn-action.btn-retry:hover { background: rgba(245,158,11,0.25); }
+
+    .btn-code-link {
+      font-size: 11px;
+      color: var(--cyan);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: rgba(56,189,248,0.04);
+      border: 1px solid rgba(56,189,248,0.15);
+      border-radius: 6px;
+      transition: all 0.2s;
+      font-weight: 500;
+      margin-top: 4px;
+    }
+    .btn-code-link:hover {
+      background: rgba(56,189,248,0.15);
+      border-color: var(--cyan);
+    }
+
+    /* ── SCROLL ─────────────────────────────────── */
+    html { scroll-behavior: smooth; }
+    /* ── DARK/LIGHT TOGGLE ──────────────────────── */
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .theme-label { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      cursor: pointer;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: all 0.3s ease;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      left: 2px; top: 2px;
+      background: var(--text-dim);
+      border-radius: 50%;
+      transition: all 0.3s ease;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--cyan-dim); border-color: var(--cyan); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: var(--cyan); }
+    /* ── BATCH RENDER ───────────────────────────── */
+    .batch-bar {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      background: rgba(124,58,237,0.08);
+      border: 1px solid rgba(124,58,237,0.25);
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      animation: slideIn 0.2s ease;
+    }
+    .batch-bar.visible { display: flex; }
+    .batch-count {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--purple);
+      flex: 1;
+    }
+    .btn-batch-4k {
+      padding: 8px 18px;
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-4k:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,0.4); }
+    .btn-batch-4k:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-batch-seo {
+      padding: 8px 18px;
+      background: rgba(245,158,11,0.9);
+      border: none;
+      border-radius: 6px;
+      color: #070b14;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-seo:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(245,158,11,0.4); }
+    .btn-batch-seo:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-batch-tsx {
+      padding: 8px 18px;
+      background: var(--cyan);
+      border: none;
+      border-radius: 6px;
+      color: #070b14;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-tsx:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(56,189,248,0.4); }
+    .btn-batch-tsx:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-batch-preview {
+      padding: 8px 18px;
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-preview:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,0.4); }
+    .btn-batch-preview:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-batch-clear {
+      padding: 8px 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-clear:hover { border-color: var(--red); color: var(--red); }
+    .btn-batch-del {
+      padding: 8px 18px;
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-del:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(239,68,68,0.4); }
+    .btn-batch-del:disabled { opacity: 0.4; cursor: not-allowed; }
+    .row-checkbox { accent-color: var(--purple); width: 16px; height: 16px; cursor: pointer; }
+    .btn-export-csv {
+      padding: 8px 14px;
+      background: var(--green-dim);
+      border: 1px solid rgba(16,185,129,0.35);
+      color: var(--green);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-export-csv:hover { background: rgba(16,185,129,0.25); }
+    .export-menu-item {
+      display: block;
+      padding: 10px 16px;
+      color: var(--text);
+      font-size: 13px;
+      text-decoration: none;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .export-menu-item:hover {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--green);
+    }
+    .btn-batch-mode {
+      padding: 8px 14px;
+      background: rgba(124,58,237,0.1);
+      border: 1px solid rgba(124,58,237,0.3);
+      color: var(--purple);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .btn-batch-mode:hover { background: rgba(124,58,237,0.2); }
+    .btn-batch-mode.active { background: rgba(124,58,237,0.2); border-color: var(--purple); }
+
+    /* ── MODAL VIDEO ────────────────────────────── */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 2000;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      background-color: rgba(7, 11, 20, 0.95);
+      backdrop-filter: blur(8px);
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.25s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .close-modal {
+      position: absolute;
+      top: 24px; right: 32px;
+      color: var(--text-dim);
+      font-size: 36px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .close-modal:hover { color: var(--red); }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-icon">🎬</div>
+  <div>
+    <div class="header-title">Remotion Stock Generator</div>
+    <div class="header-sub">Upload HTML animasi → AI convert → Render 4K di GitHub Actions</div>
+  </div>
+  <div class="theme-toggle" style="display:flex; align-items:center; gap:16px;">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span class="theme-label" id="themeLabel">🌙 Dark</span>
+      <label class="toggle-switch" title="Toggle Dark/Light Mode">
+        <input type="checkbox" id="themeToggle" onchange="toggleTheme(this.checked)" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <button class="btn-refresh" id="btnEditPrompt" onclick="togglePromptEditor()" style="display:flex; align-items:center; gap:6px; border-color:var(--purple); color:var(--purple); padding:6px 12px;">
+      📝 Edit Prompt
+    </button>
+    <button class="btn-refresh" id="btnApiKeys" onclick="toggleApiKeysPanel()" style="display:flex; align-items:center; gap:6px; border-color:var(--blue); color:var(--blue); padding:6px 12px; margin-left: 8px;">
+      🔑 API Keys
+    </button>
+    <a href="/chat" style="display:flex; align-items:center; gap:6px; margin-left:8px; padding:6px 13px; border:1px solid rgba(168,85,247,0.5); border-radius:8px; color:#a855f7; font-size:13px; font-weight:600; text-decoration:none; background:rgba(168,85,247,0.08); transition:all 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.2)'; this.style.borderColor='#a855f7';" onmouseout="this.style.background='rgba(168,85,247,0.08)'; this.style.borderColor='rgba(168,85,247,0.5)';">
+      🤖 Chat AI
+    </a>
+  </div>
+
+</header>
+
+<main class="main">
+
+  <!-- ═══════════ INPUT CARD ═══════════ -->
+  <div class="input-card">
+    <!-- Input Tabs -->
+    <div class="input-tabs">
+      <button class="tab-btn active" id="tabUploadBtn" onclick="switchInputTab('upload')">📂 Upload File HTML</button>
+      <button class="tab-btn" id="tabPasteBtn" onclick="switchInputTab('paste')">✍ Paste Kode HTML</button>
+    </div>
+
+    <!-- Tab Upload Content -->
+    <div class="tab-content active" id="tabUploadContent">
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <div class="drop-icon">📁</div>
+        <div class="drop-title">Drag & drop file .html ke sini</div>
+        <div class="drop-sub">Mendukung multi-file (maks. 10 file)</div>
+        <label class="btn-browse" onclick="event.stopPropagation()">
+          Pilih File HTML
+          <input type="file" id="fileInput" multiple accept=".html" hidden onchange="handleFileSelect(this.files)" />
+        </label>
+        <div class="file-list" id="fileList"></div>
+      </div>
+    </div>
+
+    <!-- Tab Paste Content -->
+    <div class="tab-content" id="tabPasteContent">
+      <input type="text" class="input-text-field" id="pasteFileName" placeholder="Nama file / ID unik kustom (misal: glowing_button) — opsional" />
+      <textarea class="code-editor-textarea" id="pasteHtmlCode" placeholder="Tempelkan (paste) kode HTML lengkap Anda di sini..." oninput="checkPasteInput()"></textarea>
+    </div>
+
+    <!-- Options -->
+    <div class="options-row">
+      <div class="option-group">
+        <span class="option-label">🔄 Loop Video</span>
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="loopYes" onclick="setLoop(true)">Ya</button>
+          <button class="toggle-btn" id="loopNo" onclick="setLoop(false)">Tidak</button>
+        </div>
+      </div>
+      <div class="option-group">
+        <span class="option-label">🎨 Background</span>
+        <div class="toggle-group">
+          <button class="toggle-btn" id="bgTransp" onclick="setBg(true)">Transparan</button>
+          <button class="toggle-btn active" id="bgSolid" onclick="setBg(false)">Solid</button>
+        </div>
+      </div>
+      <div class="option-group">
+        <span class="option-label">⏱️ Durasi</span>
+        <select class="select-input" id="animationDurationSelect">
+          <option value="5">5 Detik</option>
+          <option value="8">8 Detik</option>
+          <option value="10" selected>10 Detik</option>
+          <option value="12">12 Detik</option>
+          <option value="15">15 Detik</option>
+          <option value="20">20 Detik</option>
+          <option value="30">30 Detik</option>
+        </select>
+      </div>
+      <div class="option-group">
+        <span class="option-label">📺 FPS</span>
+        <select class="select-input" id="animationFpsSelect">
+          <option value="30" selected>30 FPS</option>
+          <option value="60">60 FPS</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Generate Button -->
+    <button class="btn-generate" id="btnGenerate" onclick="startGenerate()" disabled>
+      ⚡ &nbsp;GENERATE ASSET
+    </button>
+  </div>
+
+  <!-- ═══════════ LOG TERMINAL ═══════════ -->
+  <div class="log-panel" id="logPanel" style="display:none">
+    <div class="log-header">
+      <div class="log-title">
+        <div class="log-dot" id="logDot"></div>
+        📡 Live Process Log
+      </div>
+      <span class="log-status" id="logStatus">Memproses...</span>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+
+  <!-- ═══════════ RESULTS ═══════════ -->
+  <div>
+    <div class="results-header">
+      <div class="results-title">📂 Hasil & Antrian Render</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button class="btn-batch-mode" id="btnBatchMode" onclick="toggleBatchMode()">☑ Batch Render</button>
+        <div style="position:relative; display:inline-block;">
+          <button class="btn-export-csv" id="btnExportCSV" onclick="toggleExportMenu(event)" title="Unduh CSV untuk Adobe Stock atau Shutterstock">⬇ Export CSV</button>
+          <div id="exportMenu" style="display: none; position: absolute; left: 0; top: 100%; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); z-index: 1000; min-width: 180px; padding: 4px 0; margin-top: 4px;">
+            <a href="/api/export-csv?platform=adobe" class="export-menu-item">Adobe Stock CSV</a>
+            <a href="/api/export-csv?platform=shutterstock" class="export-menu-item">Shutterstock CSV</a>
+          </div>
+        </div>
+        <button class="btn-refresh" onclick="loadResults()">🔄 Refresh</button>
+      </div>
+    </div>
+    <!-- ═══════════ PROMPT EDITOR PANEL ═══════════ -->
+    <div class="input-card" id="promptEditorPanel" style="display:none; border-color: var(--purple); background: rgba(168,85,247,0.03); margin-bottom: 20px;">
+      <h3 style="font-size:16px; font-weight:700; color:var(--purple); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+        📝 Edit System Prompts AI
+      </h3>
+      <p style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">
+        Anda dapat menyesuaikan prompt instruksi AI di bawah ini. Gunakan placeholder <code>{{HTML_CONTENT}}</code>, <code>{{ANIMATION_DURATION}}</code>, dan <code>{{DURATION_FRAMES}}</code> untuk membiarkan sistem menyisipkan konten secara dinamis.
+      </p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Prompt 1: Generate Judul & Keyword (SEO)</label>
+          <textarea class="code-editor-textarea" id="promptSeoText" style="height:320px; font-size:12px; color:#c084fc; border-color:rgba(168,85,247,0.2);" placeholder="Masukkan prompt SEO..."></textarea>
+        </div>
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Prompt 2: Konversi HTML ke TSX Remotion</label>
+          <textarea class="code-editor-textarea" id="promptConversionText" style="height:320px; font-size:12px; color:#c084fc; border-color:rgba(168,85,247,0.2);" placeholder="Masukkan prompt konversi..."></textarea>
+        </div>
+      </div>
+      <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-batch-clear" onclick="togglePromptEditor()">Batal</button>
+        <button class="btn-batch-4k" onclick="savePrompts()">💾 Simpan Prompt</button>
+      </div>
+    </div>
+    <!-- ═══════════ API KEYS PANEL ═══════════ -->
+    <div class="input-card" id="apiKeysPanel" style="display:none; border-color: var(--blue); background: rgba(59,130,246,0.03); margin-bottom: 20px;">
+      <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+        🔑 Pengaturan API Keys AI & Layanan Pembantu
+      </h3>
+      <p style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">
+        Isi API Key untuk AI pribadi Anda dan RapidAPI Key (untuk email Gmailnator Syntx) di bawah ini. Kunci disimpan di file <code>.env</code> Anda.
+      </p>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px; flex-wrap:wrap;">
+        <!-- Groq Key -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Groq API Key</label>
+          <input type="password" class="input-text-field" id="keyGroq" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="gsk_..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('groq')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_groq" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <!-- Gemini Key -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Gemini AI API Key</label>
+          <input type="password" class="input-text-field" id="keyGemini" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="AQ.Ab8RN..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('gemini')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_gemini" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <!-- OpenRouter Key -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">OpenRouter API Key</label>
+          <input type="password" class="input-text-field" id="keyOpenrouter" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="sk-or-v1-..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('openrouter')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_openrouter" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <!-- RapidAPI Key (Gmailnator) -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">RapidAPI Key (Gmailnator)</label>
+          <input type="password" class="input-text-field" id="keyRapidapi" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="Masukkan key RapidAPI..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('gmailnator')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_gmailnator" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <!-- Syntx Base Email -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Syntx Base Email (Gmail)</label>
+          <input type="text" class="input-text-field" id="syntxBaseEmail" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="l.imh.en.c.e@gmail.com" />
+        </div>
+        <!-- Syntx Email Index -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Syntx Email Index (Dot-Variant)</label>
+          <input type="number" class="input-text-field" id="syntxEmailIndex" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="0" min="0" />
+        </div>
+        <!-- GitHub Token -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub PAT Token (Workflow scope)</label>
+          <input type="password" class="input-text-field" id="githubToken" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="ghp_..." />
+        </div>
+        <!-- GitHub Username -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub Username</label>
+          <input type="text" class="input-text-field" id="githubUsername" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="zulmorang15-dot" />
+        </div>
+        <!-- GitHub Repository -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub Repository</label>
+          <input type="text" class="input-text-field" id="githubRepo" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="master-stock-generator" />
+        </div>
+        <!-- Syntx Account Pool Status -->
+        <div style="grid-column: 1 / -1; margin-top: 10px; padding: 12px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 13px; font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 6px;">📋 Pool Akun Syntx.ai Cached</span>
+            <button class="btn-refresh" onclick="prewarmSyntxAccount()" id="btnPrewarmSyntx" style="padding: 4px 10px; font-size: 11px; border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim);">🔑 Tambah/Pre-warm Akun</button>
+          </div>
+          <div id="syntxPoolStatus" style="font-size: 12px; color: var(--text-dim);">
+            Loading status pool...
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-batch-clear" onclick="toggleApiKeysPanel()">Batal</button>
+        <button class="btn-batch-4k" onclick="saveApiKeys()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border:none; color:#fff;">💾 Simpan API Keys</button>
+      </div>
+    </div>
+    <!-- Batch Action Bar -->
+    <div class="batch-bar" id="batchBar" style="flex-wrap: wrap;">
+      <span class="batch-count" id="batchCount">0 item dipilih</span>
+      <button class="btn-batch-clear" onclick="clearBatchSelection()">✕ Batal Pilih</button>
+      <button class="btn-batch-seo" id="btnBatchSeo" onclick="triggerBatchSEO()">✨ Gen Judul Terpilih</button>
+      <button class="btn-batch-tsx" id="btnBatchTsx" onclick="triggerBatchTsx()">⚙️ Gen TSX & Preview Terpilih</button>
+      <button class="btn-batch-4k" id="btnBatch4k" onclick="triggerBatch4K()">🚀 Gen 4K Terpilih</button>
+      <button class="btn-batch-del" id="btnBatchDelete" onclick="triggerBatchDelete()">🗑 Batch Hapus</button>
+    </div>
+    <div id="resultsContainer">
+      <div class="empty-state">
+        <div class="empty-icon">🎞</div>
+        <div class="empty-text">Belum ada hasil</div>
+        <div class="empty-sub">Upload file HTML di atas dan tekan Generate Asset</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // ═══════════════════════════════════════════
+  // STATE
+  // ═══════════════════════════════════════════
+  let selectedFiles = [];
+  let loopEnabled = true;
+  let transparentBg = false;
+  let isGenerating = false;
+  let pollTimers = {};
+  let batchModeActive = false;
+  let batchSelected = new Set();
+  let activeSeoGenerations = {};
+  let currentPage = 1;
+  const itemsPerPage = 50;
+
+  // ─── DARK/LIGHT MODE ────────────────────────
+  function toggleTheme(isLight) {
+    document.body.classList.toggle('light-mode', isLight);
+    document.getElementById('themeLabel').textContent = isLight ? '☀️ Light' : '🌙 Dark';
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  }
+  // Restore saved theme
+  (function() {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light') {
+      document.body.classList.add('light-mode');
+      document.getElementById('themeLabel').textContent = '☀️ Light';
+      document.getElementById('themeToggle').checked = true;
+    }
+  })();
+
+  // ═══════════════════════════════════════════
+  // FILE HANDLING
+  // ═══════════════════════════════════════════
+  const dropZone = document.getElementById('dropZone');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.html'));
+    addFiles(files);
+  });
+
+  function handleFileSelect(files) {
+    addFiles(Array.from(files));
+    document.getElementById('fileInput').value = '';
+  }
+
+  function addFiles(newFiles) {
+    for (const f of newFiles) {
+      if (selectedFiles.length >= 10) { showToast('Maksimal 10 file per batch', 'error'); break; }
+      if (!selectedFiles.find(x => x.file.name === f.file?.name || x.name === f.name)) {
+        selectedFiles.push({ file: f, name: f.name, size: f.size, content: null });
+      }
+    }
+    renderFileList();
+    updateGenerateBtn();
+  }
+
+  function removeFile(idx) {
+    selectedFiles.splice(idx, 1);
+    renderFileList();
+    updateGenerateBtn();
+  }
+
+  function renderFileList() {
+    const el = document.getElementById('fileList');
+    if (selectedFiles.length === 0) { el.innerHTML = ''; return; }
+    el.innerHTML = selectedFiles.map((f, i) => `
+      <div class="file-item">
+        <span>📄</span>
+        <span class="file-name">${f.name}</span>
+        <span class="file-size">${(f.size / 1024).toFixed(1)} KB</span>
+        <button class="file-remove" onclick="removeFile(${i})" title="Hapus">✕</button>
+      </div>`).join('');
+  }
+
+  function updateGenerateBtn() {
+    const btn = document.getElementById('btnGenerate');
+    btn.disabled = selectedFiles.length === 0 || isGenerating;
+    if (isGenerating) btn.textContent = '⏳  Memproses...';
+    else if (selectedFiles.length === 0) btn.textContent = '⚡  GENERATE ASSET';
+    else btn.innerHTML = `⚡ &nbsp;GENERATE ASSET &nbsp;<span style="opacity:0.7;font-weight:400">(${selectedFiles.length} file)</span>`;
+  }
+
+  // ═══════════════════════════════════════════
+  // TOGGLES
+  // ═══════════════════════════════════════════
+  function setLoop(val) {
+    loopEnabled = val;
+    document.getElementById('loopYes').classList.toggle('active', val);
+    document.getElementById('loopNo').classList.toggle('active', !val);
+  }
+
+  function setBg(isTransparent) {
+    transparentBg = isTransparent;
+    document.getElementById('bgTransp').classList.toggle('active', isTransparent);
+    document.getElementById('bgSolid').classList.toggle('active', !isTransparent);
+  }
+
+  // ═══════════════════════════════════════════
+  // GENERATE
+  // ═══════════════════════════════════════════
+  // TABS & PASTING LOGIC
+  let currentInputTab = 'upload'; // 'upload' atau 'paste'
+
+  function switchInputTab(tab) {
+    currentInputTab = tab;
+    document.getElementById('tabUploadBtn').classList.toggle('active', tab === 'upload');
+    document.getElementById('tabPasteBtn').classList.toggle('active', tab === 'paste');
+    document.getElementById('tabUploadContent').classList.toggle('active', tab === 'upload');
+    document.getElementById('tabPasteContent').classList.toggle('active', tab === 'paste');
+    updateGenerateBtn();
+  }
+
+  function checkPasteInput() {
+    updateGenerateBtn();
+  }
+
+  function updateGenerateBtn() {
+    const btn = document.getElementById('btnGenerate');
+    if (currentInputTab === 'upload') {
+      btn.disabled = selectedFiles.length === 0 || isGenerating;
+      if (isGenerating) btn.textContent = '⏳  Memproses...';
+      else if (selectedFiles.length === 0) btn.textContent = '⚡  GENERATE ASSET';
+      else btn.innerHTML = `⚡ &nbsp;GENERATE ASSET &nbsp;<span style="opacity:0.7;font-weight:400">(${selectedFiles.length} file)</span>`;
+    } else {
+      const code = document.getElementById('pasteHtmlCode').value.trim();
+      btn.disabled = !code || isGenerating;
+      if (isGenerating) btn.textContent = '⏳  Memproses...';
+      else btn.textContent = '⚡  GENERATE FROM PASTE';
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // GENERATE
+  // ═══════════════════════════════════════════
+  async function startGenerate() {
+    const aiModel = 'auto'; // Model AI dipilih per-item di tabel
+    const animationDuration = Number(document.getElementById('animationDurationSelect').value);
+    const fps = Number(document.getElementById('animationFpsSelect').value);
+    
+    isGenerating = true;
+    updateGenerateBtn();
+
+    try {
+      if (currentInputTab === 'upload') {
+        if (selectedFiles.length === 0) return;
+        showToast('📦 Mengirim batch file ke antrean...', 'info');
+
+        const filesPayload = await Promise.all(selectedFiles.map(async f => {
+          const content = await readFileText(f.file);
+          return { name: f.name, content };
+        }));
+
+        const resp = await fetch('/api/process-html-batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            files: filesPayload, 
+            loop: loopEnabled, 
+            transparent: transparentBg,
+            aiModel,
+            animationDuration,
+            fps
+          })
+        });
+        
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        
+        showToast('✅ Batch berhasil ditambahkan ke antrean!', 'success');
+        selectedFiles = [];
+        renderFileList();
+
+      } else {
+        const htmlContent = document.getElementById('pasteHtmlCode').value.trim();
+        const customId = document.getElementById('pasteFileName').value.trim();
+        if (!htmlContent) return;
+
+        showToast('✍ Mengirim kode paste ke antrean...', 'info');
+
+        const resp = await fetch('/api/paste-html', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: customId,
+            htmlContent,
+            loop: loopEnabled,
+            transparent: transparentBg,
+            aiModel,
+            animationDuration,
+            fps
+          })
+        });
+
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+
+        showToast('✅ Kode paste berhasil diantrekan!', 'success');
+        document.getElementById('pasteHtmlCode').value = '';
+        document.getElementById('pasteFileName').value = '';
+      }
+
+      // Refresh results list immediately to show newly queued item(s)
+      setTimeout(loadResults, 500);
+
+    } catch(err) {
+      showToast('❌ Error: ' + err.message, 'error');
+    } finally {
+      isGenerating = false;
+      updateGenerateBtn();
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // CANCELLATION & SSE LOG STREAM
+  // ═══════════════════════════════════════════
+  const taskStreams = {};
+
+  function startTaskLogStream(itemId) {
+    if (taskStreams[itemId]) return; // stream sudah berjalan
+
+    const logBox = document.getElementById(`logbox_${itemId}`);
+    if (logBox) {
+      logBox.innerHTML = '';
+    }
+
+    const source = new EventSource(`/api/task-logs/${itemId}`);
+    taskStreams[itemId] = source;
+
+    source.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'done') {
+          source.close();
+          delete taskStreams[itemId];
+          // Tunggu sebentar lalu reload table untuk update status badge final
+          setTimeout(loadResults, 1000);
+          return;
+        }
+
+        // Cari log box untuk baris item ini
+        const logBox = document.getElementById(`logbox_${itemId}`);
+        if (logBox) {
+          if (logBox.innerHTML.includes("Belum ada log")) {
+            logBox.innerHTML = '';
+          }
+
+          let msgClass = '';
+          if (data.type === 'error') msgClass = 'error';
+          else if (data.type === 'success') msgClass = 'success';
+          else if (data.type === 'warning') msgClass = 'warning';
+
+          const lineEl = document.createElement('div');
+          lineEl.className = 'mini-log-line';
+          lineEl.innerHTML = `
+            <span class="mini-log-time">${data.time || ''}</span>
+            <span class="mini-log-msg ${msgClass}">${escHtml(data.message || '')}</span>
+          `;
+          logBox.appendChild(lineEl);
+          logBox.scrollTop = logBox.scrollHeight;
+        }
+      } catch (e) {
+        console.error("Gagal parse SSE log data:", e);
+      }
+    };
+
+    source.onerror = () => {
+      source.close();
+      delete taskStreams[itemId];
+    };
+  }
+
+  async function cancelTask(id) {
+    if (!confirm(`Batalkan proses generate untuk "${id}"?`)) return;
+    try {
+      const resp = await fetch(`/api/cancel-task/${id}`, { method: 'POST' });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      
+      showToast('🚫 Task dibatalkan!', 'success');
+      
+      // Close stream jika ada
+      if (taskStreams[id]) {
+        taskStreams[id].close();
+        delete taskStreams[id];
+      }
+      
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal batal: ' + err.message, 'error');
+    }
+  }
+
+  async function retryTask(id) {
+    const aiModel = document.getElementById(`seo_model_${id}`)?.value || 'auto';
+    const animationDuration = Number(document.getElementById('animationDurationSelect').value);
+    const fps = Number(document.getElementById('animationFpsSelect').value);
+    if (!confirm(`Retry proses generate untuk "${id}"?\n\nAkan memulai ulang dari awal dengan AI yang sama.`)) return;
+    try {
+      const resp = await fetch(`/api/retry-task/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aiModel, animationDuration, fps })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('🔄 Task berhasil dimasukkan ulang ke antrean!', 'success');
+      setTimeout(loadResults, 500);
+    } catch(err) {
+      showToast('❌ Gagal retry: ' + err.message, 'error');
+    }
+  }
+
+  function readFileText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ═══════════════════════════════════════════
+  // RESULTS TABLE
+  // ═══════════════════════════════════════════
+  async function loadResults() {
+    try {
+      const resp = await fetch('/api/saved-items');
+      const items = await resp.json();
+      renderTable(items);
+      
+      // Auto-poll atau start SSE stream untuk item yang masih diproses
+      items.forEach(item => {
+        const status = item.statusConvertTsx || 'queued';
+        const isRunning = status === 'processing-preview' || status === 'processing-tsx' || status === 'queued' || item.statusRender4k === 'processing';
+        if (isRunning) {
+          startTaskLogStream(item.id);
+        }
+      });
+    } catch(err) {
+      console.error('Gagal load results:', err);
+    }
+  }
+
+  // ─── BATCH MODE ──────────────────────────────
+  function toggleBatchMode() {
+    batchModeActive = !batchModeActive;
+    const btn = document.getElementById('btnBatchMode');
+    btn.classList.toggle('active', batchModeActive);
+    btn.textContent = batchModeActive ? '☑ Mode Aktif' : '☑ Batch Render';
+    if (!batchModeActive) clearBatchSelection();
+    loadResults(); // Re-render table with/without checkboxes
+  }
+
+  function clearBatchSelection() {
+    batchSelected.clear();
+    updateBatchBar();
+    // Uncheck all checkboxes
+    document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+    const selectAllCb = document.getElementById('selectAllCheckbox');
+    if (selectAllCb) selectAllCb.checked = false;
+  }
+
+  function toggleBatchItem(id, checked) {
+    if (checked) batchSelected.add(id);
+    else batchSelected.delete(id);
+    
+    const selectAllCb = document.getElementById('selectAllCheckbox');
+    if (selectAllCb) {
+      const checkboxes = Array.from(document.querySelectorAll('.row-checkbox:not(:disabled)'));
+      selectAllCb.checked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+    }
+    updateBatchBar();
+  }
+
+  function updateBatchBar() {
+    const bar = document.getElementById('batchBar');
+    const countEl = document.getElementById('batchCount');
+    const btnSeo = document.getElementById('btnBatchSeo');
+    const btnTsx = document.getElementById('btnBatchTsx');
+    const btn4k = document.getElementById('btnBatch4k');
+    const btnDel = document.getElementById('btnBatchDelete');
+    const count = batchSelected.size;
+    bar.classList.toggle('visible', count > 0 && batchModeActive);
+    countEl.textContent = `${count} item dipilih`;
+    
+    const disabled = count === 0;
+    if (btnSeo) btnSeo.disabled = disabled;
+    if (btnTsx) btnTsx.disabled = disabled;
+    if (btn4k) btn4k.disabled = disabled;
+    if (btnDel) btnDel.disabled = disabled;
+  }
+
+  async function triggerBatchSEO() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Generate Judul & Keywords untuk ${ids.length} item?`)) return;
+    
+    const btn = document.getElementById('btnBatchSeo');
+    btn.disabled = true;
+    btn.textContent = '⏳ Memproses...';
+    
+    try {
+      for (const id of ids) {
+        const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
+        activeSeoGenerations[id] = true;
+        loadResults();
+        
+        try {
+          const resp = await fetch(`/api/regenerate-seo/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aiModel })
+          });
+          const data = await resp.json();
+          if (data.error) throw new Error(data.error);
+          showToast(`✅ SEO untuk ${id} berhasil!`, 'success');
+        } catch (err) {
+          showToast(`❌ SEO untuk ${id} gagal: ${err.message}`, 'error');
+        } finally {
+          activeSeoGenerations[id] = false;
+          loadResults();
+        }
+        
+        startTaskLogStream(id);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      clearBatchSelection();
+    } catch(err) {
+      showToast('❌ Batch SEO gagal: ' + err.message, 'error');
+    } finally {
+      btn.textContent = '✨ Gen Judul Terpilih';
+      updateBatchBar();
+    }
+  }
+
+  async function triggerBatchTsx() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Generate TSX & Preview untuk ${ids.length} item?`)) return;
+    
+    const btn = document.getElementById('btnBatchTsx');
+    btn.disabled = true;
+    btn.textContent = '⏳ Memproses...';
+    
+    try {
+      const resp = await fetch('/api/saved-items');
+      const items = await resp.json();
+      
+      for (const id of ids) {
+        const item = items.find(i => i.id === id);
+        if (!item) continue;
+        
+        const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
+        const animationDuration = Number(document.getElementById('animationDurationSelect').value);
+        const animationFps = Number(document.getElementById('animationFpsSelect').value);
+        const status = item.statusConvertTsx || 'waiting';
+        
+        try {
+          let url, body;
+          if (status === 'waiting') {
+            url = `/api/start-task/${id}`;
+            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps });
+          } else {
+            url = `/api/retry-task/${id}`;
+            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps });
+          }
+          
+          const startResp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+          });
+          const startData = await startResp.json();
+          if (startData.error) throw new Error(startData.error);
+          
+          startTaskLogStream(id);
+        } catch (err) {
+          showToast(`❌ TSX untuk ${id} gagal: ${err.message}`, 'error');
+        }
+        await new Promise(r => setTimeout(r, 300));
+      }
+      showToast(`🚀 Batch TSX & Preview berhasil diantrekan!`, 'success');
+      loadResults();
+      clearBatchSelection();
+    } catch(err) {
+      showToast('❌ Batch gagal: ' + err.message, 'error');
+    } finally {
+      btn.textContent = '⚙️ Gen TSX & Preview Terpilih';
+      updateBatchBar();
+    }
+  }
+
+  async function triggerBatch4K() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Generate 4K ProRes untuk ${ids.length} item?\n\nProses ini akan git push dan trigger GitHub Actions secara sekuensial.\n\nItem yang dipilih:\n${ids.join('\n')}`)) return;
+    const btn = document.getElementById('btnBatch4k');
+    btn.disabled = true;
+    btn.textContent = '⏳ Memproses...';
+    try {
+      const resp = await fetch('/api/batch-trigger-4k', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+      const data = await resp.json();
+      const success = data.results?.filter(r => r.success).length || 0;
+      const failed = data.results?.filter(r => !r.success).length || 0;
+      showToast(`🚀 ${success} render 4K dipicu${failed > 0 ? `, ${failed} gagal` : ''}. Pantau di GitHub Actions.`, success > 0 ? 'success' : 'error');
+      // Hubungkan log stream untuk setiap item yang berhasil dipicu
+      data.results?.forEach(r => { if (r.success) startTaskLogStream(r.id); });
+      clearBatchSelection();
+      loadResults();
+    } catch(err) {
+      showToast('❌ Batch 4K gagal: ' + err.message, 'error');
+    } finally {
+      btn.textContent = '🚀 Generate 4K Terpilih';
+      updateBatchBar();
+    }
+  }
+
+  window.toggleSelectAll = function(checked) {
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+    checkboxes.forEach(cb => {
+      if (!cb.disabled) {
+        cb.checked = checked;
+        const id = cb.getAttribute('data-id');
+        if (checked) {
+          batchSelected.add(id);
+        } else {
+          batchSelected.delete(id);
+        }
+      }
+    });
+    updateBatchBar();
+  }
+
+  async function triggerBatchDelete() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Hapus ${ids.length} item terpilih dari daftar?\nFile video asli tidak ikut terhapus.`)) return;
+
+    const btn = document.getElementById('btnBatchDelete');
+    btn.disabled = true;
+    btn.textContent = '⏳ Menghapus...';
+
+    try {
+      const resp = await fetch('/api/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Gagal batch hapus');
+      
+      showToast(`🗑 ${data.deletedCount || ids.length} item berhasil dihapus`, 'success');
+      clearBatchSelection();
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal batch hapus: ' + err.message, 'error');
+    } finally {
+      btn.textContent = '🗑 Batch Hapus';
+      updateBatchBar();
+    }
+  }
+
+  function renderTable(items) {
+    const container = document.getElementById('resultsContainer');
+    if (!items || items.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-text">Belum ada hasil</div><div class="empty-sub">Upload atau Paste kode HTML di atas dan tekan Generate Asset</div></div>`;
+      return;
+    }
+
+    // Sort newest first
+    const sorted = [...items].reverse();
+    const totalItems = sorted.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    const endIdx = startIdx + itemsPerPage;
+    const paginatedItems = sorted.slice(startIdx, endIdx);
+
+    let paginationHtml = '';
+    if (totalPages > 1) {
+      paginationHtml = `
+        <div class="pagination-container" style="display:flex; justify-content:center; align-items:center; gap:6px; margin: 20px 0; user-select: none;">
+          <button class="toggle-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})" style="padding:5px 10px; font-size:12px;">« Prev</button>
+      `;
+      for (let p = 1; p <= totalPages; p++) {
+        if (p === currentPage) {
+          paginationHtml += `<button class="toggle-btn active" style="padding:5px 10px; font-size:12px; font-weight:bold;">${p}</button>`;
+        } else {
+          paginationHtml += `<button class="toggle-btn" onclick="changePage(${p})" style="padding:5px 10px; font-size:12px;">${p}</button>`;
+        }
+      }
+      paginationHtml += `
+          <button class="toggle-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})" style="padding:5px 10px; font-size:12px;">Next »</button>
+        </div>
+      `;
+    }
+
+    container.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              ${batchModeActive ? '<th style="width:36px"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="accent-color: var(--purple); width: 16px; height: 16px; cursor: pointer;" /></th>' : ''}
+              <th style="width:44px">No</th>
+              <th style="width:180px">Preview Video</th>
+              <th style="width:320px">Log & Status Proses</th>
+              <th>Rekomendasi Keywords</th>
+              <th style="width:170px">Aksi & AI</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${paginatedItems.map((item, i) => renderRow(item, startIdx + i + 1)).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${paginationHtml}
+    `;
+
+    // Attach change listeners for editable fields
+    paginatedItems.forEach(item => {
+      const titleEl = document.getElementById(`title_${item.id}`);
+      const kwEl = document.getElementById(`kw_${item.id}`);
+      if (titleEl) titleEl.addEventListener('blur', () => saveField(item.id, 'judul', titleEl.value));
+      if (kwEl) kwEl.addEventListener('blur', () => saveField(item.id, 'keywords', kwEl.value));
+      
+      // Auto-scroll log box ke bawah saat pertama kali render
+      const logBox = document.getElementById(`logbox_${item.id}`);
+      if (logBox) logBox.scrollTop = logBox.scrollHeight;
+    });
+
+    if (batchModeActive) {
+      const selectAllCb = document.getElementById('selectAllCheckbox');
+      if (selectAllCb) {
+        const checkboxes = Array.from(document.querySelectorAll('.row-checkbox:not(:disabled)'));
+        selectAllCb.checked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+      }
+    }
+  }
+
+  window.changePage = function(page) {
+    currentPage = page;
+    loadResults();
+  }
+
+  function renderLogCell(item) {
+    let statusBadge = '';
+    const status = item.statusConvertTsx || 'queued';
+    const isSeoRunning = !!activeSeoGenerations[item.id];
+    
+    if (isSeoRunning) {
+      statusBadge = `<span class="status-badge badge-converting"><span class="spin">⏳</span> AI SEO...</span>`;
+    } else if (status === 'queued') {
+      statusBadge = `<span class="status-badge badge-queued"><span class="spin">⏳</span> Antrean TSX</span>`;
+    } else if (status === 'processing-tsx') {
+      statusBadge = `<span class="status-badge badge-converting"><span class="spin">⚙</span> Konversi TSX</span>`;
+    } else if (status === 'processing-preview') {
+      statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render Preview</span>`;
+    } else if (status === 'success') {
+      if (item.statusRender4k === 'processing') {
+        statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render 4K...</span>`;
+      } else if (item.statusRender4k === 'success') {
+        statusBadge = `<span class="status-badge badge-success">✅ Selesai 4K</span>`;
+      } else if (item.statusRender4k === 'failed') {
+        statusBadge = `<span class="status-badge badge-error">❌ Gagal 4K</span>`;
+      } else {
+        statusBadge = `<span class="status-badge badge-success">✅ Preview Siap</span>`;
+      }
+    } else if (status === 'failed') {
+      statusBadge = `<span class="status-badge badge-error">❌ Gagal TSX/Preview</span>`;
+    } else if (status === 'cancelled') {
+      statusBadge = `<span class="status-badge badge-cancelled">🚫 Dibatalkan</span>`;
+    } else if (status === 'waiting') {
+      statusBadge = `<span class="status-badge badge-queued" style="background:rgba(100,100,100,0.12);color:#94a3b8;border:1px solid rgba(100,100,100,0.2)">⏸ Menunggu SEO</span>`;
+    } else if (status === 'waiting-otp') {
+      statusBadge = `<span class="status-badge badge-queued" style="background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.35);"><span class="spin">🔑</span> Menunggu OTP</span>`;
+    } else if (status === 'waiting-preview') {
+      statusBadge = `<span class="status-badge badge-queued" style="background:rgba(124,58,237,0.12);color:var(--purple);border:1px solid rgba(124,58,237,0.25);">⏸ Menunggu Preview</span>`;
+    }
+
+    const logs = item.logs || [];
+    const logsHtml = logs.map(log => {
+      let msgClass = '';
+      if (log.type === 'error') msgClass = 'error';
+      else if (log.type === 'success') msgClass = 'success';
+      else if (log.type === 'warning') msgClass = 'warning';
+      return `<div class="mini-log-line">
+        <span class="mini-log-time">${log.time || ''}</span>
+        <span class="mini-log-msg ${msgClass}">${escHtml(log.message || '')}</span>
+      </div>`;
+    }).join('');
+
+    const logBoxId = `logbox_${item.id}`;
+    
+    let otpForm = '';
+    if (status === 'waiting-otp') {
+      otpForm = `
+        <div style="margin-top:8px; padding:8px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px; max-width:100%;">
+          <div style="font-size:11px; color:var(--amber); font-weight:600; margin-bottom:4px;">🔑 Masukkan OTP Syntx.ai:</div>
+          <div style="font-size:10px; color:var(--text-dim); margin-bottom:6px; word-break:break-all;">Kirim ke: <a href="https://www.emailnator.com/mailbox/#${escHtml(item.otpEmail || '')}" target="_blank" style="color:var(--cyan); font-weight:bold; text-decoration:underline; font-family:monospace;">${escHtml(item.otpEmail || '')}</a></div>
+          <div style="display:flex; gap:4px;">
+            <input type="text" id="otp_input_${item.id}" placeholder="6-digit" class="select-input" style="padding:4px 8px; font-size:11px; height:auto; text-align:center; font-family:monospace; font-weight:bold; width:80px;" maxlength="6" />
+            <button class="btn-action" onclick="submitOtp('${item.id}')" style="padding:4px 10px; font-size:11px; margin:0; line-height:1.3; width:auto; background:var(--amber); border:1px solid var(--amber); color:#000; font-weight:600; border-radius:6px; cursor:pointer;">Kirim</button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div>
+        <div style="margin-bottom:6px;">${statusBadge}</div>
+        <div class="mini-log-box" id="${logBoxId}" style="height: 140px; min-height: 140px; max-height: 140px;">
+          ${logsHtml || '<div style="color:var(--text-dim);font-size:10px;">Belum ada log.</div>'}
+        </div>
+        ${otpForm}
+      </div>
+    `;
+  }
+
+  function renderRow(item, no) {
+    const previewCell = renderPreviewCell(item);
+    const logCell = renderLogCell(item);
+    const actsCell = renderActionsCell(item);
+    const canBatch4k = !!(item.promptCode);
+
+    const checkboxCell = batchModeActive
+      ? `<td rowspan="3" style="text-align:center;vertical-align:middle; border-bottom:2px solid var(--border);"><input type="checkbox" class="row-checkbox" data-id="${item.id}" ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" /></td>`
+      : '';
+
+    return `
+      <!-- Baris 1: No, Nama File, Aksi -->
+      <tr id="row_1_${item.id}" style="background: rgba(56,189,248,0.02);">
+        ${checkboxCell}
+        <td class="td-no" rowspan="3" style="text-align:center; vertical-align:middle; font-weight:700; border-bottom:2px solid var(--border); border-right:1px solid var(--border);">${no}</td>
+        <td colspan="3" style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--cyan); font-weight:700; padding:10px 14px; border-bottom:1px solid rgba(56,189,248,0.15); vertical-align:middle;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
+            <span>📄 ${escHtml(item.fileName || item.id)}</span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <!-- Dropdown upload status (catatan saya) -->
+              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0;" onchange="saveField('${item.id}', 'uploadStatus', this.value)" title="Status Upload / Catatan Saya">
+                <option value="belum_upload" ${item.uploadStatus !== 'upload' ? 'selected' : ''}>❌ Belum Upload</option>
+                <option value="upload" ${item.uploadStatus === 'upload' ? 'selected' : ''}>✅ Sudah Upload</option>
+              </select>
+
+              <!-- Dropdown Adobe Stock Category -->
+              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(168,85,247,0.4);" onchange="saveField('${item.id}', 'adobeCategory', this.value)" title="Kategori Adobe Stock">
+                <option value="">Kategori Adobe...</option>
+                <option value="1" ${item.adobeCategory === '1' ? 'selected' : ''}>1. Animals</option>
+                <option value="2" ${item.adobeCategory === '2' ? 'selected' : ''}>2. Buildings & Architecture</option>
+                <option value="3" ${item.adobeCategory === '3' ? 'selected' : ''}>3. Business</option>
+                <option value="4" ${item.adobeCategory === '4' ? 'selected' : ''}>4. Drinks</option>
+                <option value="5" ${item.adobeCategory === '5' ? 'selected' : ''}>5. The Environment</option>
+                <option value="6" ${item.adobeCategory === '6' ? 'selected' : ''}>6. States of Mind</option>
+                <option value="7" ${item.adobeCategory === '7' ? 'selected' : ''}>7. Food</option>
+                <option value="8" ${item.adobeCategory === '8' ? 'selected' : ''}>8. Graphic Resources</option>
+                <option value="9" ${item.adobeCategory === '9' ? 'selected' : ''}>9. Hobbies & Leisure</option>
+                <option value="10" ${item.adobeCategory === '10' ? 'selected' : ''}>10. Industry</option>
+                <option value="11" ${item.adobeCategory === '11' ? 'selected' : ''}>11. Landscape</option>
+                <option value="12" ${item.adobeCategory === '12' ? 'selected' : ''}>12. Lifestyle</option>
+                <option value="13" ${item.adobeCategory === '13' ? 'selected' : ''}>13. People</option>
+                <option value="14" ${item.adobeCategory === '14' ? 'selected' : ''}>14. Plants & Flowers</option>
+                <option value="15" ${item.adobeCategory === '15' ? 'selected' : ''}>15. Culture & Religion</option>
+                <option value="16" ${item.adobeCategory === '16' ? 'selected' : ''}>16. Science</option>
+                <option value="17" ${item.adobeCategory === '17' ? 'selected' : ''}>17. Social Issues</option>
+                <option value="18" ${item.adobeCategory === '18' ? 'selected' : ''}>18. Sports</option>
+                <option value="19" ${item.adobeCategory === '19' ? 'selected' : ''}>19. Technology</option>
+                <option value="20" ${item.adobeCategory === '20' ? 'selected' : ''}>20. Transport</option>
+                <option value="21" ${item.adobeCategory === '21' ? 'selected' : ''}>21. Travel</option>
+              </select>
+
+              <!-- Dropdown Shutterstock Category -->
+              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory', this.value)" title="Kategori Shutterstock">
+                <option value="">Kategori Shutter...</option>
+                <option value="Animals/Wildlife" ${item.shutterstockCategory === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
+                <option value="Arts" ${item.shutterstockCategory === 'Arts' ? 'selected' : ''}>Arts</option>
+                <option value="Backgrounds/Textures" ${item.shutterstockCategory === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
+                <option value="Buildings/Landmarks" ${item.shutterstockCategory === 'Buildings/Landmarks' ? 'selected' : ''}>Buildings/Landmarks</option>
+                <option value="Business/Finance" ${item.shutterstockCategory === 'Business/Finance' ? 'selected' : ''}>Business/Finance</option>
+                <option value="Education" ${item.shutterstockCategory === 'Education' ? 'selected' : ''}>Education</option>
+                <option value="Food and drink" ${item.shutterstockCategory === 'Food and drink' ? 'selected' : ''}>Food and drink</option>
+                <option value="Healthcare/Medical" ${item.shutterstockCategory === 'Healthcare/Medical' ? 'selected' : ''}>Healthcare/Medical</option>
+                <option value="Holidays" ${item.shutterstockCategory === 'Holidays' ? 'selected' : ''}>Holidays</option>
+                <option value="Industrial" ${item.shutterstockCategory === 'Industrial' ? 'selected' : ''}>Industrial</option>
+                <option value="Nature" ${item.shutterstockCategory === 'Nature' ? 'selected' : ''}>Nature</option>
+                <option value="Objects" ${item.shutterstockCategory === 'Objects' ? 'selected' : ''}>Objects</option>
+                <option value="People" ${item.shutterstockCategory === 'People' ? 'selected' : ''}>People</option>
+                <option value="Religion" ${item.shutterstockCategory === 'Religion' ? 'selected' : ''}>Religion</option>
+                <option value="Science" ${item.shutterstockCategory === 'Science' ? 'selected' : ''}>Science</option>
+                <option value="Signs/Symbols" ${item.shutterstockCategory === 'Signs/Symbols' ? 'selected' : ''}>Signs/Symbols</option>
+                <option value="Sports/Recreation" ${item.shutterstockCategory === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
+                <option value="Technology" ${item.shutterstockCategory === 'Technology' ? 'selected' : ''}>Technology</option>
+                <option value="Transportation" ${item.shutterstockCategory === 'Transportation' ? 'selected' : ''}>Transportation</option>
+              </select>
+            </div>
+          </div>
+        </td>
+        <td rowspan="3" style="vertical-align:top; border-left:1px solid var(--border); border-bottom:2px solid var(--border); padding:12px;">
+          ${actsCell}
+        </td>
+      </tr>
+      
+      <!-- Baris 2: Rekomendasi Judul -->
+      <tr id="row_2_${item.id}">
+        <td colspan="3" style="padding:8px 14px; border-bottom:1px solid rgba(56,189,248,0.15); vertical-align:middle;">
+          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:4px; letter-spacing:0.5px;">Rekomendasi Judul</div>
+          <div class="edit-wrap">
+            <textarea id="title_${item.id}" class="edit-field" placeholder="Belum ada judul video..." rows="2" style="width:100%; font-family:inherit; font-size:13px; line-height:1.4; padding:4px 6px;">${escHtml(item.judul||'')}</textarea>
+            <button class="btn-copy" onclick="copyText(document.getElementById('title_${item.id}').value, this)">📋</button>
+          </div>
+          ${item.seoAiUsed ? `<div style="margin-top:4px; font-size:9.5px; color:var(--green); display:flex; align-items:center; gap:3px;"><span>✅</span><span>Generate dengan AI: <strong>${item.seoAiUsed === 'auto' ? 'Auto-Fallback' : item.seoAiUsed === 'groq' ? 'Groq' : item.seoAiUsed === 'syntx-claude' ? 'Syntx Claude' : item.seoAiUsed === 'syntx-gemini' ? 'Syntx Gemini' : item.seoAiUsed === 'gemini' ? 'Gemini API' : item.seoAiUsed === 'openrouter' ? 'OpenRouter' : item.seoAiUsed}</strong></span></div>` : ''}
+        </td>
+      </tr>
+      
+      <!-- Baris 3: Preview, Log Proses, Keywords -->
+      <tr id="row_3_${item.id}" style="border-bottom:2px solid var(--border);">
+        <!-- Preview Cell -->
+        <td class="preview-cell" style="width:180px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:2px solid var(--border);">
+          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px; text-align:center;">Preview</div>
+          ${previewCell}
+        </td>
+        
+        <!-- Log Cell -->
+        <td style="width:320px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:2px solid var(--border);">
+          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px;">Log Proses</div>
+          ${logCell}
+        </td>
+        
+        <!-- Keywords Cell -->
+        <td style="padding:10px; vertical-align:top; border-bottom:2px solid var(--border);">
+          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px;">Rekomendasi Keywords</div>
+          <div class="edit-wrap">
+            <textarea id="kw_${item.id}" class="edit-field" rows="6" placeholder="Belum ada keywords..." style="padding:4px 6px; font-size:12px; line-height:1.4; height:140px; min-height:140px; max-height:140px;">${escHtml(item.keywords||'')}</textarea>
+            <button class="btn-copy" onclick="copyText(document.getElementById('kw_${item.id}').value, this)">📋</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  function renderPreviewCell(item) {
+    if (item.previewUrl) {
+      const videoSrc = (item.previewUrl.startsWith("http://") || item.previewUrl.startsWith("https://"))
+        ? item.previewUrl
+        : `/api/preview-file/${item.id}`;
+      return `
+        <div style="display:flex; flex-direction:column; align-items:center; gap:8px; width:100%;">
+          <video class="preview-video" src="${videoSrc}#t=0.1" preload="none" controls muted loop playsinline style="width:100%; max-width:160px; height:90px; object-fit:cover; border-radius:6px; border:1px solid var(--border); background:#000;"></video>
+          <button class="btn-browse" onclick="openVideoModal('${videoSrc}')" style="padding:4px 8px; font-size:10px; border-color:var(--cyan); color:var(--cyan); background:var(--cyan-dim); width:100%; display:flex; align-items:center; justify-content:center; gap:4px; font-weight:600; border-radius:6px;">
+            🔍 Perbesar Preview
+          </button>
+        </div>
+      `;
+    }
+    return `<div style="text-align:center; color:var(--text-dim); font-size:11px; padding:40px 0; border:1px dashed var(--border); border-radius:6px; background:rgba(0,0,0,0.1);">Menunggu Video</div>`;
+  }
+
+  function renderActionsCell(item) {
+    const isSeoRunning = !!activeSeoGenerations[item.id];
+    const isTsxRunning = item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx';
+    const isPreviewRunning = item.statusConvertTsx === 'processing-preview';
+    const is4kRunning = item.statusRender4k === 'processing';
+    const isAnyRunning = isSeoRunning || isTsxRunning || isPreviewRunning || is4kRunning;
+
+    const aiSelect = `
+      <select id="ai_model_${item.id}" class="select-input" style="padding: 4px 8px; font-size: 11px; height: auto; font-weight: 600; width: 100%; margin-bottom: 8px;" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}>
+        <option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>🤖 Auto AI</option>
+        <option value="groq" ${item.aiModel === 'groq' ? 'selected' : ''}>⚡ Groq</option>
+        <option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>🎯 Syntx Claude</option>
+        <option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>🌐 Syntx Gemini</option>
+        <option value="gemini" ${item.aiModel === 'gemini' ? 'selected' : ''}>🧠 Gemini API</option>
+        <option value="openrouter" ${item.aiModel === 'openrouter' ? 'selected' : ''}>🔀 OpenRouter</option>
+      </select>
+    `;
+
+    // Button 1: Judul
+    const hasJudul = !!(item.judul && item.judul.trim());
+    let btnJudulText = hasJudul ? '✨ REGEN JUDUL' : '✨ GEN JUDUL';
+    if (isSeoRunning) btnJudulText = '⏳ Generating...';
+    const btnJudulDisabled = isAnyRunning;
+    const btnJudul = `<button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${btnJudulDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btnJudulText}</button>`;
+
+    // Combined Button 2: TSX & Preview
+    const hasPreview = !!item.previewUrl;
+    let btnTsxPreviewText = hasPreview ? '⚙️ REGEN TSX & PREVIEW' : '⚙️ GEN TSX & PREVIEW';
+    if (isTsxRunning) btnTsxPreviewText = '⏳ Converting TSX...';
+    else if (isPreviewRunning) btnTsxPreviewText = '⏳ Rendering Preview...';
+    const btnTsxPreviewDisabled = isAnyRunning || !hasJudul;
+    const btnTsxPreview = `<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${btnTsxPreviewDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:${btnTsxPreviewDisabled ? 'rgba(100,100,100,0.1)' : 'linear-gradient(135deg,rgba(56,189,248,0.15),rgba(168,85,247,0.15))'}; border:1px solid ${btnTsxPreviewDisabled ? 'rgba(100,100,100,0.2)' : 'rgba(56,189,248,0.35)'}; color:${btnTsxPreviewDisabled ? 'var(--text-dim)' : 'var(--cyan)'};">${btnTsxPreviewText}</button>`;
+
+    // Button 4: 4K
+    const has4k = !!item.outputPath4k;
+    let btn4kText = has4k ? '🚀 REGEN 4K' : '🚀 GEN 4K';
+    if (is4kRunning) btn4kText = '⏳ Rendering 4K...';
+    const btn4kDisabled = isAnyRunning || !hasPreview;
+    const btn4k = `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${btn4kDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btn4kText}</button>`;
+
+    // Download 4K Zip Button
+    const downloadZipBtn = has4k
+      ? `<a href="/api/download-4k-zip/${item.id}" class="btn-action" style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; text-decoration:none; text-align:center; display:block; border-radius:6px; box-sizing:border-box;">📥 DOWNLOAD 4K (ZIP)</a>`
+      : '';
+
+    // Utility actions
+    const btnCancel = (isTsxRunning || isPreviewRunning)
+      ? `<button class="btn-action btn-cancel" onclick="cancelTask('${item.id}')" style="margin:0; padding:6px 10px; font-size:11px; width:100%;">🚫 Batal</button>`
+      : '';
+
+    const btnDel = `<button class="btn-action btn-del" onclick="event.stopPropagation(); deleteItem('${item.id}', event)" style="margin:0; padding:6px 10px; font-size:11px; width:100%;">🗑 Hapus</button>`;
+
+    const htmlCodeLink = `<a class="btn-code-link" href="/saved-code/${item.id}.html" target="_blank" download="${item.id}.html" style="font-size:10px; padding:3px 6px; flex:1; text-align:center; display:block;">🌐 HTML Asli</a>`;
+    const tsxCodeLink = (item.promptCode)
+      ? `<a class="btn-code-link" href="/saved-code/${item.id}.tsx" target="_blank" download="${item.id}.tsx" style="font-size:10px; padding:3px 6px; flex:1; text-align:center; display:block;">📦 TSX File</a>`
+      : '';
+
+    return `
+      <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
+        ${aiSelect}
+        ${btnJudul}
+        ${btnTsxPreview}
+        ${btn4k}
+        ${downloadZipBtn}
+        ${btnCancel}
+        ${btnDel}
+        <div style="display:flex; gap:4px; width:100%; margin-top:4px;">
+          ${htmlCodeLink}
+          ${tsxCodeLink}
+        </div>
+      </div>
+    `;
+  }
+
+  async function trigger4K(id) {
+    if (!confirm(`Generate 4K ProRes untuk "${id}"?\n\nProses ini akan git push dan trigger GitHub Actions (~10-15 menit).`)) return;
+    try {
+      const resp = await fetch(`/api/trigger-4k/${id}`, { method: 'POST' });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('🚀 4K render dipicu! Pantau di log box.', 'success');
+      startTaskLogStream(id);
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal: ' + err.message, 'error');
+    }
+  }
+
+  async function deleteItem(id, event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (!confirm(`Hapus item "${id}" dari daftar?\nFile video tidak ikut terhapus.`)) return;
+    try {
+      const resp = await fetch(`/api/delete-item/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Gagal hapus');
+      showToast('🗑 Item dihapus', 'success');
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal hapus: ' + err.message, 'error');
+    }
+  }
+
+  async function saveField(id, field, value) {
+    try {
+      await fetch('/api/save-item', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: { id, [field]: value } })
+      });
+    } catch(e) { console.error('Save field error:', e); }
+  }
+
+  async function copyText(text, btn) {
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = '✓';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '📋'; btn.classList.remove('copied'); }, 2000);
+    } catch(e) {}
+  }
+
+  // ═══════════════════════════════════════════
+  // NEW ACTIONS: START, REGEN SEO, REGEN TSX
+  // ═══════════════════════════════════════════
+  async function regenerateSeo(id) {
+    const aiModel = document.getElementById(`ai_model_${id}`).value;
+    activeSeoGenerations[id] = true;
+    loadResults();
+    try {
+      showToast('✨ Memulai regenerasi Judul & Keywords...', 'info');
+      startTaskLogStream(id);
+
+      const resp = await fetch(`/api/regenerate-seo/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aiModel })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('✅ Judul & Keywords berhasil diperbarui!', 'success');
+    } catch(err) {
+      showToast('❌ Gagal regenerasi: ' + err.message, 'error');
+    } finally {
+      activeSeoGenerations[id] = false;
+      loadResults();
+    }
+  }
+
+  async function generateTsx(id, currentStatus) {
+    const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
+    const animationDuration = Number(document.getElementById('animationDurationSelect').value);
+    const animationFps = Number(document.getElementById('animationFpsSelect').value);
+
+    try {
+      if (currentStatus === 'waiting') {
+        showToast('▶ Memulai Generate TSX dengan AI: ' + (aiModel === 'auto' ? 'Auto' : aiModel) + '...', 'info');
+        const resp = await fetch(`/api/start-task/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        showToast('🚀 Generate TSX dimulai!', 'success');
+      } else {
+        if (!confirm(`Regenerasi TSX untuk "${id}"?\n\nProses ini akan mengkonversi ulang HTML ke TSX Remotion dengan AI: ${aiModel}.`)) return;
+        showToast('⚙️ Memulai regenerasi TSX...', 'info');
+        const resp = await fetch(`/api/retry-task/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        showToast('🔄 Regenerasi TSX dimulai!', 'success');
+      }
+
+      startTaskLogStream(id);
+      setTimeout(loadResults, 600);
+    } catch(err) {
+      showToast('❌ Gagal: ' + err.message, 'error');
+    }
+  }
+
+  async function triggerPreview(id) {
+    try {
+      showToast('☁️ Memulai Render Preview di GitHub...', 'info');
+      startTaskLogStream(id);
+      
+      const resp = await fetch(`/api/trigger-preview/${id}`, { method: 'POST' });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      
+      showToast('🚀 Render preview dipicu! Pantau di log box.', 'success');
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal render preview: ' + err.message, 'error');
+    }
+  }
+
+  async function submitOtp(id) {
+    const inputEl = document.getElementById(`otp_input_${id}`);
+    const otp = inputEl ? inputEl.value.trim() : '';
+    if (!otp) {
+      showToast('⚠️ OTP tidak boleh kosong', 'warning');
+      return;
+    }
+    try {
+      showToast('🔑 Mengirim OTP...', 'info');
+      const resp = await fetch('/api/submit-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, otp })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('✅ OTP berhasil dikirim!', 'success');
+      loadResults();
+      if (id === 'manual') {
+        setTimeout(loadSyntxStatus, 1000);
+      }
+    } catch(err) {
+      showToast('❌ Gagal mengirim OTP: ' + err.message, 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // PROMPT MANAGEMENT
+  // ═══════════════════════════════════════════
+  async function loadPrompts() {
+    try {
+      const resp = await fetch('/api/prompts');
+      const data = await resp.json();
+      document.getElementById('promptSeoText').value = data.seoPrompt || '';
+      document.getElementById('promptConversionText').value = data.conversionPrompt || '';
+    } catch(err) {
+      console.error('Gagal load prompts:', err);
+    }
+  }
+
+  function togglePromptEditor() {
+    const el = document.getElementById('promptEditorPanel');
+    const isHidden = el.style.display === 'none';
+    el.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) {
+      loadPrompts();
+    }
+  }
+
+  async function savePrompts() {
+    const seoPrompt = document.getElementById('promptSeoText').value;
+    const conversionPrompt = document.getElementById('promptConversionText').value;
+    try {
+      const resp = await fetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seoPrompt, conversionPrompt })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('✅ System prompts berhasil disimpan!', 'success');
+      togglePromptEditor();
+    } catch(err) {
+      showToast('❌ Gagal simpan prompt: ' + err.message, 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // API KEYS MANAGEMENT
+  // ═══════════════════════════════════════════
+  function toggleApiKeysPanel() {
+    const el = document.getElementById('apiKeysPanel');
+    const isHidden = el.style.display === 'none';
+    el.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) {
+      loadApiKeys();
+      loadSyntxStatus();
+      // Reset statuses
+      document.getElementById('status_groq').innerHTML = '';
+      document.getElementById('status_gemini').innerHTML = '';
+      document.getElementById('status_openrouter').innerHTML = '';
+      document.getElementById('status_gmailnator').innerHTML = '';
+    }
+  }
+
+  function toggleExportMenu(event) {
+    event.stopPropagation();
+    const el = document.getElementById('exportMenu');
+    const isHidden = el.style.display === 'none';
+    el.style.display = isHidden ? 'block' : 'none';
+  }
+
+  // Close export menu when clicking outside
+  document.addEventListener('click', function(event) {
+    const el = document.getElementById('exportMenu');
+    if (el && el.style.display !== 'none' && !el.contains(event.target) && event.target.id !== 'btnExportCSV') {
+      el.style.display = 'none';
+    }
+  });
+
+  async function loadSyntxStatus() {
+    const statusEl = document.getElementById('syntxPoolStatus');
+    if (!statusEl) return;
+    statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Memuat status pool...</span>';
+    
+    try {
+      const resp = await fetch('/api/syntx-status');
+      const data = await resp.json();
+      
+      const pool = data.pool || { activeAccountsCount: 0, totalAccountsCount: 0, accounts: [] };
+      
+      let html = `
+        <div style="margin-bottom: 6px; font-weight: 600;">
+          Jumlah Akun Aktif (Valid & Belum Limit): <span style="color:var(--green);">${pool.activeAccountsCount}</span> / Total: ${pool.totalAccountsCount}
+        </div>
+      `;
+      
+      if (pool.accounts.length === 0) {
+        html += '<div style="color:var(--text-dim); font-style:italic;">Belum ada akun di pool. Tekan tombol di kanan atas untuk membuat/login akun pertama.</div>';
+      } else {
+        html += '<div style="max-height:120px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; background:rgba(0,0,0,0.2); padding:6px; display:flex; flex-direction:column; gap:4px; margin-bottom: 8px;">';
+        pool.accounts.forEach(acc => {
+          const expiresDate = acc.expiresAt ? new Date(acc.expiresAt).toLocaleTimeString('id-ID') : '-';
+          const statusText = acc.isValid 
+            ? `<span style="color:var(--green); font-weight:bold;">Active (${acc.messageCount}/${acc.messageLimit})</span>` 
+            : `<span style="color:var(--red);">Limit/Expired</span>`;
+          html += `
+            <div style="display:flex; justify-content:space-between; font-family:monospace; font-size:11px; padding:2px 4px; border-bottom:1px solid rgba(255,255,255,0.03);">
+              <span style="color:var(--cyan); overflow:hidden; text-overflow:ellipsis; max-width:260px;" title="${acc.email}">${acc.email}</span>
+              <span>${statusText}</span>
+            </div>
+          `;
+        });
+        html += '</div>';
+      }
+      
+      if (data.waitingOtp) {
+        html += `
+          <div style="margin-top:8px; padding:8px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px;">
+            <div style="font-size:11px; color:var(--amber); font-weight:600; margin-bottom:4px;">🔑 Masukkan OTP Syntx.ai (Pre-warm Akun):</div>
+            <div style="font-size:10px; color:var(--text-dim); margin-bottom:6px; word-break:break-all;">Kirim ke: <a href="https://www.emailnator.com/mailbox/#${escHtml(data.otpEmail || '')}" target="_blank" style="color:var(--cyan); font-weight:bold; text-decoration:underline; font-family:monospace;">${escHtml(data.otpEmail || '')}</a></div>
+            <div style="display:flex; gap:4px;">
+              <input type="text" id="otp_input_manual" placeholder="6-digit" class="select-input" style="padding:4px 8px; font-size:11px; height:auto; text-align:center; font-family:monospace; font-weight:bold; width:80px;" maxlength="6" />
+              <button class="btn-action" onclick="submitOtp('manual')" style="padding:4px 10px; font-size:11px; margin:0; line-height:1.3; width:auto; background:var(--amber); border:1px solid var(--amber); color:#000; font-weight:600; border-radius:6px; cursor:pointer;">Kirim</button>
+            </div>
+          </div>
+        `;
+      }
+      
+      statusEl.innerHTML = html;
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red);">❌ Gagal memuat status: ${err.message}</span>`;
+    }
+  }
+
+  async function prewarmSyntxAccount() {
+    const btn = document.getElementById('btnPrewarmSyntx');
+    const statusEl = document.getElementById('syntxPoolStatus');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Logging in...';
+    }
+    showToast('🔐 Memulai pendaftaran/login akun Syntx baru di background...', 'info');
+    
+    try {
+      const resp = await fetch('/api/syntx-login', { method: 'POST' });
+      const data = await resp.json();
+      if (data.success) {
+        showToast('🎉 Berhasil menambahkan akun Syntx baru ke pool!', 'success');
+      } else {
+        throw new Error(data.error || 'Gagal login');
+      }
+    } catch (err) {
+      showToast('❌ Gagal pre-warm akun Syntx: ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '🔑 Tambah/Pre-warm Akun';
+      }
+      loadSyntxStatus();
+      loadApiKeys();
+    }
+  }
+
+  async function loadApiKeys() {
+    try {
+      const resp = await fetch('/api/keys');
+      const data = await resp.json();
+      document.getElementById('keyGroq').value = data.groqKey || '';
+      document.getElementById('keyGemini').value = data.geminiKey || '';
+      document.getElementById('keyOpenrouter').value = data.openrouterKey || '';
+      document.getElementById('keyRapidapi').value = data.rapidApiKey || '';
+      document.getElementById('syntxBaseEmail').value = data.syntxBaseEmail || '';
+      document.getElementById('syntxEmailIndex').value = data.syntxEmailIndex || '0';
+      document.getElementById('githubToken').value = data.githubToken || '';
+      document.getElementById('githubUsername').value = data.githubUsername || '';
+      document.getElementById('githubRepo').value = data.githubRepo || '';
+    } catch (err) {
+      showToast('❌ Gagal memuat API Keys: ' + err.message, 'error');
+    }
+  }
+
+  async function saveApiKeys() {
+    const groqKey = document.getElementById('keyGroq').value;
+    const geminiKey = document.getElementById('keyGemini').value;
+    const openrouterKey = document.getElementById('keyOpenrouter').value;
+    const rapidApiKey = document.getElementById('keyRapidapi').value;
+    const syntxBaseEmail = document.getElementById('syntxBaseEmail').value;
+    const syntxEmailIndex = document.getElementById('syntxEmailIndex').value;
+    const githubToken = document.getElementById('githubToken').value;
+    const githubUsername = document.getElementById('githubUsername').value;
+    const githubRepo = document.getElementById('githubRepo').value;
+
+    try {
+      const resp = await fetch('/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groqKey,
+          geminiKey,
+          openrouterKey,
+          rapidApiKey,
+          syntxBaseEmail,
+          syntxEmailIndex,
+          githubToken,
+          githubUsername,
+          githubRepo
+        })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      showToast('✅ API Keys berhasil disimpan!', 'success');
+      toggleApiKeysPanel();
+    } catch(err) {
+      showToast('❌ Gagal menyimpan API Keys: ' + err.message, 'error');
+    }
+  }
+
+  async function testApiKey(provider) {
+    const inputId = provider === 'groq' ? 'keyGroq' : provider === 'gemini' ? 'keyGemini' : provider === 'gmailnator' ? 'keyRapidapi' : 'keyOpenrouter';
+    const statusId = `status_${provider}`;
+    const apiKey = document.getElementById(inputId).value;
+    const statusEl = document.getElementById(statusId);
+
+    if (!apiKey) {
+      statusEl.innerHTML = '<span style="color:var(--amber);">⚠️ Kosong</span>';
+      return;
+    }
+
+    statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Mengecek...</span>';
+
+    try {
+      const resp = await fetch('/api/keys/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, apiKey })
+      });
+      const data = await resp.json();
+      if (data.valid) {
+        statusEl.innerHTML = '<span style="color:var(--green);">✅ Valid</span>';
+      } else {
+        statusEl.innerHTML = `<span style="color:var(--red);" title="${data.error || 'Gagal'}">❌ Invalid</span>`;
+        showToast(`❌ API Key ${provider} tidak valid: ${data.error || 'Gagal'}`, 'error');
+      }
+    } catch(err) {
+      statusEl.innerHTML = `<span style="color:var(--red);" title="${err.message}">❌ Error</span>`;
+      showToast(`❌ Gagal mengetes key: ${err.message}`, 'error');
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // TOAST
+  // ═══════════════════════════════════════════
+  function showToast(msg, type = 'info') {
+    const old = document.querySelector('.toast');
+    if (old) old.remove();
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    // After 3.5s, play fade-out animation (0.35s), then remove
+    setTimeout(() => {
+      el.classList.add('fade-out');
+      el.addEventListener('animationend', () => el.remove());
+    }, 3500);
+  }
+
+  function openVideoModal(src) {
+    const modal = document.getElementById('videoModal');
+    const video = document.getElementById('modalVideoPlayer');
+    video.src = src;
+    modal.style.display = 'flex';
+    video.play().catch(e => console.log('Autoplay blocked:', e));
+  }
+
+  function closeVideoModal() {
+    const modal = document.getElementById('videoModal');
+    const video = document.getElementById('modalVideoPlayer');
+    video.pause();
+    video.src = '';
+    modal.style.display = 'none';
+  }
+
+  // Close modal when clicking outside the video container
+  window.addEventListener('click', (e) => {
+    const modal = document.getElementById('videoModal');
+    if (e.target === modal) {
+      closeVideoModal();
+    }
+  });
+
+  // ═══════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════
+  loadResults();
+  loadPrompts();
+  // Auto-refresh every 30s
+  setInterval(loadResults, 30000);
+</script>
+
+<!-- Modal Preview Besar -->
+<div id="videoModal" class="modal">
+  <span class="close-modal" onclick="closeVideoModal()">&times;</span>
+  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; box-shadow:0 0 32px rgba(56,189,248,0.5); border:1px solid rgba(56,189,248,0.3);"></video>
+</div>
+
+</body>
+</html>
