@@ -440,6 +440,8 @@
     @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
     .toast.success { border-color: rgba(16,185,129,0.5); color: var(--green); }
     .toast.error { border-color: rgba(239,68,68,0.5); color: var(--red); }
+    .toast.fade-out { animation: toastOut 0.35s ease forwards; }
+    @keyframes toastOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(10px); } }
     /* ── TABS & CODE EDITOR ──────────────────────── */
     .input-tabs {
       display: flex;
@@ -640,6 +642,45 @@
     }
     .btn-batch-4k:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,0.4); }
     .btn-batch-4k:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-batch-seo {
+      padding: 8px 18px;
+      background: rgba(245,158,11,0.9);
+      border: none;
+      border-radius: 6px;
+      color: #070b14;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-seo:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(245,158,11,0.4); }
+    .btn-batch-seo:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-batch-tsx {
+      padding: 8px 18px;
+      background: var(--cyan);
+      border: none;
+      border-radius: 6px;
+      color: #070b14;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-tsx:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(56,189,248,0.4); }
+    .btn-batch-tsx:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-batch-preview {
+      padding: 8px 18px;
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-preview:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,0.4); }
+    .btn-batch-preview:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn-batch-clear {
       padding: 8px 14px;
       background: transparent;
@@ -652,6 +693,19 @@
       transition: all 0.2s;
     }
     .btn-batch-clear:hover { border-color: var(--red); color: var(--red); }
+    .btn-batch-del {
+      padding: 8px 18px;
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-batch-del:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(239,68,68,0.4); }
+    .btn-batch-del:disabled { opacity: 0.4; cursor: not-allowed; }
     .row-checkbox { accent-color: var(--purple); width: 16px; height: 16px; cursor: pointer; }
     .btn-export-csv {
       padding: 8px 14px;
@@ -670,6 +724,19 @@
       gap: 5px;
     }
     .btn-export-csv:hover { background: rgba(16,185,129,0.25); }
+    .export-menu-item {
+      display: block;
+      padding: 10px 16px;
+      color: var(--text);
+      font-size: 13px;
+      text-decoration: none;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .export-menu-item:hover {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--green);
+    }
     .btn-batch-mode {
       padding: 8px 14px;
       background: rgba(124,58,237,0.1);
@@ -733,7 +800,11 @@
     <button class="btn-refresh" id="btnApiKeys" onclick="toggleApiKeysPanel()" style="display:flex; align-items:center; gap:6px; border-color:var(--blue); color:var(--blue); padding:6px 12px; margin-left: 8px;">
       🔑 API Keys
     </button>
+    <a href="/chat" style="display:flex; align-items:center; gap:6px; margin-left:8px; padding:6px 13px; border:1px solid rgba(168,85,247,0.5); border-radius:8px; color:#a855f7; font-size:13px; font-weight:600; text-decoration:none; background:rgba(168,85,247,0.08); transition:all 0.2s;" onmouseover="this.style.background='rgba(168,85,247,0.2)'; this.style.borderColor='#a855f7';" onmouseout="this.style.background='rgba(168,85,247,0.08)'; this.style.borderColor='rgba(168,85,247,0.5)';">
+      🤖 Chat AI
+    </a>
   </div>
+
 </header>
 
 <main class="main">
@@ -794,6 +865,13 @@
           <option value="30">30 Detik</option>
         </select>
       </div>
+      <div class="option-group">
+        <span class="option-label">📺 FPS</span>
+        <select class="select-input" id="animationFpsSelect">
+          <option value="30" selected>30 FPS</option>
+          <option value="60">60 FPS</option>
+        </select>
+      </div>
     </div>
 
     <!-- Generate Button -->
@@ -820,7 +898,13 @@
       <div class="results-title">📂 Hasil & Antrian Render</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button class="btn-batch-mode" id="btnBatchMode" onclick="toggleBatchMode()">☑ Batch Render</button>
-        <a class="btn-export-csv" href="/api/export-keywords" download="keywords.csv" title="Unduh semua keyword ke CSV">⬇ Export CSV</a>
+        <div style="position:relative; display:inline-block;">
+          <button class="btn-export-csv" id="btnExportCSV" onclick="toggleExportMenu(event)" title="Unduh CSV untuk Adobe Stock atau Shutterstock">⬇ Export CSV</button>
+          <div id="exportMenu" style="display: none; position: absolute; left: 0; top: 100%; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); z-index: 1000; min-width: 180px; padding: 4px 0; margin-top: 4px;">
+            <a href="/api/export-csv?platform=adobe" class="export-menu-item">Adobe Stock CSV</a>
+            <a href="/api/export-csv?platform=shutterstock" class="export-menu-item">Shutterstock CSV</a>
+          </div>
+        </div>
         <button class="btn-refresh" onclick="loadResults()">🔄 Refresh</button>
       </div>
     </div>
@@ -917,6 +1001,16 @@
           <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub Repository</label>
           <input type="text" class="input-text-field" id="githubRepo" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="master-stock-generator" />
         </div>
+        <!-- Syntx Account Pool Status -->
+        <div style="grid-column: 1 / -1; margin-top: 10px; padding: 12px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 13px; font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 6px;">📋 Pool Akun Syntx.ai Cached</span>
+            <button class="btn-refresh" onclick="prewarmSyntxAccount()" id="btnPrewarmSyntx" style="padding: 4px 10px; font-size: 11px; border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim);">🔑 Tambah/Pre-warm Akun</button>
+          </div>
+          <div id="syntxPoolStatus" style="font-size: 12px; color: var(--text-dim);">
+            Loading status pool...
+          </div>
+        </div>
       </div>
       <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
         <button class="btn-batch-clear" onclick="toggleApiKeysPanel()">Batal</button>
@@ -924,10 +1018,13 @@
       </div>
     </div>
     <!-- Batch Action Bar -->
-    <div class="batch-bar" id="batchBar">
+    <div class="batch-bar" id="batchBar" style="flex-wrap: wrap;">
       <span class="batch-count" id="batchCount">0 item dipilih</span>
       <button class="btn-batch-clear" onclick="clearBatchSelection()">✕ Batal Pilih</button>
-      <button class="btn-batch-4k" id="btnBatch4k" onclick="triggerBatch4K()" disabled>🚀 Generate 4K Terpilih</button>
+      <button class="btn-batch-seo" id="btnBatchSeo" onclick="triggerBatchSEO()">✨ Gen Judul Terpilih</button>
+      <button class="btn-batch-tsx" id="btnBatchTsx" onclick="triggerBatchTsx()">⚙️ Gen TSX & Preview Terpilih</button>
+      <button class="btn-batch-4k" id="btnBatch4k" onclick="triggerBatch4K()">🚀 Gen 4K Terpilih</button>
+      <button class="btn-batch-del" id="btnBatchDelete" onclick="triggerBatchDelete()">🗑 Batch Hapus</button>
     </div>
     <div id="resultsContainer">
       <div class="empty-state">
@@ -952,6 +1049,8 @@
   let batchModeActive = false;
   let batchSelected = new Set();
   let activeSeoGenerations = {};
+  let currentPage = 1;
+  const itemsPerPage = 50;
 
   // ─── DARK/LIGHT MODE ────────────────────────
   function toggleTheme(isLight) {
@@ -1079,6 +1178,7 @@
   async function startGenerate() {
     const aiModel = 'auto'; // Model AI dipilih per-item di tabel
     const animationDuration = Number(document.getElementById('animationDurationSelect').value);
+    const fps = Number(document.getElementById('animationFpsSelect').value);
     
     isGenerating = true;
     updateGenerateBtn();
@@ -1101,7 +1201,8 @@
             loop: loopEnabled, 
             transparent: transparentBg,
             aiModel,
-            animationDuration
+            animationDuration,
+            fps
           })
         });
         
@@ -1128,7 +1229,8 @@
             loop: loopEnabled,
             transparent: transparentBg,
             aiModel,
-            animationDuration
+            animationDuration,
+            fps
           })
         });
 
@@ -1235,12 +1337,13 @@
   async function retryTask(id) {
     const aiModel = document.getElementById(`seo_model_${id}`)?.value || 'auto';
     const animationDuration = Number(document.getElementById('animationDurationSelect').value);
+    const fps = Number(document.getElementById('animationFpsSelect').value);
     if (!confirm(`Retry proses generate untuk "${id}"?\n\nAkan memulai ulang dari awal dengan AI yang sama.`)) return;
     try {
       const resp = await fetch(`/api/retry-task/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aiModel, animationDuration })
+        body: JSON.stringify({ aiModel, animationDuration, fps })
       });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
@@ -1301,22 +1404,138 @@
     updateBatchBar();
     // Uncheck all checkboxes
     document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+    const selectAllCb = document.getElementById('selectAllCheckbox');
+    if (selectAllCb) selectAllCb.checked = false;
   }
 
   function toggleBatchItem(id, checked) {
     if (checked) batchSelected.add(id);
     else batchSelected.delete(id);
+    
+    const selectAllCb = document.getElementById('selectAllCheckbox');
+    if (selectAllCb) {
+      const checkboxes = Array.from(document.querySelectorAll('.row-checkbox:not(:disabled)'));
+      selectAllCb.checked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+    }
     updateBatchBar();
   }
 
   function updateBatchBar() {
     const bar = document.getElementById('batchBar');
     const countEl = document.getElementById('batchCount');
+    const btnSeo = document.getElementById('btnBatchSeo');
+    const btnTsx = document.getElementById('btnBatchTsx');
     const btn4k = document.getElementById('btnBatch4k');
+    const btnDel = document.getElementById('btnBatchDelete');
     const count = batchSelected.size;
     bar.classList.toggle('visible', count > 0 && batchModeActive);
     countEl.textContent = `${count} item dipilih`;
-    btn4k.disabled = count === 0;
+    
+    const disabled = count === 0;
+    if (btnSeo) btnSeo.disabled = disabled;
+    if (btnTsx) btnTsx.disabled = disabled;
+    if (btn4k) btn4k.disabled = disabled;
+    if (btnDel) btnDel.disabled = disabled;
+  }
+
+  async function triggerBatchSEO() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Generate Judul & Keywords untuk ${ids.length} item?`)) return;
+    
+    const btn = document.getElementById('btnBatchSeo');
+    btn.disabled = true;
+    btn.textContent = '⏳ Memproses...';
+    
+    try {
+      for (const id of ids) {
+        const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
+        activeSeoGenerations[id] = true;
+        loadResults();
+        
+        try {
+          const resp = await fetch(`/api/regenerate-seo/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aiModel })
+          });
+          const data = await resp.json();
+          if (data.error) throw new Error(data.error);
+          showToast(`✅ SEO untuk ${id} berhasil!`, 'success');
+        } catch (err) {
+          showToast(`❌ SEO untuk ${id} gagal: ${err.message}`, 'error');
+        } finally {
+          activeSeoGenerations[id] = false;
+          loadResults();
+        }
+        
+        startTaskLogStream(id);
+        await new Promise(r => setTimeout(r, 500));
+      }
+      clearBatchSelection();
+    } catch(err) {
+      showToast('❌ Batch SEO gagal: ' + err.message, 'error');
+    } finally {
+      btn.textContent = '✨ Gen Judul Terpilih';
+      updateBatchBar();
+    }
+  }
+
+  async function triggerBatchTsx() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Generate TSX & Preview untuk ${ids.length} item?`)) return;
+    
+    const btn = document.getElementById('btnBatchTsx');
+    btn.disabled = true;
+    btn.textContent = '⏳ Memproses...';
+    
+    try {
+      const resp = await fetch('/api/saved-items');
+      const items = await resp.json();
+      
+      for (const id of ids) {
+        const item = items.find(i => i.id === id);
+        if (!item) continue;
+        
+        const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
+        const animationDuration = Number(document.getElementById('animationDurationSelect').value);
+        const animationFps = Number(document.getElementById('animationFpsSelect').value);
+        const status = item.statusConvertTsx || 'waiting';
+        
+        try {
+          let url, body;
+          if (status === 'waiting') {
+            url = `/api/start-task/${id}`;
+            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps });
+          } else {
+            url = `/api/retry-task/${id}`;
+            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps });
+          }
+          
+          const startResp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: body
+          });
+          const startData = await startResp.json();
+          if (startData.error) throw new Error(startData.error);
+          
+          startTaskLogStream(id);
+        } catch (err) {
+          showToast(`❌ TSX untuk ${id} gagal: ${err.message}`, 'error');
+        }
+        await new Promise(r => setTimeout(r, 300));
+      }
+      showToast(`🚀 Batch TSX & Preview berhasil diantrekan!`, 'success');
+      loadResults();
+      clearBatchSelection();
+    } catch(err) {
+      showToast('❌ Batch gagal: ' + err.message, 'error');
+    } finally {
+      btn.textContent = '⚙️ Gen TSX & Preview Terpilih';
+      updateBatchBar();
+    }
   }
 
   async function triggerBatch4K() {
@@ -1348,6 +1567,51 @@
     }
   }
 
+  window.toggleSelectAll = function(checked) {
+    const checkboxes = document.querySelectorAll('.row-checkbox');
+    checkboxes.forEach(cb => {
+      if (!cb.disabled) {
+        cb.checked = checked;
+        const id = cb.getAttribute('data-id');
+        if (checked) {
+          batchSelected.add(id);
+        } else {
+          batchSelected.delete(id);
+        }
+      }
+    });
+    updateBatchBar();
+  }
+
+  async function triggerBatchDelete() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Hapus ${ids.length} item terpilih dari daftar?\nFile video asli tidak ikut terhapus.`)) return;
+
+    const btn = document.getElementById('btnBatchDelete');
+    btn.disabled = true;
+    btn.textContent = '⏳ Menghapus...';
+
+    try {
+      const resp = await fetch('/api/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Gagal batch hapus');
+      
+      showToast(`🗑 ${data.deletedCount || ids.length} item berhasil dihapus`, 'success');
+      clearBatchSelection();
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal batch hapus: ' + err.message, 'error');
+    } finally {
+      btn.textContent = '🗑 Batch Hapus';
+      updateBatchBar();
+    }
+  }
+
   function renderTable(items) {
     const container = document.getElementById('resultsContainer');
     if (!items || items.length === 0) {
@@ -1357,13 +1621,40 @@
 
     // Sort newest first
     const sorted = [...items].reverse();
+    const totalItems = sorted.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    const endIdx = startIdx + itemsPerPage;
+    const paginatedItems = sorted.slice(startIdx, endIdx);
+
+    let paginationHtml = '';
+    if (totalPages > 1) {
+      paginationHtml = `
+        <div class="pagination-container" style="display:flex; justify-content:center; align-items:center; gap:6px; margin: 20px 0; user-select: none;">
+          <button class="toggle-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})" style="padding:5px 10px; font-size:12px;">« Prev</button>
+      `;
+      for (let p = 1; p <= totalPages; p++) {
+        if (p === currentPage) {
+          paginationHtml += `<button class="toggle-btn active" style="padding:5px 10px; font-size:12px; font-weight:bold;">${p}</button>`;
+        } else {
+          paginationHtml += `<button class="toggle-btn" onclick="changePage(${p})" style="padding:5px 10px; font-size:12px;">${p}</button>`;
+        }
+      }
+      paginationHtml += `
+          <button class="toggle-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})" style="padding:5px 10px; font-size:12px;">Next »</button>
+        </div>
+      `;
+    }
 
     container.innerHTML = `
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              ${batchModeActive ? '<th style="width:36px">Pilih</th>' : ''}
+              ${batchModeActive ? '<th style="width:36px"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="accent-color: var(--purple); width: 16px; height: 16px; cursor: pointer;" /></th>' : ''}
               <th style="width:44px">No</th>
               <th style="width:180px">Preview Video</th>
               <th style="width:320px">Log & Status Proses</th>
@@ -1372,13 +1663,15 @@
             </tr>
           </thead>
           <tbody>
-            ${sorted.map((item, i) => renderRow(item, i + 1)).join('')}
+            ${paginatedItems.map((item, i) => renderRow(item, startIdx + i + 1)).join('')}
           </tbody>
         </table>
-      </div>`;
+      </div>
+      ${paginationHtml}
+    `;
 
     // Attach change listeners for editable fields
-    sorted.forEach(item => {
+    paginatedItems.forEach(item => {
       const titleEl = document.getElementById(`title_${item.id}`);
       const kwEl = document.getElementById(`kw_${item.id}`);
       if (titleEl) titleEl.addEventListener('blur', () => saveField(item.id, 'judul', titleEl.value));
@@ -1388,6 +1681,19 @@
       const logBox = document.getElementById(`logbox_${item.id}`);
       if (logBox) logBox.scrollTop = logBox.scrollHeight;
     });
+
+    if (batchModeActive) {
+      const selectAllCb = document.getElementById('selectAllCheckbox');
+      if (selectAllCb) {
+        const checkboxes = Array.from(document.querySelectorAll('.row-checkbox:not(:disabled)'));
+        selectAllCb.checked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+      }
+    }
+  }
+
+  window.changePage = function(page) {
+    currentPage = page;
+    loadResults();
   }
 
   function renderLogCell(item) {
@@ -1471,7 +1777,7 @@
     const canBatch4k = !!(item.promptCode);
 
     const checkboxCell = batchModeActive
-      ? `<td rowspan="3" style="text-align:center;vertical-align:middle; border-bottom:2px solid var(--border);"><input type="checkbox" class="row-checkbox" data-id="${item.id}" ${!canBatch4k ? 'disabled title="Tidak memiliki TSX code"' : ''} ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" /></td>`
+      ? `<td rowspan="3" style="text-align:center;vertical-align:middle; border-bottom:2px solid var(--border);"><input type="checkbox" class="row-checkbox" data-id="${item.id}" ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" /></td>`
       : '';
 
     return `
@@ -1480,7 +1786,66 @@
         ${checkboxCell}
         <td class="td-no" rowspan="3" style="text-align:center; vertical-align:middle; font-weight:700; border-bottom:2px solid var(--border); border-right:1px solid var(--border);">${no}</td>
         <td colspan="3" style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--cyan); font-weight:700; padding:10px 14px; border-bottom:1px solid rgba(56,189,248,0.15); vertical-align:middle;">
-          📄 ${escHtml(item.fileName || item.id)}
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
+            <span>📄 ${escHtml(item.fileName || item.id)}</span>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <!-- Dropdown upload status (catatan saya) -->
+              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0;" onchange="saveField('${item.id}', 'uploadStatus', this.value)" title="Status Upload / Catatan Saya">
+                <option value="belum_upload" ${item.uploadStatus !== 'upload' ? 'selected' : ''}>❌ Belum Upload</option>
+                <option value="upload" ${item.uploadStatus === 'upload' ? 'selected' : ''}>✅ Sudah Upload</option>
+              </select>
+
+              <!-- Dropdown Adobe Stock Category -->
+              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(168,85,247,0.4);" onchange="saveField('${item.id}', 'adobeCategory', this.value)" title="Kategori Adobe Stock">
+                <option value="">Kategori Adobe...</option>
+                <option value="1" ${item.adobeCategory === '1' ? 'selected' : ''}>1. Animals</option>
+                <option value="2" ${item.adobeCategory === '2' ? 'selected' : ''}>2. Buildings & Architecture</option>
+                <option value="3" ${item.adobeCategory === '3' ? 'selected' : ''}>3. Business</option>
+                <option value="4" ${item.adobeCategory === '4' ? 'selected' : ''}>4. Drinks</option>
+                <option value="5" ${item.adobeCategory === '5' ? 'selected' : ''}>5. The Environment</option>
+                <option value="6" ${item.adobeCategory === '6' ? 'selected' : ''}>6. States of Mind</option>
+                <option value="7" ${item.adobeCategory === '7' ? 'selected' : ''}>7. Food</option>
+                <option value="8" ${item.adobeCategory === '8' ? 'selected' : ''}>8. Graphic Resources</option>
+                <option value="9" ${item.adobeCategory === '9' ? 'selected' : ''}>9. Hobbies & Leisure</option>
+                <option value="10" ${item.adobeCategory === '10' ? 'selected' : ''}>10. Industry</option>
+                <option value="11" ${item.adobeCategory === '11' ? 'selected' : ''}>11. Landscape</option>
+                <option value="12" ${item.adobeCategory === '12' ? 'selected' : ''}>12. Lifestyle</option>
+                <option value="13" ${item.adobeCategory === '13' ? 'selected' : ''}>13. People</option>
+                <option value="14" ${item.adobeCategory === '14' ? 'selected' : ''}>14. Plants & Flowers</option>
+                <option value="15" ${item.adobeCategory === '15' ? 'selected' : ''}>15. Culture & Religion</option>
+                <option value="16" ${item.adobeCategory === '16' ? 'selected' : ''}>16. Science</option>
+                <option value="17" ${item.adobeCategory === '17' ? 'selected' : ''}>17. Social Issues</option>
+                <option value="18" ${item.adobeCategory === '18' ? 'selected' : ''}>18. Sports</option>
+                <option value="19" ${item.adobeCategory === '19' ? 'selected' : ''}>19. Technology</option>
+                <option value="20" ${item.adobeCategory === '20' ? 'selected' : ''}>20. Transport</option>
+                <option value="21" ${item.adobeCategory === '21' ? 'selected' : ''}>21. Travel</option>
+              </select>
+
+              <!-- Dropdown Shutterstock Category -->
+              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory', this.value)" title="Kategori Shutterstock">
+                <option value="">Kategori Shutter...</option>
+                <option value="Animals/Wildlife" ${item.shutterstockCategory === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
+                <option value="Arts" ${item.shutterstockCategory === 'Arts' ? 'selected' : ''}>Arts</option>
+                <option value="Backgrounds/Textures" ${item.shutterstockCategory === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
+                <option value="Buildings/Landmarks" ${item.shutterstockCategory === 'Buildings/Landmarks' ? 'selected' : ''}>Buildings/Landmarks</option>
+                <option value="Business/Finance" ${item.shutterstockCategory === 'Business/Finance' ? 'selected' : ''}>Business/Finance</option>
+                <option value="Education" ${item.shutterstockCategory === 'Education' ? 'selected' : ''}>Education</option>
+                <option value="Food and drink" ${item.shutterstockCategory === 'Food and drink' ? 'selected' : ''}>Food and drink</option>
+                <option value="Healthcare/Medical" ${item.shutterstockCategory === 'Healthcare/Medical' ? 'selected' : ''}>Healthcare/Medical</option>
+                <option value="Holidays" ${item.shutterstockCategory === 'Holidays' ? 'selected' : ''}>Holidays</option>
+                <option value="Industrial" ${item.shutterstockCategory === 'Industrial' ? 'selected' : ''}>Industrial</option>
+                <option value="Nature" ${item.shutterstockCategory === 'Nature' ? 'selected' : ''}>Nature</option>
+                <option value="Objects" ${item.shutterstockCategory === 'Objects' ? 'selected' : ''}>Objects</option>
+                <option value="People" ${item.shutterstockCategory === 'People' ? 'selected' : ''}>People</option>
+                <option value="Religion" ${item.shutterstockCategory === 'Religion' ? 'selected' : ''}>Religion</option>
+                <option value="Science" ${item.shutterstockCategory === 'Science' ? 'selected' : ''}>Science</option>
+                <option value="Signs/Symbols" ${item.shutterstockCategory === 'Signs/Symbols' ? 'selected' : ''}>Signs/Symbols</option>
+                <option value="Sports/Recreation" ${item.shutterstockCategory === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
+                <option value="Technology" ${item.shutterstockCategory === 'Technology' ? 'selected' : ''}>Technology</option>
+                <option value="Transportation" ${item.shutterstockCategory === 'Transportation' ? 'selected' : ''}>Transportation</option>
+              </select>
+            </div>
+          </div>
         </td>
         <td rowspan="3" style="vertical-align:top; border-left:1px solid var(--border); border-bottom:2px solid var(--border); padding:12px;">
           ${actsCell}
@@ -1532,7 +1897,7 @@
         : `/api/preview-file/${item.id}`;
       return `
         <div style="display:flex; flex-direction:column; align-items:center; gap:8px; width:100%;">
-          <video class="preview-video" src="${videoSrc}#t=0.1" preload="metadata" controls muted loop playsinline style="width:100%; max-width:160px; height:90px; object-fit:cover; border-radius:6px; border:1px solid var(--border); background:#000;" onmouseenter="this.play().catch(e=>{})" onmouseleave="this.pause(); this.currentTime = 0.1;"></video>
+          <video class="preview-video" src="${videoSrc}#t=0.1" preload="none" controls muted loop playsinline style="width:100%; max-width:160px; height:90px; object-fit:cover; border-radius:6px; border:1px solid var(--border); background:#000;"></video>
           <button class="btn-browse" onclick="openVideoModal('${videoSrc}')" style="padding:4px 8px; font-size:10px; border-color:var(--cyan); color:var(--cyan); background:var(--cyan-dim); width:100%; display:flex; align-items:center; justify-content:center; gap:4px; font-weight:600; border-radius:6px;">
             🔍 Perbesar Preview
           </button>
@@ -1567,19 +1932,13 @@
     const btnJudulDisabled = isAnyRunning;
     const btnJudul = `<button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${btnJudulDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btnJudulText}</button>`;
 
-    // Button 2: TSX
-    const hasTsx = !!item.promptCode;
-    let btnTsxText = hasTsx ? '⚙️ REGEN TSX' : '⚙️ GEN TSX';
-    if (isTsxRunning) btnTsxText = '⏳ Converting...';
-    const btnTsxDisabled = isAnyRunning || !hasJudul;
-    const btnTsx = `<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${btnTsxDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:${btnTsxDisabled ? 'rgba(100,100,100,0.1)' : 'linear-gradient(135deg,rgba(56,189,248,0.15),rgba(168,85,247,0.15))'}; border:1px solid ${btnTsxDisabled ? 'rgba(100,100,100,0.2)' : 'rgba(56,189,248,0.35)'}; color:${btnTsxDisabled ? 'var(--text-dim)' : 'var(--cyan)'};">${btnTsxText}</button>`;
-
-    // Button 3: Preview
+    // Combined Button 2: TSX & Preview
     const hasPreview = !!item.previewUrl;
-    let btnPreviewText = hasPreview ? '☁️ REGEN PREVIEW' : '☁️ GEN PREVIEW';
-    if (isPreviewRunning) btnPreviewText = '⏳ Rendering...';
-    const btnPreviewDisabled = isAnyRunning || !hasTsx;
-    const btnPreview = `<button class="btn-action" onclick="triggerPreview('${item.id}')" ${btnPreviewDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:${btnPreviewDisabled ? 'rgba(100,100,100,0.1)' : 'linear-gradient(135deg,#7c3aed,#6366f1)'}; border:none; color:${btnPreviewDisabled ? 'var(--text-dim)' : '#fff'};">${btnPreviewText}</button>`;
+    let btnTsxPreviewText = hasPreview ? '⚙️ REGEN TSX & PREVIEW' : '⚙️ GEN TSX & PREVIEW';
+    if (isTsxRunning) btnTsxPreviewText = '⏳ Converting TSX...';
+    else if (isPreviewRunning) btnTsxPreviewText = '⏳ Rendering Preview...';
+    const btnTsxPreviewDisabled = isAnyRunning || !hasJudul;
+    const btnTsxPreview = `<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${btnTsxPreviewDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:${btnTsxPreviewDisabled ? 'rgba(100,100,100,0.1)' : 'linear-gradient(135deg,rgba(56,189,248,0.15),rgba(168,85,247,0.15))'}; border:1px solid ${btnTsxPreviewDisabled ? 'rgba(100,100,100,0.2)' : 'rgba(56,189,248,0.35)'}; color:${btnTsxPreviewDisabled ? 'var(--text-dim)' : 'var(--cyan)'};">${btnTsxPreviewText}</button>`;
 
     // Button 4: 4K
     const has4k = !!item.outputPath4k;
@@ -1598,10 +1957,10 @@
       ? `<button class="btn-action btn-cancel" onclick="cancelTask('${item.id}')" style="margin:0; padding:6px 10px; font-size:11px; width:100%;">🚫 Batal</button>`
       : '';
 
-    const btnDel = `<button class="btn-action btn-del" onclick="deleteItem('${item.id}')" style="margin:0; padding:6px 10px; font-size:11px; width:100%;">🗑 Hapus</button>`;
+    const btnDel = `<button class="btn-action btn-del" onclick="event.stopPropagation(); deleteItem('${item.id}', event)" style="margin:0; padding:6px 10px; font-size:11px; width:100%;">🗑 Hapus</button>`;
 
     const htmlCodeLink = `<a class="btn-code-link" href="/saved-code/${item.id}.html" target="_blank" download="${item.id}.html" style="font-size:10px; padding:3px 6px; flex:1; text-align:center; display:block;">🌐 HTML Asli</a>`;
-    const tsxCodeLink = hasTsx
+    const tsxCodeLink = (item.promptCode)
       ? `<a class="btn-code-link" href="/saved-code/${item.id}.tsx" target="_blank" download="${item.id}.tsx" style="font-size:10px; padding:3px 6px; flex:1; text-align:center; display:block;">📦 TSX File</a>`
       : '';
 
@@ -1609,8 +1968,7 @@
       <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
         ${aiSelect}
         ${btnJudul}
-        ${btnTsx}
-        ${btnPreview}
+        ${btnTsxPreview}
         ${btn4k}
         ${downloadZipBtn}
         ${btnCancel}
@@ -1637,7 +1995,11 @@
     }
   }
 
-  async function deleteItem(id) {
+  async function deleteItem(id, event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
     if (!confirm(`Hapus item "${id}" dari daftar?\nFile video tidak ikut terhapus.`)) return;
     try {
       const resp = await fetch(`/api/delete-item/${encodeURIComponent(id)}`, { method: 'DELETE' });
@@ -1699,6 +2061,7 @@
   async function generateTsx(id, currentStatus) {
     const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
     const animationDuration = Number(document.getElementById('animationDurationSelect').value);
+    const animationFps = Number(document.getElementById('animationFpsSelect').value);
 
     try {
       if (currentStatus === 'waiting') {
@@ -1706,7 +2069,7 @@
         const resp = await fetch(`/api/start-task/${id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ aiModel })
+          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps })
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
@@ -1717,7 +2080,7 @@
         const resp = await fetch(`/api/retry-task/${id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ aiModel, animationDuration })
+          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps })
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
@@ -1765,6 +2128,9 @@
       if (data.error) throw new Error(data.error);
       showToast('✅ OTP berhasil dikirim!', 'success');
       loadResults();
+      if (id === 'manual') {
+        setTimeout(loadSyntxStatus, 1000);
+      }
     } catch(err) {
       showToast('❌ Gagal mengirim OTP: ' + err.message, 'error');
     }
@@ -1820,11 +2186,111 @@
     el.style.display = isHidden ? 'block' : 'none';
     if (isHidden) {
       loadApiKeys();
+      loadSyntxStatus();
       // Reset statuses
       document.getElementById('status_groq').innerHTML = '';
       document.getElementById('status_gemini').innerHTML = '';
       document.getElementById('status_openrouter').innerHTML = '';
       document.getElementById('status_gmailnator').innerHTML = '';
+    }
+  }
+
+  function toggleExportMenu(event) {
+    event.stopPropagation();
+    const el = document.getElementById('exportMenu');
+    const isHidden = el.style.display === 'none';
+    el.style.display = isHidden ? 'block' : 'none';
+  }
+
+  // Close export menu when clicking outside
+  document.addEventListener('click', function(event) {
+    const el = document.getElementById('exportMenu');
+    if (el && el.style.display !== 'none' && !el.contains(event.target) && event.target.id !== 'btnExportCSV') {
+      el.style.display = 'none';
+    }
+  });
+
+  async function loadSyntxStatus() {
+    const statusEl = document.getElementById('syntxPoolStatus');
+    if (!statusEl) return;
+    statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Memuat status pool...</span>';
+    
+    try {
+      const resp = await fetch('/api/syntx-status');
+      const data = await resp.json();
+      
+      const pool = data.pool || { activeAccountsCount: 0, totalAccountsCount: 0, accounts: [] };
+      
+      let html = `
+        <div style="margin-bottom: 6px; font-weight: 600;">
+          Jumlah Akun Aktif (Valid & Belum Limit): <span style="color:var(--green);">${pool.activeAccountsCount}</span> / Total: ${pool.totalAccountsCount}
+        </div>
+      `;
+      
+      if (pool.accounts.length === 0) {
+        html += '<div style="color:var(--text-dim); font-style:italic;">Belum ada akun di pool. Tekan tombol di kanan atas untuk membuat/login akun pertama.</div>';
+      } else {
+        html += '<div style="max-height:120px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; background:rgba(0,0,0,0.2); padding:6px; display:flex; flex-direction:column; gap:4px; margin-bottom: 8px;">';
+        pool.accounts.forEach(acc => {
+          const expiresDate = acc.expiresAt ? new Date(acc.expiresAt).toLocaleTimeString('id-ID') : '-';
+          const statusText = acc.isValid 
+            ? `<span style="color:var(--green); font-weight:bold;">Active (${acc.messageCount}/${acc.messageLimit})</span>` 
+            : `<span style="color:var(--red);">Limit/Expired</span>`;
+          html += `
+            <div style="display:flex; justify-content:space-between; font-family:monospace; font-size:11px; padding:2px 4px; border-bottom:1px solid rgba(255,255,255,0.03);">
+              <span style="color:var(--cyan); overflow:hidden; text-overflow:ellipsis; max-width:260px;" title="${acc.email}">${acc.email}</span>
+              <span>${statusText}</span>
+            </div>
+          `;
+        });
+        html += '</div>';
+      }
+      
+      if (data.waitingOtp) {
+        html += `
+          <div style="margin-top:8px; padding:8px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px;">
+            <div style="font-size:11px; color:var(--amber); font-weight:600; margin-bottom:4px;">🔑 Masukkan OTP Syntx.ai (Pre-warm Akun):</div>
+            <div style="font-size:10px; color:var(--text-dim); margin-bottom:6px; word-break:break-all;">Kirim ke: <a href="https://www.emailnator.com/mailbox/#${escHtml(data.otpEmail || '')}" target="_blank" style="color:var(--cyan); font-weight:bold; text-decoration:underline; font-family:monospace;">${escHtml(data.otpEmail || '')}</a></div>
+            <div style="display:flex; gap:4px;">
+              <input type="text" id="otp_input_manual" placeholder="6-digit" class="select-input" style="padding:4px 8px; font-size:11px; height:auto; text-align:center; font-family:monospace; font-weight:bold; width:80px;" maxlength="6" />
+              <button class="btn-action" onclick="submitOtp('manual')" style="padding:4px 10px; font-size:11px; margin:0; line-height:1.3; width:auto; background:var(--amber); border:1px solid var(--amber); color:#000; font-weight:600; border-radius:6px; cursor:pointer;">Kirim</button>
+            </div>
+          </div>
+        `;
+      }
+      
+      statusEl.innerHTML = html;
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color:var(--red);">❌ Gagal memuat status: ${err.message}</span>`;
+    }
+  }
+
+  async function prewarmSyntxAccount() {
+    const btn = document.getElementById('btnPrewarmSyntx');
+    const statusEl = document.getElementById('syntxPoolStatus');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Logging in...';
+    }
+    showToast('🔐 Memulai pendaftaran/login akun Syntx baru di background...', 'info');
+    
+    try {
+      const resp = await fetch('/api/syntx-login', { method: 'POST' });
+      const data = await resp.json();
+      if (data.success) {
+        showToast('🎉 Berhasil menambahkan akun Syntx baru ke pool!', 'success');
+      } else {
+        throw new Error(data.error || 'Gagal login');
+      }
+    } catch (err) {
+      showToast('❌ Gagal pre-warm akun Syntx: ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '🔑 Tambah/Pre-warm Akun';
+      }
+      loadSyntxStatus();
+      loadApiKeys();
     }
   }
 
@@ -1924,7 +2390,11 @@
     el.className = `toast ${type}`;
     el.textContent = msg;
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 4000);
+    // After 3.5s, play fade-out animation (0.35s), then remove
+    setTimeout(() => {
+      el.classList.add('fade-out');
+      el.addEventListener('animationend', () => el.remove());
+    }, 3500);
   }
 
   function openVideoModal(src) {

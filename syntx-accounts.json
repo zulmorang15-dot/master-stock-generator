@@ -1,0 +1,20 @@
+[
+  {
+    "email": "jadenwu39+4bala@gmail.com",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjozNjUxMTM5NzQ5NjI0NTY4OTMsImlhdCI6MTc4MTE1NjYxOCwiZXhwIjoxNzgzNzQ4NjE4fQ.wJgisi-ybVd_jR3hIKX5wg2p5kysGJjCgffCurZcjgs",
+    "expiresAt": 1781239417977,
+    "messageCount": 3,
+    "messageLimit": 5,
+    "isValid": true,
+    "createdAt": "2026-06-11T05:43:37.977Z"
+  },
+  {
+    "email": "yeo.ng69.4.0@gmail.com",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjozNzExOTI2ODczNTk2NTAzNDMsImlhdCI6MTc4MTE2NDQ1MywiZXhwIjoxNzgzNzU2NDUzfQ.stjQxFaVHWA-oompuI57ro7YyZrwUKpKXcIJNSA6u0M",
+    "expiresAt": 1781247252850,
+    "messageCount": 0,
+    "messageLimit": 5,
+    "isValid": true,
+    "createdAt": "2026-06-11T07:54:12.852Z"
+  }
+]

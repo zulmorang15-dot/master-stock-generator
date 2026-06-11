@@ -28,224 +28,432 @@ var jsx_runtime = __webpack_require__(4848);
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 const PARTICLE_COUNT = 80;
-const PARTICLES = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
-  const angle = i / PARTICLE_COUNT * Math.PI * 2;
-  const radius = 150 + i % 5 * 40;
-  const speed = 0.3 + i % 3 * 0.15;
-  const size = 2 + i % 4;
-  const hue = Math.round(i / PARTICLE_COUNT * 360);
-  const direction = i % 2 === 0 ? 1 : -1;
-  return { angle, radius, speed, size, hue, direction };
+const PARTICLES = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
+  const seed = i * 45.32;
+  const x = (Math.sin(seed) + 1) / 2 * ORIGINAL_WIDTH;
+  const y = (Math.cos(seed * 1.5) + 1) / 2 * ORIGINAL_HEIGHT;
+  const size = 1.5 + (Math.sin(seed * 2.3) + 1) / 2 * 3.5;
+  const opacity = 0.2 + (Math.cos(seed * 3.7) + 1) / 2 * 0.5;
+  const ampX = 8 + (Math.sin(seed * 4.1) + 1) / 2 * 15;
+  const ampY = 12 + (Math.cos(seed * 5.9) + 1) / 2 * 20;
+  return { x, y, size, opacity, ampX, ampY, seed };
 });
-const RING_COUNT = 5;
-const RINGS = Array.from({ length: RING_COUNT }, (_, i) => ({
-  radius: 80 + i * 55,
-  speed: 0.4 + i * 0.1,
-  opacity: 0.15 + i * 0.05,
-  direction: i % 2 === 0 ? 1 : -1
-}));
-const DefaultPlaceholder = () => {
-  const { width, height } = (0,esm.useVideoConfig)();
+const CyberpunkGamingEndscreen = () => {
+  const { width, height, fps } = (0,esm.useVideoConfig)();
   const frame = (0,esm.useCurrentFrame)();
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.9;
-  const fps = 30;
-  const cycleDuration = fps * 10;
-  const localFrame = frame % cycleDuration;
-  const pulse = (0,esm.interpolate)(
-    localFrame,
-    [0, cycleDuration / 2, cycleDuration],
-    [1, 1.05, 1],
-    { easing: esm.Easing.inOut(esm.Easing.sine), extrapolate: "clamp" }
-  );
-  const globalOpacity = (0,esm.interpolate)(frame, [0, 20], [0, 1], {
-    extrapolate: "clamp"
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
+  const inputProps = (0,esm.getInputProps)() || {};
+  const judul = inputProps.judul || "UP NEXT";
+  const keywordsList = (inputProps.keywords || "cyberpunk, gaming, looping, endscreen").split(",");
+  const gridScroll = frame * 2 % 60;
+  const driftAngle = frame / 300 * Math.PI * 2;
+  const driftX = Math.sin(driftAngle) * 15;
+  const driftY = Math.cos(driftAngle) * 8;
+  const cycle150 = frame % 150;
+  const cycle100 = frame % 100;
+  const leftFloatY = (0,esm.interpolate)(cycle150, [0, 75, 150], [0, -12, 0], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
   });
-  const coreGlow = (0,esm.interpolate)(
-    localFrame,
-    [0, cycleDuration / 2, cycleDuration],
-    [0.6, 1, 0.6],
-    { easing: esm.Easing.inOut(esm.Easing.sine), extrapolate: "clamp" }
-  );
-  return /* @__PURE__ */ (0,jsx_runtime.jsx)(
-    "div",
-    {
-      style: {
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#040818",
-        opacity: globalOpacity
-      },
-      children: /* @__PURE__ */ (0,jsx_runtime.jsxs)(
-        "div",
-        {
-          style: {
-            position: "relative",
-            width: ORIGINAL_WIDTH,
-            height: ORIGINAL_HEIGHT,
-            transform: `scale(${scaleFactor})`,
-            transformOrigin: "center center",
-            overflow: "hidden"
+  const leftGlowSize = (0,esm.interpolate)(cycle150, [0, 75, 150], [25, 50, 25], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
+  });
+  const leftGlowOpacity = (0,esm.interpolate)(cycle150, [0, 75, 150], [0.3, 0.65, 0.3], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
+  });
+  const rightFloatY = (0,esm.interpolate)((frame + 45) % 150, [0, 75, 150], [0, -12, 0], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
+  });
+  const rightGlowSize = (0,esm.interpolate)((frame + 45) % 150, [0, 75, 150], [25, 50, 25], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
+  });
+  const rightGlowOpacity = (0,esm.interpolate)((frame + 45) % 150, [0, 75, 150], [0.3, 0.65, 0.3], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
+  });
+  const centerFloatY = (0,esm.interpolate)(cycle100, [0, 50, 100], [0, 10, 0], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
+  });
+  const centerGlowSize = (0,esm.interpolate)(cycle100, [0, 50, 100], [40, 70, 40], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
+  });
+  const centerGlowOpacity = (0,esm.interpolate)(cycle100, [0, 50, 100], [0.5, 0.85, 0.5], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
+  });
+  const innerRingRotation = (0,esm.interpolate)(frame % 300, [0, 300], [0, 360], {
+    easing: esm.Easing.linear
+  });
+  const outerRingRotation = (0,esm.interpolate)(frame % 300, [0, 300], [0, -360], {
+    easing: esm.Easing.linear
+  });
+  const hudLineOpacity = (0,esm.interpolate)(cycle150, [0, 75, 150], [0.6, 0.25, 0.6], {
+    easing: esm.Easing.inOut(esm.Easing.quad)
+  });
+  const textOpacity = (0,esm.interpolate)(frame, [0, 35], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: esm.Easing.out(esm.Easing.quad)
+  });
+  const textY = (0,esm.interpolate)(frame, [0, 35], [30, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: esm.Easing.out(esm.Easing.quad)
+  });
+  const scanLineY = (0,esm.interpolate)(frame * 2.5 % 360, [0, 360], [-40, 400], {
+    easing: esm.Easing.linear
+  });
+  const mainWrapperStyle = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: "center center",
+    backgroundColor: "#030008",
+    backgroundImage: "radial-gradient(circle at center, transparent 0%, #030008 100%)",
+    overflow: "hidden"
+  };
+  const gridContainerStyle = {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    perspective: "800px",
+    transformStyle: "preserve-3d",
+    zIndex: 1,
+    overflow: "hidden",
+    transform: `translate(${driftX}px, ${driftY}px)`
+  };
+  const floorStyle = {
+    position: "absolute",
+    width: "200%",
+    height: "200%",
+    left: "-50%",
+    top: "42%",
+    transform: "rotateX(82deg)",
+    transformOrigin: "center top",
+    backgroundImage: `
+            linear-gradient(rgba(0, 243, 255, 0.12) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(0, 243, 255, 0.12) 2px, transparent 2px)
+        `,
+    backgroundSize: "60px 60px",
+    backgroundPosition: `center ${gridScroll}px`,
+    maskImage: "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%)",
+    WebkitMaskImage: "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%)"
+  };
+  const ceilingStyle = {
+    position: "absolute",
+    width: "200%",
+    height: "200%",
+    left: "-50%",
+    bottom: "42%",
+    transform: "rotateX(-82deg)",
+    transformOrigin: "center bottom",
+    backgroundImage: `
+            linear-gradient(rgba(188, 19, 254, 0.12) 2px, transparent 2px),
+            linear-gradient(90deg, rgba(188, 19, 254, 0.12) 2px, transparent 2px)
+        `,
+    backgroundSize: "60px 60px",
+    backgroundPosition: `center ${gridScroll}px`,
+    maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%)",
+    WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 80%)"
+  };
+  const vfxOverlayStyle = {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    zIndex: 2,
+    background: "repeating-linear-gradient(to bottom, rgba(0, 243, 255, 0.03) 0px, rgba(0, 243, 255, 0.03) 2px, transparent 2px, transparent 4px)",
+    pointerEvents: "none",
+    boxShadow: "inset 0 0 150px rgba(188, 19, 254, 0.15)"
+  };
+  const placeholderBaseStyle = {
+    position: "absolute",
+    zIndex: 10,
+    width: 640,
+    height: 360,
+    top: 360,
+    background: "rgba(0, 15, 30, 0.65)",
+    border: "2px solid #00f3ff",
+    borderRadius: 12,
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden"
+  };
+  const cornerBaseStyle = {
+    position: "absolute",
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderStyle: "solid",
+    opacity: 0.9,
+    pointerEvents: "none"
+  };
+  const gridOverlayStyle = {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    backgroundImage: `
+            linear-gradient(rgba(0, 243, 255, 0.08) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 243, 255, 0.08) 1px, transparent 1px)
+        `,
+    backgroundSize: "40px 40px",
+    backgroundPosition: "center center",
+    opacity: 0.3
+  };
+  const hudLineStyle = {
+    position: "absolute",
+    backgroundColor: "#00f3ff",
+    boxShadow: "0 0 10px #00f3ff",
+    opacity: hudLineOpacity,
+    zIndex: 5
+  };
+  const hudDotStyle = {
+    position: "absolute",
+    width: 6,
+    height: 6,
+    backgroundColor: "#bc13fe",
+    boxShadow: "0 0 8px #bc13fe",
+    borderRadius: "50%",
+    zIndex: 5
+  };
+  const subscribeAreaStyle = {
+    position: "absolute",
+    width: 360,
+    height: 360,
+    left: 780,
+    top: 360,
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: "50%",
+    zIndex: 15
+  };
+  const ringBaseStyle = {
+    position: "absolute",
+    borderRadius: "50%",
+    left: "50%",
+    top: "50%"
+  };
+  return /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: mainWrapperStyle, children: [
+    /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: gridContainerStyle, children: [
+      /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: floorStyle }),
+      /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: ceilingStyle }),
+      PARTICLES.map((p, i) => {
+        const angle = frame / 300 * Math.PI * 2;
+        const pOffsetX = Math.sin(angle + p.seed) * p.ampX;
+        const pOffsetY = Math.cos(angle * 2 + p.seed) * p.ampY;
+        return /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          "div",
+          {
+            style: {
+              position: "absolute",
+              left: p.x + pOffsetX,
+              top: p.y + pOffsetY,
+              width: p.size,
+              height: p.size,
+              borderRadius: "50%",
+              backgroundColor: "#00f3ff",
+              boxShadow: "0 0 8px #00f3ff, 0 0 2px #00f3ff",
+              opacity: p.opacity
+            }
           },
-          children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "div",
-              {
-                style: {
-                  position: "absolute",
-                  inset: 0,
-                  background: "radial-gradient(ellipse at 50% 50%, #0d1b4b 0%, #040818 70%)"
-                }
+          i
+        );
+      })
+    ] }),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: vfxOverlayStyle }),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...hudLineStyle, top: 120, left: 160, width: 1600, height: 1 } }),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...hudLineStyle, bottom: 120, left: 160, width: 1600, height: 1 } }),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...hudDotStyle, top: 118, left: 157 } }),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...hudDotStyle, top: 118, right: 157 } }),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...hudDotStyle, bottom: 118, left: 157 } }),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...hudDotStyle, bottom: 118, right: 157 } }),
+    /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+      "div",
+      {
+        style: {
+          ...placeholderBaseStyle,
+          left: 160,
+          transform: `translateY(${leftFloatY}px)`,
+          boxShadow: `0 0 ${leftGlowSize}px rgba(0, 243, 255, ${leftGlowOpacity}), inset 0 0 ${leftGlowSize * 0.6}px rgba(0, 243, 255, ${leftGlowOpacity * 0.5})`
+        },
+        children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: gridOverlayStyle }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: {
+            position: "absolute",
+            top: scanLineY,
+            left: 0,
+            width: "100%",
+            height: "3px",
+            background: "linear-gradient(to right, transparent, #00f3ff, transparent)",
+            boxShadow: "0 0 12px #00f3ff, 0 0 4px #00f3ff",
+            opacity: 0.8,
+            pointerEvents: "none"
+          } }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("svg", { width: "48", height: "48", viewBox: "0 0 24 24", fill: "none", style: { opacity: 0.25, filter: "drop-shadow(0 0 8px #00f3ff)", zIndex: 11 }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)("path", { d: "M8 5V19L19 12L8 5Z", fill: "#00f3ff" }) }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...cornerBaseStyle, top: -2, left: -2, borderRight: "none", borderBottom: "none", borderRadius: "12px 0 0 0", borderColor: "#bc13fe" } }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...cornerBaseStyle, top: -2, right: -2, borderLeft: "none", borderBottom: "none", borderRadius: "0 12px 0 0", borderColor: "#bc13fe" } }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...cornerBaseStyle, bottom: -2, left: -2, borderRight: "none", borderTop: "none", borderRadius: "0 0 0 12px", borderColor: "#bc13fe" } }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...cornerBaseStyle, bottom: -2, right: -2, borderLeft: "none", borderTop: "none", borderRadius: "0 0 12px 0", borderColor: "#bc13fe" } })
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+      "div",
+      {
+        style: {
+          ...placeholderBaseStyle,
+          right: 160,
+          transform: `translateY(${rightFloatY}px)`,
+          boxShadow: `0 0 ${rightGlowSize}px rgba(0, 243, 255, ${rightGlowOpacity}), inset 0 0 ${rightGlowSize * 0.6}px rgba(0, 243, 255, ${rightGlowOpacity * 0.5})`
+        },
+        children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: gridOverlayStyle }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: {
+            position: "absolute",
+            top: scanLineY,
+            left: 0,
+            width: "100%",
+            height: "3px",
+            background: "linear-gradient(to right, transparent, #00f3ff, transparent)",
+            boxShadow: "0 0 12px #00f3ff, 0 0 4px #00f3ff",
+            opacity: 0.8,
+            pointerEvents: "none"
+          } }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("svg", { width: "48", height: "48", viewBox: "0 0 24 24", fill: "none", style: { opacity: 0.25, filter: "drop-shadow(0 0 8px #00f3ff)", zIndex: 11 }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)("path", { d: "M8 5V19L19 12L8 5Z", fill: "#00f3ff" }) }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...cornerBaseStyle, top: -2, left: -2, borderRight: "none", borderBottom: "none", borderRadius: "12px 0 0 0", borderColor: "#bc13fe" } }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...cornerBaseStyle, top: -2, right: -2, borderLeft: "none", borderBottom: "none", borderRadius: "0 12px 0 0", borderColor: "#bc13fe" } }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...cornerBaseStyle, bottom: -2, left: -2, borderRight: "none", borderTop: "none", borderRadius: "0 0 0 12px", borderColor: "#bc13fe" } }),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { ...cornerBaseStyle, bottom: -2, right: -2, borderLeft: "none", borderTop: "none", borderRadius: "0 0 12px 0", borderColor: "#bc13fe" } })
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+      "div",
+      {
+        style: {
+          ...subscribeAreaStyle,
+          transform: `translateY(${centerFloatY}px)`
+        },
+        children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
+            "div",
+            {
+              style: {
+                ...ringBaseStyle,
+                width: 240,
+                height: 240,
+                border: "2px solid transparent",
+                borderLeft: "2px dashed #bc13fe",
+                borderRight: "2px dashed #bc13fe",
+                boxShadow: "-10px 0 20px rgba(188, 19, 254, 0.2)",
+                zIndex: 18,
+                transform: `translate(-50%, -50%) rotate(${outerRingRotation}deg)`
               }
-            ),
-            RINGS.map((ring, i) => {
-              const rotation = (0,esm.interpolate)(
-                localFrame,
-                [0, cycleDuration],
-                [0, 360 * ring.direction],
-                { extrapolate: "clamp" }
-              );
-              return /* @__PURE__ */ (0,jsx_runtime.jsx)(
-                "div",
+            }
+          ),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
+            "div",
+            {
+              style: {
+                ...ringBaseStyle,
+                width: 210,
+                height: 210,
+                border: "2px solid transparent",
+                borderTop: "2px solid #00f3ff",
+                borderBottom: "2px solid #00f3ff",
+                boxShadow: "0 10px 20px rgba(0, 243, 255, 0.2)",
+                zIndex: 19,
+                transform: `translate(-50%, -50%) rotate(${innerRingRotation}deg)`
+              }
+            }
+          ),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
+            "div",
+            {
+              style: {
+                ...subscribeCircleStyle,
+                boxShadow: `0 0 ${centerGlowSize}px rgba(188, 19, 254, ${centerGlowOpacity}), inset 0 0 ${centerGlowSize * 0.8}px rgba(188, 19, 254, ${centerGlowOpacity * 0.6})`
+              },
+              children: /* @__PURE__ */ (0,jsx_runtime.jsx)("svg", { width: "60", height: "60", viewBox: "0 0 24 24", fill: "none", style: { filter: "drop-shadow(0 0 12px #bc13fe)" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)("path", { d: "M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z", fill: "#bc13fe" }) })
+            }
+          )
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0,jsx_runtime.jsxs)(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          left: 160,
+          bottom: 45,
+          zIndex: 25,
+          display: "flex",
+          flexDirection: "column"
+        },
+        children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
+            "div",
+            {
+              style: {
+                fontFamily: "system-ui, -apple-system, sans-serif",
+                fontSize: "46px",
+                fontWeight: 900,
+                color: "#ffffff",
+                textTransform: "uppercase",
+                letterSpacing: "4px",
+                textShadow: "0 0 10px #00f3ff, 0 0 20px #00f3ff, 0 0 30px #bc13fe",
+                marginBottom: "12px",
+                opacity: textOpacity,
+                transform: `translateY(${textY}px)`
+              },
+              children: judul
+            }
+          ),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
+            "div",
+            {
+              style: {
+                display: "flex",
+                gap: "12px",
+                opacity: textOpacity,
+                transform: `translateY(${textY}px)`
+              },
+              children: keywordsList.map((word, index) => /* @__PURE__ */ (0,jsx_runtime.jsx)(
+                "span",
                 {
                   style: {
-                    position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    width: ring.radius * 2,
-                    height: ring.radius * 2,
-                    marginLeft: -ring.radius,
-                    marginTop: -ring.radius,
-                    borderRadius: "50%",
-                    border: `1px solid rgba(0, 200, 255, ${ring.opacity})`,
-                    transform: `rotate(${rotation}deg)`,
-                    boxShadow: `0 0 8px rgba(0, 200, 255, ${ring.opacity * 0.5})`
-                  }
+                    fontFamily: "system-ui, -apple-system, sans-serif",
+                    fontSize: "11px",
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                    color: "#00f3ff",
+                    backgroundColor: "rgba(0, 243, 255, 0.1)",
+                    border: "1px solid rgba(0, 243, 255, 0.35)",
+                    borderRadius: "30px",
+                    padding: "5px 14px",
+                    letterSpacing: "1.5px",
+                    backdropFilter: "blur(5px)",
+                    WebkitBackdropFilter: "blur(5px)",
+                    boxShadow: "0 0 15px rgba(0, 243, 255, 0.2)"
+                  },
+                  children: word.trim()
                 },
-                `ring-${i}`
-              );
-            }),
-            PARTICLES.map((p, i) => {
-              const currentAngle = (0,esm.interpolate)(
-                localFrame,
-                [0, cycleDuration],
-                [p.angle, p.angle + Math.PI * 2 * p.speed * p.direction],
-                { extrapolate: "clamp" }
-              );
-              const px = ORIGINAL_WIDTH / 2 + Math.cos(currentAngle) * p.radius - p.size / 2;
-              const py = ORIGINAL_HEIGHT / 2 + Math.sin(currentAngle) * p.radius - p.size / 2;
-              const particleOpacity = (0,esm.interpolate)(
-                localFrame,
-                [0, cycleDuration / 2, cycleDuration],
-                [0.4, 0.9, 0.4],
-                { easing: esm.Easing.inOut(esm.Easing.sine), extrapolate: "clamp" }
-              );
-              return /* @__PURE__ */ (0,jsx_runtime.jsx)(
-                "div",
-                {
-                  style: {
-                    position: "absolute",
-                    left: px,
-                    top: py,
-                    width: p.size,
-                    height: p.size,
-                    borderRadius: "50%",
-                    backgroundColor: `hsl(${p.hue}, 100%, 70%)`,
-                    opacity: particleOpacity,
-                    boxShadow: `0 0 ${p.size * 3}px hsl(${p.hue}, 100%, 60%)`
-                  }
-                },
-                `particle-${i}`
-              );
-            }),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "div",
-              {
-                style: {
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  width: 120,
-                  height: 120,
-                  marginLeft: -60,
-                  marginTop: -60,
-                  borderRadius: "50%",
-                  background: "radial-gradient(circle, #00eeff 0%, #0044ff 50%, transparent 100%)",
-                  transform: `scale(${pulse * coreGlow})`,
-                  boxShadow: `0 0 60px rgba(0, 200, 255, ${coreGlow * 0.8}), 0 0 120px rgba(0, 100, 255, ${coreGlow * 0.4})`
-                }
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "div",
-              {
-                style: {
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  width: 20,
-                  height: 20,
-                  marginLeft: -10,
-                  marginTop: -10,
-                  borderRadius: "50%",
-                  backgroundColor: "#ffffff",
-                  boxShadow: "0 0 30px #ffffff, 0 0 60px #00eeff"
-                }
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsxs)(
-              "div",
-              {
-                style: {
-                  position: "absolute",
-                  bottom: 60,
-                  left: 0,
-                  right: 0,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 12
-                },
-                children: [
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)(
-                    "div",
-                    {
-                      style: {
-                        fontFamily: "system-ui, sans-serif",
-                        fontSize: 28,
-                        fontWeight: 700,
-                        color: "rgba(255,255,255,0.9)",
-                        letterSpacing: 6,
-                        textTransform: "uppercase",
-                        textShadow: "0 0 20px rgba(0, 200, 255, 0.8)"
-                      },
-                      children: "AWAITING COMPOSITION"
-                    }
-                  ),
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)(
-                    "div",
-                    {
-                      style: {
-                        fontFamily: "system-ui, sans-serif",
-                        fontSize: 16,
-                        color: "rgba(100, 200, 255, 0.6)",
-                        letterSpacing: 2
-                      },
-                      children: "Upload HTML \u2192 Convert \u2192 Render"
-                    }
-                  )
-                ]
-              }
-            )
-          ]
-        }
-      )
-    }
-  );
+                index
+              ))
+            }
+          )
+        ]
+      }
+    )
+  ] });
 };
-/* harmony default export */ const Composition = (DefaultPlaceholder);
+/* harmony default export */ const Composition = (CyberpunkGamingEndscreen);
 
 // EXTERNAL MODULE: ./node_modules/react/index.js
 var react = __webpack_require__(6540);
@@ -5396,23 +5604,6 @@ const Dashboard = () => {
   const [keyword, setKeyword] = (0,react.useState)("");
   const [results, setResults] = (0,react.useState)([]);
   const [loading, setLoading] = (0,react.useState)(false);
-  const [showGuide, setShowGuide] = (0,react.useState)(false);
-  const [sidebarTab, setSidebarTab] = (0,react.useState)("guide");
-  const [keywordSearch, setKeywordSearch] = (0,react.useState)("");
-  const [copiedBadge, setCopiedBadge] = (0,react.useState)(null);
-  const [activePreviewItem, setActivePreviewItem] = (0,react.useState)(null);
-  const [savedItems, setSavedItems] = (0,react.useState)([]);
-  const loadSavedItems = async () => {
-    try {
-      const response = await lib_axios.get("http://localhost:5000/api/saved-items");
-      setSavedItems(response.data);
-    } catch (error) {
-      console.error("Gagal memuat item tersimpan:", error);
-    }
-  };
-  (0,react.useEffect)(() => {
-    loadSavedItems();
-  }, []);
   const handleSearch = async () => {
     if (!keyword) return;
     setLoading(true);
@@ -5420,993 +5611,243 @@ const Dashboard = () => {
       const response = await lib_axios.post("http://localhost:5000/api/generate", { keyword });
       const formatted = response.data.map((item) => ({
         ...item,
-        promptHTML: "",
-        htmlPreview: "",
-        statusHtmlPreview: "idle",
-        statusConvertTsx: "idle",
-        statusRender4k: "idle",
-        statusSave: "idle",
-        previewUrl: "",
-        outputPath4k: ""
+        statusPreview: "idle"
       }));
       setResults(formatted);
     } catch (error) {
-      console.error("Gagal terhubung ke backend:", error);
+      const globalObj = globalThis;
+      if (globalObj.console) {
+        globalObj.console.error("Gagal terhubung ke backend:", error);
+      }
     } finally {
       setLoading(false);
     }
   };
-  const handleInputChange = (index, field, value, isSavedSection = false) => {
-    if (isSavedSection) {
-      const updated = [...savedItems];
-      updated[index] = { ...updated[index], [field]: value };
-      setSavedItems(updated);
-    } else {
-      const updatedResults = [...results];
-      updatedResults[index] = { ...updatedResults[index], [field]: value };
-      setResults(updatedResults);
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      const response = await lib_axios.get("http://localhost:5000/api/saved-items");
+      const refreshed = response.data.map((item) => ({
+        ...item,
+        statusPreview: "idle"
+      }));
+      setResults(refreshed);
+    } catch (error) {
+      const globalObj = globalThis;
+      if (globalObj.console) {
+        globalObj.console.error("Gagal refresh data:", error);
+      }
+    } finally {
+      setLoading(false);
     }
   };
-  const handleHtmlUpload = (index, file, isSavedSection = false) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      var _a;
-      const content = (_a = e.target) == null ? void 0 : _a.result;
-      if (isSavedSection) {
-        const updated = [...savedItems];
-        updated[index].htmlPreview = content;
-        updated[index].statusHtmlPreview = "success";
-        setSavedItems(updated);
-      } else {
-        const updated = [...results];
-        updated[index].htmlPreview = content;
-        updated[index].statusHtmlPreview = "success";
-        setResults(updated);
-      }
+  const handleInputChange = (index, field, value) => {
+    const updatedResults = [...results];
+    updatedResults[index] = {
+      ...updatedResults[index],
+      [field]: value
     };
-    reader.readAsText(file);
+    setResults(updatedResults);
   };
-  const startPolling = (itemId, renderType, isSavedSection = false) => {
-    const interval = setInterval(async () => {
-      try {
-        const response = await lib_axios.get(`http://localhost:5000/api/check-render-status/${itemId}/${renderType}`);
-        const data = response.data;
-        const setList = isSavedSection ? setSavedItems : setResults;
-        if (data.status === "success") {
-          clearInterval(interval);
-          setList((prevList) => {
-            const idx = prevList.findIndex((item) => item.id === itemId);
-            if (idx === -1) return prevList;
-            const updated = [...prevList];
-            if (renderType === "preview") {
-              updated[idx] = {
-                ...updated[idx],
-                previewUrl: data.url,
-                statusConvertTsx: "success"
-              };
-            } else {
-              updated[idx] = {
-                ...updated[idx],
-                outputPath4k: data.url,
-                statusRender4k: "success"
-              };
-              setTimeout(() => {
-                alert(`Render 4K Selesai!
-File tersimpan di: ${data.localPath}`);
-              }, 100);
-            }
-            return updated;
-          });
-        } else if (data.status === "failed") {
-          clearInterval(interval);
-          setList((prevList) => {
-            const idx = prevList.findIndex((item) => item.id === itemId);
-            if (idx === -1) return prevList;
-            const updated = [...prevList];
-            if (renderType === "preview") {
-              updated[idx] = { ...updated[idx], statusConvertTsx: "failed" };
-            } else {
-              updated[idx] = { ...updated[idx], statusRender4k: "failed" };
-            }
-            return updated;
-          });
-          setTimeout(() => {
-            alert(`Render ${renderType} gagal: ${data.error}`);
-          }, 100);
-        }
-      } catch (error) {
-        console.error("Error polling render status:", error);
-      }
-    }, 5e3);
-  };
-  const handleGenerate = async (index, isSavedSection = false) => {
-    const list = isSavedSection ? savedItems : results;
-    const setList = isSavedSection ? setSavedItems : setResults;
-    const item = list[index];
-    const updated = [...list];
-    updated[index].statusConvertTsx = "processing-tsx";
-    setList(updated);
+  const handleCreatePreview = async (id, index) => {
+    const updated = [...results];
+    updated[index].statusPreview = "processing";
+    setResults(updated);
     try {
-      const convertResponse = await lib_axios.post("http://localhost:5000/api/convert-html-to-tsx", {
-        item
-      });
-      if (!convertResponse.data || !convertResponse.data.success) {
-        throw new Error("Gagal mengonversi HTML ke TSX");
+      const response = await lib_axios.post("http://localhost:5000/api/render", { item: results[index] });
+      const finalUpdate = [...results];
+      if (response.data && response.data.success) {
+        finalUpdate[index].statusPreview = "success";
+      } else {
+        finalUpdate[index].statusPreview = "failed";
       }
-      const tsxCode = convertResponse.data.promptCode;
-      const nextUpdate = [...list];
-      nextUpdate[index].promptCode = tsxCode;
-      nextUpdate[index].statusConvertTsx = "processing-preview";
-      setList(nextUpdate);
-      const triggerResponse = await lib_axios.post("http://localhost:5000/api/trigger-github-render", {
-        item: { ...item, promptCode: tsxCode },
-        renderType: "preview"
-      });
-      if (!triggerResponse.data || !triggerResponse.data.success) {
-        throw new Error("Gagal memicu render GitHub");
-      }
-      startPolling(item.id, "preview", isSavedSection);
+      setResults(finalUpdate);
     } catch (error) {
-      console.error("Gagal memproses render:", error);
-      const finalUpdate = [...list];
-      finalUpdate[index].statusConvertTsx = "failed";
-      setList(finalUpdate);
-      alert(`Gagal memproses generate: ${error.message}`);
+      const finalUpdate = [...results];
+      finalUpdate[index].statusPreview = "failed";
+      setResults(finalUpdate);
     }
   };
-  const handleRender4K = async (index, isSavedSection = false) => {
-    const list = isSavedSection ? savedItems : results;
-    const setList = isSavedSection ? setSavedItems : setResults;
-    const item = list[index];
-    const updated = [...list];
-    updated[index].statusRender4k = "processing";
-    setList(updated);
+  const handleDelete = async (id, index) => {
     try {
-      const triggerResponse = await lib_axios.post("http://localhost:5000/api/trigger-github-render", {
-        item,
-        renderType: "4k"
-      });
-      if (!triggerResponse.data || !triggerResponse.data.success) {
-        throw new Error("Gagal memicu render 4K di GitHub");
-      }
-      startPolling(item.id, "4k", isSavedSection);
+      const encodedId = encodeURIComponent(id);
+      await lib_axios.delete(`http://localhost:5000/api/delete-item/${encodedId}`);
+      const updated = [...results];
+      updated.splice(index, 1);
+      setResults(updated);
     } catch (error) {
-      console.error("Gagal render 4K:", error);
-      const finalUpdate = [...list];
-      finalUpdate[index].statusRender4k = "failed";
-      setList(finalUpdate);
-      alert(`Gagal memproses render 4K: ${error.message}`);
-    }
-  };
-  const handleSaveItem = async (index, isSavedSection = false) => {
-    const list = isSavedSection ? savedItems : results;
-    const setList = isSavedSection ? setSavedItems : setResults;
-    const updated = [...list];
-    updated[index].statusSave = "processing";
-    setList(updated);
-    try {
-      await lib_axios.post("http://localhost:5000/api/save-item", {
-        item: list[index]
-      });
-      const finalUpdate = [...list];
-      finalUpdate[index].statusSave = "success";
-      setList(finalUpdate);
-      loadSavedItems();
-      alert("Item berhasil disimpan ke database lokal!");
-    } catch (error) {
-      console.error("Gagal menyimpan item:", error);
-      const finalUpdate = [...list];
-      finalUpdate[index].statusSave = "failed";
-      setList(finalUpdate);
-    }
-  };
-  const handleDeleteItem = async (id) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus item ini dari database lokal?")) return;
-    try {
-      await lib_axios.delete(`http://localhost:5000/api/delete-item/${id}`);
-      loadSavedItems();
-    } catch (error) {
-      console.error("Gagal menghapus item:", error);
+      console.error("Delete failed", error);
     }
   };
   const copyToClipboard = (text) => {
-    if (navigator && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
-      alert("Teks berhasil disalin!");
+    const globalObj = globalThis;
+    if (globalObj.navigator && globalObj.navigator.clipboard) {
+      globalObj.navigator.clipboard.writeText(text);
+      if (globalObj.alert) {
+        globalObj.alert("Teks berhasil disalin!");
+      }
     }
   };
-  const copySingleBadge = (tag) => {
-    if (navigator && navigator.clipboard) {
-      navigator.clipboard.writeText(tag.trim());
-      setCopiedBadge(tag.trim());
-      setTimeout(() => setCopiedBadge(null), 2e3);
-    }
-  };
-  const openSidebar = (tab) => {
-    setSidebarTab(tab);
-    setShowGuide(true);
-  };
-  return /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { minHeight: "100vh", backgroundColor: "#0b0f19", color: "#f3f4f6", padding: "30px", fontFamily: "sans-serif" }, children: [
-    results.length === 0 ? /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { maxWidth: "600px", margin: "100px auto", textAlign: "center" }, children: [
-      /* @__PURE__ */ (0,jsx_runtime.jsx)("h1", { style: { fontSize: "32px", marginBottom: "10px", background: "linear-gradient(to right, #38bdf8, #a855f7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: "bold" }, children: "Adobe Stock Live-Scrape & Code Generator" }),
-      /* @__PURE__ */ (0,jsx_runtime.jsx)("p", { style: { color: "#9ca3af", marginBottom: "30px", fontSize: "14px" }, children: "Mata-matai kompetitor teratas di USA secara real-time dan edit langsung kodenya sebelum dirender di Cloud." }),
-      /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { backgroundColor: "#161f32", padding: "20px", borderRadius: "16px", border: "1px solid #1e293b" }, children: [
-        /* @__PURE__ */ (0,jsx_runtime.jsx)(
-          "textarea",
-          {
-            style: { width: "100%", backgroundColor: "transparent", border: "none", outline: "none", color: "white", fontSize: "16px", resize: "none" },
-            placeholder: "Masukkan kata kunci... (Contoh: Futuristic Digital Cyber Background)",
-            rows: 3,
-            value: keyword,
-            onChange: (e) => setKeyword(e.target.value)
-          }
-        ),
-        /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { textAlign: "right", marginTop: "15px", borderTop: "1px solid #1e293b", paddingTop: "10px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
-          "button",
-          {
-            onClick: handleSearch,
-            disabled: loading,
-            style: { backgroundColor: "#38bdf8", color: "#0b0f19", padding: "10px 24px", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", opacity: loading ? 0.5 : 1 },
-            children: loading ? "Menyisir Data & Meracik Kode..." : "Cari Ide & Optimasi ATM"
-          }
-        ) })
-      ] })
-    ] }) : /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { width: "100%", margin: "0 auto" }, children: [
-      /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: () => setResults([]), style: { background: "none", border: "none", color: "#38bdf8", cursor: "pointer", marginBottom: "20px", fontWeight: "bold" }, children: "\u2190 Cari Kata Kunci Lain" }),
-      /* @__PURE__ */ (0,jsx_runtime.jsxs)("h2", { style: { fontSize: "20px", marginBottom: "20px" }, children: [
-        "Pusat Kendali Hasil Analisis Kompetitor & AI Code: ",
-        /* @__PURE__ */ (0,jsx_runtime.jsxs)("span", { style: { color: "#38bdf8" }, children: [
-          '"',
-          keyword,
-          '"'
-        ] })
-      ] }),
-      /* @__PURE__ */ (0,jsx_runtime.jsxs)("table", { style: { width: "100%", borderCollapse: "collapse", backgroundColor: "#111827", borderRadius: "12px", overflow: "hidden", fontSize: "13px", border: "1px solid #1e293b" }, children: [
-        /* @__PURE__ */ (0,jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { backgroundColor: "#1f2937", color: "#e5e7eb", textAlign: "left" }, children: [
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "40px" }, children: "No" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "220px" }, children: "Deskripsi Video (Bisa Diedit)" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "200px" }, children: "Rekomendasi Judul (Bisa Diedit)" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "230px" }, children: "Keywords (Tagging)" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "110px" }, children: "Kategori / Durasi" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "250px" }, children: "Upload HTML" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "150px" }, children: "Aksi" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "140px" }, children: "Status" })
-        ] }) }),
-        /* @__PURE__ */ (0,jsx_runtime.jsx)("tbody", { children: results.map((item, index) => /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid #1e293b", verticalAlign: "top" }, children: [
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "12px", color: "#9ca3af" }, children: index + 1 }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "textarea",
-              {
-                style: { width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "12px", resize: "vertical" },
-                rows: 4,
-                value: item.deskripsi,
-                onChange: (e) => handleInputChange(index, "deskripsi", e.target.value, false)
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: () => copyToClipboard(item.deskripsi), style: { background: "none", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "11px", marginTop: "5px", padding: 0 }, children: "\u{1F4CB} Salin" })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "input",
-              {
-                type: "text",
-                style: { width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "12px" },
-                value: item.judul,
-                onChange: (e) => handleInputChange(index, "judul", e.target.value, false)
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: () => copyToClipboard(item.judul), style: { background: "none", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "11px", marginTop: "5px", padding: 0 }, children: "\u{1F4CB} Salin" })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "textarea",
-              {
-                style: { width: "100%", backgroundColor: "#1f2937", color: "#9ca3af", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "11px", resize: "vertical" },
-                rows: 4,
-                value: item.keywords,
-                onChange: (e) => handleInputChange(index, "keywords", e.target.value, false)
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: () => copyToClipboard(item.keywords), style: { background: "none", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "11px", marginTop: "5px", padding: 0 }, children: "\u{1F4CB} Salin Semua" })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { backgroundColor: "#1e1b4b", color: "#818cf8", padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", textAlign: "center" }, children: item.kategori }),
-            /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { fontSize: "11px", color: "#9ca3af" }, children: [
-              "Frames:",
-              /* @__PURE__ */ (0,jsx_runtime.jsx)(
-                "input",
-                {
-                  type: "number",
-                  style: { width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "4px", marginTop: "2px" },
-                  value: item.durationInFrames,
-                  onChange: (e) => handleInputChange(index, "durationInFrames", Number(e.target.value), false)
-                }
-              )
-            ] })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "input",
-              {
-                type: "file",
-                accept: ".html",
-                style: { display: "none" },
-                id: `upload-html-${item.id}`,
-                onChange: (e) => {
-                  const files = e.target.files;
-                  if (files && files.length > 0) {
-                    handleHtmlUpload(index, files[0], false);
-                  }
-                }
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "label",
-              {
-                htmlFor: `upload-html-${item.id}`,
-                style: {
-                  backgroundColor: item.htmlPreview ? "rgba(16, 185, 129, 0.15)" : "rgba(56, 189, 248, 0.1)",
-                  color: item.htmlPreview ? "#10b981" : "#38bdf8",
-                  border: item.htmlPreview ? "1px solid #10b981" : "1px solid rgba(56, 189, 248, 0.4)",
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  display: "inline-block",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  textAlign: "center",
-                  transition: "all 0.2s"
-                },
-                children: item.htmlPreview ? "\u2713 HTML Loaded" : "\u{1F4C2} Upload HTML"
-              }
-            ),
-            item.htmlPreview && /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { fontSize: "11px", color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
-              "Size: ",
-              item.htmlPreview.length,
-              " chars"
-            ] })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px", display: "flex", flexDirection: "column", gap: "6px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => handleGenerate(index, false),
-                disabled: !item.htmlPreview || item.statusConvertTsx === "processing-tsx" || item.statusConvertTsx === "processing-preview",
-                style: {
-                  backgroundColor: !item.htmlPreview ? "#374151" : item.statusConvertTsx === "success" ? "#10b981" : "#38bdf8",
-                  color: !item.htmlPreview ? "#9ca3af" : "#0b0f19",
-                  padding: "6px 10px",
-                  borderRadius: "4px",
-                  border: "none",
-                  cursor: !item.htmlPreview ? "not-allowed" : "pointer",
-                  fontSize: "11px",
-                  fontWeight: "bold",
-                  opacity: !item.htmlPreview ? 0.6 : 1
-                },
-                children: item.statusConvertTsx === "processing-tsx" ? "\u23F3 Converting..." : item.statusConvertTsx === "processing-preview" ? "\u23F3 Rendering..." : item.statusConvertTsx === "success" ? "\u{1F504} Regenerate" : "\u2728 Generate"
-              }
-            ),
-            (item.htmlPreview || item.previewUrl) && /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => setActivePreviewItem(item),
-                style: { backgroundColor: "#06b6d4", color: "white", padding: "6px 10px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" },
-                children: "\u{1F441}\uFE0F Lihat Preview"
-              }
-            ),
-            item.statusConvertTsx === "success" && /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => handleRender4K(index, false),
-                disabled: item.statusRender4k === "processing",
-                style: { backgroundColor: "#ef4444", color: "white", padding: "6px 10px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" },
-                children: item.statusRender4k === "processing" ? "\u23F3 Render 4K..." : "\u{1F680} Render 4K"
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => handleSaveItem(index, false),
-                disabled: item.statusSave === "processing",
-                style: {
-                  backgroundColor: item.statusSave === "success" ? "#047857" : "#4b5563",
-                  color: "white",
-                  padding: "6px 10px",
-                  borderRadius: "4px",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "11px",
-                  fontWeight: "bold"
-                },
-                children: item.statusSave === "processing" ? "\u23F3 Saving..." : item.statusSave === "success" ? "\u2713 Tersimpan" : "\u{1F4BE} Simpan"
-              }
-            )
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px", fontSize: "11px" }, children: [
-            item.statusHtmlPreview !== "success" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#6b7280" }, children: "Menunggu HTML" }),
-            item.statusHtmlPreview === "success" && item.statusConvertTsx !== "success" && item.statusConvertTsx !== "processing-tsx" && item.statusConvertTsx !== "processing-preview" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#38bdf8" }, children: "HTML Siap, Tekan Generate" }),
-            item.statusConvertTsx === "processing-tsx" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#f59e0b", fontWeight: "bold" }, children: "\u23F3 Convert HTML -> TSX..." }),
-            item.statusConvertTsx === "processing-preview" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#f59e0b", fontWeight: "bold" }, children: "\u23F3 Render Preview MP4..." }),
-            item.statusConvertTsx === "success" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#34d399", fontWeight: "bold" }, children: "\u2705 Preview Ready" }),
-            item.statusConvertTsx === "failed" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#ef4444" }, children: "\u274C Gagal Proses" }),
-            item.statusRender4k === "processing" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#f59e0b", fontWeight: "bold" }, children: "\u23F3 Rendering 4K ProRes..." }),
-            item.statusRender4k === "success" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#34d399", fontWeight: "bold" }, children: "\u2705 4K Rendered" }),
-            item.statusRender4k === "failed" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#ef4444" }, children: "\u274C Gagal Render 4K" }),
-            item.previewUrl && /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { marginTop: "6px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)("a", { href: `http://localhost:5000${item.previewUrl}`, target: "_blank", rel: "noopener noreferrer", style: { color: "#38bdf8", textDecoration: "underline", fontSize: "11px", fontWeight: "bold" }, children: "\u{1F4E5} Download Preview" }) })
-          ] })
-        ] }, item.id)) })
+  return /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { minHeight: "100vh", backgroundColor: "#0b0f19", color: "#f3f4f6", padding: "30px", fontFamily: "sans-serif" }, children: results.length === 0 ? /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { maxWidth: "600px", margin: "100px auto", textAlign: "center" }, children: [
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("h1", { style: { fontSize: "32px", marginBottom: "10px", background: "linear-gradient(to right, #38bdf8, #a855f7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: "bold" }, children: "Adobe Stock Live-Scrape & Code Generator" }),
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("p", { style: { color: "#9ca3af", marginBottom: "30px", fontSize: "14px" }, children: "Mata-matai kompetitor teratas di USA secara real-time dan edit langsung kodenya sebelum dirender di Cloud." }),
+    /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { backgroundColor: "#161f32", padding: "20px", borderRadius: "16px", border: "1px solid #1e293b" }, children: [
+      /* @__PURE__ */ (0,jsx_runtime.jsx)(
+        "textarea",
+        {
+          style: { width: "100%", backgroundColor: "transparent", border: "none", outline: "none", color: "white", fontSize: "16px", resize: "none" },
+          placeholder: "Masukkan kata kunci... (Contoh: Futuristic Digital Cyber Background)",
+          rows: 3,
+          value: keyword,
+          onChange: (e) => setKeyword(e.target.value)
+        }
+      ),
+      /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { textAlign: "right", marginTop: "15px", borderTop: "1px solid #1e293b", paddingTop: "10px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+        "button",
+        {
+          onClick: handleSearch,
+          disabled: loading,
+          style: { backgroundColor: "#38bdf8", color: "#0b0f19", padding: "10px 24px", borderRadius: "8px", border: "none", fontWeight: "bold", cursor: "pointer", opacity: loading ? 0.5 : 1 },
+          children: loading ? "Menyisir Data & Meracik Kode..." : "Cari Ide & Optimasi ATM"
+        }
+      ) })
+    ] })
+  ] }) : /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { width: "100%", margin: "0 auto" }, children: [
+    /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: () => setResults([]), style: { background: "none", border: "none", color: "#38bdf8", cursor: "pointer", marginBottom: "20px", fontWeight: "bold" }, children: "\u2190 Cari Kata Kunci Lain" }),
+    /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { display: "flex", gap: "12px", marginBottom: "10px" }, children: [
+      /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: handleRefresh, disabled: loading, style: { backgroundColor: "#2563eb", color: "#f3f4f6", padding: "6px 12px", borderRadius: "6px", border: "none", cursor: loading ? "not-allowed" : "pointer" }, children: loading ? "Menyegarkan..." : "Refresh Data" }),
+      /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: async () => {
+        try {
+          const res = await lib_axios.get("http://localhost:5000/api/export-keywords", { responseType: "blob" });
+          const url = window.URL.createObjectURL(new Blob([res.data]));
+          const link = document.createElement("a");
+          link.href = url;
+          link.setAttribute("download", "keywords.csv");
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(url);
+        } catch (e) {
+          console.error("Export CSV gagal", e);
+        }
+      }, style: { backgroundColor: "#16a34a", color: "#f3f4f6", padding: "6px 12px", borderRadius: "6px", border: "none", cursor: "pointer" }, children: "Export CSV" })
+    ] }),
+    /* @__PURE__ */ (0,jsx_runtime.jsxs)("h2", { style: { fontSize: "20px", marginBottom: "20px" }, children: [
+      "Pusat Kendali Hasil Analisis Kompetitor & AI Code: ",
+      /* @__PURE__ */ (0,jsx_runtime.jsxs)("span", { style: { color: "#38bdf8" }, children: [
+        '"',
+        keyword,
+        '"'
       ] })
     ] }),
-    /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { marginTop: "40px", borderTop: "1px solid rgba(56, 189, 248, 0.2)", paddingTop: "30px" }, children: [
-      /* @__PURE__ */ (0,jsx_runtime.jsx)("h2", { style: { fontSize: "24px", marginBottom: "20px", background: "linear-gradient(to right, #10b981, #38bdf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontWeight: "bold" }, children: "\u{1F4C2} Saved Compositions & Rendered Videos" }),
-      savedItems.length === 0 ? /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { backgroundColor: "#161f32", padding: "20px", borderRadius: "12px", textAlign: "center", color: "#9ca3af", border: "1px solid #1e293b" }, children: 'Belum ada item yang disimpan. Jalankan generator atau upload HTML, lalu klik "Simpan" untuk memantau progress rendering 4K Anda di sini.' }) : /* @__PURE__ */ (0,jsx_runtime.jsxs)("table", { style: { width: "100%", borderCollapse: "collapse", backgroundColor: "#111827", borderRadius: "12px", overflow: "hidden", fontSize: "13px", border: "1px solid #1e293b" }, children: [
-        /* @__PURE__ */ (0,jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { backgroundColor: "#1f2937", color: "#e5e7eb", textAlign: "left" }, children: [
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "40px" }, children: "No" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "220px" }, children: "Deskripsi" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "200px" }, children: "Judul" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "200px" }, children: "Keywords" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "120px" }, children: "Kategori / Durasi" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "220px" }, children: "HTML File" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "180px" }, children: "Aksi" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "120px" }, children: "Status" })
-        ] }) }),
-        /* @__PURE__ */ (0,jsx_runtime.jsx)("tbody", { children: savedItems.map((item, index) => /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid #1e293b", verticalAlign: "top" }, children: [
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "12px", color: "#9ca3af" }, children: index + 1 }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "12px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+    /* @__PURE__ */ (0,jsx_runtime.jsxs)("table", { style: { width: "100%", borderCollapse: "collapse", backgroundColor: "#111827", borderRadius: "12px", overflow: "hidden", fontSize: "13px", border: "1px solid #1e293b" }, children: [
+      /* @__PURE__ */ (0,jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { backgroundColor: "#1f2937", color: "#e5e7eb", textAlign: "left" }, children: [
+        /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "40px" }, children: "No" }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "220px" }, children: "Deskripsi Video (Bisa Diedit)" }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "200px" }, children: "Rekomendasi Judul (Bisa Diedit)" }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "230px" }, children: "Keywords (Tagging)" }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "110px" }, children: "Kategori / Durasi" }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "250px" }, children: "Kode Visual `.tsx` AI (Bisa Diedit)" }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "90px" }, children: "Aksi" }),
+        /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "12px", width: "140px" }, children: "Cloud Status" })
+      ] }) }),
+      /* @__PURE__ */ (0,jsx_runtime.jsx)("tbody", { children: results.map((item, index) => /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid #1e293b", verticalAlign: "top" }, children: [
+        /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "12px", color: "#9ca3af" }, children: index + 1 }),
+        /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
             "textarea",
             {
-              style: { width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "12px" },
-              rows: 3,
+              style: { width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "12px", resize: "vertical" },
+              rows: 4,
               value: item.deskripsi,
-              onChange: (e) => handleInputChange(index, "deskripsi", e.target.value, true)
+              onChange: (e) => handleInputChange(index, "deskripsi", e.target.value)
             }
-          ) }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "12px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          ),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: () => copyToClipboard(item.deskripsi), style: { background: "none", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "11px", marginTop: "5px", padding: 0 }, children: "\u{1F4CB} Salin Deskripsi" })
+        ] }),
+        /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
             "input",
             {
               type: "text",
               style: { width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "12px" },
               value: item.judul,
-              onChange: (e) => handleInputChange(index, "judul", e.target.value, true)
+              onChange: (e) => handleInputChange(index, "judul", e.target.value)
             }
-          ) }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "12px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
+          ),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: () => copyToClipboard(item.judul), style: { background: "none", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "11px", marginTop: "5px", padding: 0 }, children: "\u{1F4CB} Salin Judul" })
+        ] }),
+        /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
             "textarea",
             {
-              style: { width: "100%", backgroundColor: "#1f2937", color: "#9ca3af", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "11px" },
-              rows: 3,
+              style: { width: "100%", backgroundColor: "#1f2937", color: "#9ca3af", border: "1px solid #374151", borderRadius: "4px", padding: "6px", fontSize: "11px", resize: "vertical" },
+              rows: 4,
               value: item.keywords,
-              onChange: (e) => handleInputChange(index, "keywords", e.target.value, true)
+              onChange: (e) => handleInputChange(index, "keywords", e.target.value)
             }
-          ) }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { backgroundColor: "#065f46", color: "#a7f3d0", padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold" }, children: item.kategori }),
-            /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { fontSize: "11px", color: "#9ca3af", marginTop: "8px" }, children: [
-              "Frames:",
-              /* @__PURE__ */ (0,jsx_runtime.jsx)(
-                "input",
-                {
-                  type: "number",
-                  style: { width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "4px", marginTop: "2px" },
-                  value: item.durationInFrames,
-                  onChange: (e) => handleInputChange(index, "durationInFrames", Number(e.target.value), true)
-                }
-              )
-            ] })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
+          ),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: () => copyToClipboard(item.keywords), style: { background: "none", border: "none", color: "#38bdf8", cursor: "pointer", fontSize: "11px", marginTop: "5px", padding: 0 }, children: "\u{1F4CB} Salin Semua Tag" })
+        ] }),
+        /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }, children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { backgroundColor: "#1e1b4b", color: "#818cf8", padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: "bold", textAlign: "center" }, children: item.kategori }),
+          /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { fontSize: "11px", color: "#9ca3af" }, children: [
+            "Frames:",
             /* @__PURE__ */ (0,jsx_runtime.jsx)(
               "input",
               {
-                type: "file",
-                accept: ".html",
-                style: { display: "none" },
-                id: `upload-html-saved-${item.id}`,
-                onChange: (e) => {
-                  const files = e.target.files;
-                  if (files && files.length > 0) {
-                    handleHtmlUpload(index, files[0], true);
-                  }
-                }
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "label",
-              {
-                htmlFor: `upload-html-saved-${item.id}`,
-                style: {
-                  backgroundColor: item.htmlPreview ? "rgba(16, 185, 129, 0.15)" : "rgba(56, 189, 248, 0.1)",
-                  color: item.htmlPreview ? "#10b981" : "#38bdf8",
-                  border: item.htmlPreview ? "1px solid #10b981" : "1px solid rgba(56, 189, 248, 0.4)",
-                  padding: "6px 10px",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  display: "inline-block",
-                  fontSize: "11px",
-                  fontWeight: "bold"
-                },
-                children: item.htmlPreview ? "\u2713 HTML Loaded" : "\u{1F4C2} Upload HTML"
-              }
-            ),
-            item.previewUrl && /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { marginTop: "10px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)("video", { src: item.previewUrl, style: { width: "120px", borderRadius: "4px" }, muted: true, playsInline: true }) })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px", display: "flex", flexDirection: "column", gap: "6px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => handleGenerate(index, true),
-                disabled: !item.htmlPreview || item.statusConvertTsx === "processing-tsx" || item.statusConvertTsx === "processing-preview",
-                style: { backgroundColor: "#38bdf8", color: "#0b0f19", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" },
-                children: item.statusConvertTsx === "processing-tsx" ? "\u23F3 Convert..." : item.statusConvertTsx === "processing-preview" ? "\u23F3 Rendering..." : "\u2728 Generate Preview"
-              }
-            ),
-            (item.htmlPreview || item.previewUrl) && /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => setActivePreviewItem(item),
-                style: { backgroundColor: "#06b6d4", color: "white", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" },
-                children: "\u{1F441}\uFE0F Preview"
-              }
-            ),
-            item.statusConvertTsx === "success" && /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => handleRender4K(index, true),
-                disabled: item.statusRender4k === "processing",
-                style: { backgroundColor: "#ef4444", color: "white", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" },
-                children: item.statusRender4k === "processing" ? "\u23F3 Render 4K..." : "\u{1F680} Render 4K"
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => handleSaveItem(index, true),
-                style: { backgroundColor: "#047857", color: "white", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" },
-                children: "\u{1F4BE} Simpan Perubahan"
-              }
-            ),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => handleDeleteItem(item.id),
-                style: { backgroundColor: "#ef4444", color: "white", padding: "5px 8px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "11px", fontWeight: "bold" },
-                children: "\u{1F5D1}\uFE0F Hapus"
+                type: "number",
+                style: { width: "100%", backgroundColor: "#1f2937", color: "white", border: "1px solid #374151", borderRadius: "4px", padding: "4px", marginTop: "2px" },
+                value: item.durationInFrames,
+                onChange: (e) => handleInputChange(index, "durationInFrames", Number(e.target.value))
               }
             )
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px", fontSize: "11px" }, children: [
-            item.statusConvertTsx === "processing-tsx" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#f59e0b" }, children: "Converting..." }),
-            item.statusConvertTsx === "processing-preview" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#f59e0b" }, children: "Rendering..." }),
-            item.statusConvertTsx === "success" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#34d399" }, children: "\u2705 Ready" }),
-            item.statusRender4k === "processing" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#f59e0b" }, children: "Rendering 4K..." }),
-            item.statusRender4k === "success" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#34d399" }, children: "\u2705 4K Done" }),
-            item.outputPath4k && /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { fontSize: "10px", color: "#9ca3af", marginTop: "4px" }, children: [
-              "File: ",
-              item.outputPath4k.split(/[\\/]/).pop()
-            ] }),
-            item.previewUrl && /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { marginTop: "6px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)("a", { href: `http://localhost:5000${item.previewUrl}`, target: "_blank", rel: "noopener noreferrer", style: { color: "#38bdf8", textDecoration: "underline", fontSize: "11px", fontWeight: "bold" }, children: "\u{1F4E5} Download Preview" }) })
           ] })
-        ] }, item.id)) })
-      ] })
-    ] }),
-    /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: {
-      position: "fixed",
-      top: 0,
-      right: showGuide ? 0 : "-480px",
-      width: "460px",
-      height: "100vh",
-      backgroundColor: "rgba(11, 15, 25, 0.97)",
-      backdropFilter: "blur(20px)",
-      borderLeft: "1px solid rgba(56, 189, 248, 0.25)",
-      boxShadow: showGuide ? "-15px 0 40px rgba(0, 0, 0, 0.8)" : "none",
-      transition: "right 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-      zIndex: 1e3,
-      display: "flex",
-      flexDirection: "column",
-      color: "#f3f4f6"
-    }, children: [
-      /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { padding: "20px 24px 0", borderBottom: "1px solid rgba(56, 189, 248, 0.15)" }, children: [
-        /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }, children: [
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("h3", { style: { fontSize: "16px", color: "#f3f4f6", fontWeight: "bold" }, children: "Stock Video Tools" }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("button", { onClick: () => setShowGuide(false), style: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: "22px", lineHeight: 1 }, children: "\xD7" })
         ] }),
-        /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { display: "flex", gap: "4px", marginBottom: "0" }, children: [
+        /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
+          /* @__PURE__ */ (0,jsx_runtime.jsx)(
+            "textarea",
+            {
+              style: { width: "100%", fontFamily: "monospace", fontSize: "11px", color: "#34d399", backgroundColor: "#062016", border: "1px solid #10b981", borderRadius: "4px", padding: "6px", resize: "vertical" },
+              rows: 6,
+              value: item.promptCode,
+              onChange: (e) => handleInputChange(index, "promptCode", e.target.value)
+            }
+          ),
+          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { fontSize: "10px", color: "#9ca3af", marginTop: "4px" }, children: "\u{1F4A1} Anda bisa merombak logika CSS/React AI di atas langsung sebelum merender" })
+        ] }),
+        /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px" }, children: [
           /* @__PURE__ */ (0,jsx_runtime.jsx)(
             "button",
             {
-              onClick: () => setSidebarTab("keywords"),
-              style: {
-                flex: 1,
-                padding: "8px 12px",
-                border: "none",
-                borderRadius: "8px 8px 0 0",
-                fontSize: "12px",
-                fontWeight: "bold",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                backgroundColor: sidebarTab === "keywords" ? "rgba(16, 185, 129, 0.2)" : "transparent",
-                color: sidebarTab === "keywords" ? "#10b981" : "#6b7280",
-                borderBottom: sidebarTab === "keywords" ? "2px solid #10b981" : "2px solid transparent"
-              },
-              children: "\u{1F4CB} Menu Keyword"
+              onClick: () => handleCreatePreview(item.id, index),
+              disabled: item.statusPreview === "processing",
+              style: { backgroundColor: item.statusPreview === "success" ? "#4b5563" : "#38bdf8", color: item.statusPreview === "success" ? "white" : "#0b0f19", padding: "8px 12px", borderRadius: "4px", border: "none", cursor: item.statusPreview === "processing" ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: "bold", width: "100%" },
+              children: item.statusPreview === "processing" ? "Deploy..." : item.statusPreview === "success" ? "Cetak Lagi" : "Generate"
             }
           ),
           /* @__PURE__ */ (0,jsx_runtime.jsx)(
             "button",
             {
-              onClick: () => setSidebarTab("guide"),
-              style: {
-                flex: 1,
-                padding: "8px 12px",
-                border: "none",
-                borderRadius: "8px 8px 0 0",
-                fontSize: "12px",
-                fontWeight: "bold",
-                cursor: "pointer",
-                transition: "all 0.2s",
-                backgroundColor: sidebarTab === "guide" ? "rgba(56, 189, 248, 0.15)" : "transparent",
-                color: sidebarTab === "guide" ? "#38bdf8" : "#6b7280",
-                borderBottom: sidebarTab === "guide" ? "2px solid #38bdf8" : "2px solid transparent"
+              type: "button",
+              onClick: (e) => {
+                e.stopPropagation();
+                handleDelete(item.id, index);
               },
-              children: "\u{1F4D6} SEO Guide"
+              style: { marginTop: "8px", backgroundColor: "#ef4444", color: "#f3f4f6", padding: "6px 12px", borderRadius: "4px", border: "none", cursor: "pointer", fontSize: "12px", width: "100%" },
+              children: "Delete"
             }
           )
-        ] })
-      ] }),
-      /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { flex: 1, overflowY: "auto", padding: "20px 24px" }, children: [
-        sidebarTab === "keywords" && /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("p", { style: { fontSize: "12px", color: "#9ca3af", marginBottom: "14px", lineHeight: 1.5 }, children: [
-            "Klik badge keyword untuk menyalin satu keyword. Klik ",
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("strong", { style: { color: "#10b981" }, children: "Salin Semua" }),
-            " untuk menyalin seluruh daftar."
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { position: "relative", marginBottom: "16px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
-            "input",
-            {
-              type: "text",
-              placeholder: "\u{1F50D} Cari judul atau keyword...",
-              value: keywordSearch,
-              onChange: (e) => setKeywordSearch(e.target.value),
-              style: {
-                width: "100%",
-                backgroundColor: "#161f32",
-                border: "1px solid rgba(56, 189, 248, 0.3)",
-                borderRadius: "8px",
-                padding: "9px 12px",
-                color: "#f3f4f6",
-                fontSize: "12px",
-                outline: "none"
-              }
-            }
-          ) }),
-          savedItems.length === 0 ? /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { textAlign: "center", padding: "40px 20px", color: "#4b5563" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { fontSize: "32px", marginBottom: "10px" }, children: "\u{1F4ED}" }),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("p", { style: { fontSize: "13px" }, children: "Belum ada keyword tersimpan." }),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("p", { style: { fontSize: "11px", marginTop: "6px" }, children: 'Klik "Simpan" pada baris tabel untuk melihat keyword di sini.' })
-          ] }) : /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "18px" }, children: [
-            savedItems.filter(
-              (item) => keywordSearch === "" || item.judul.toLowerCase().includes(keywordSearch.toLowerCase()) || item.keywords.toLowerCase().includes(keywordSearch.toLowerCase())
-            ).map((item, index) => /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: {
-              backgroundColor: "rgba(17, 24, 39, 0.8)",
-              border: "1px solid rgba(255, 255, 255, 0.07)",
-              borderRadius: "10px",
-              padding: "14px"
-            }, children: [
-              /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "8px" }, children: [
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-                  /* @__PURE__ */ (0,jsx_runtime.jsxs)("span", { style: { fontSize: "10px", color: "#6b7280", display: "block", marginBottom: "2px" }, children: [
-                    "#",
-                    index + 1,
-                    " \xB7 ",
-                    item.kategori
-                  ] }),
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("strong", { style: { fontSize: "12px", color: "#e5e7eb", display: "block", lineHeight: 1.3 }, title: item.judul, children: item.judul })
-                ] }),
-                /* @__PURE__ */ (0,jsx_runtime.jsx)(
-                  "button",
-                  {
-                    onClick: () => copyToClipboard(item.keywords),
-                    style: {
-                      backgroundColor: "rgba(16, 185, 129, 0.15)",
-                      border: "1px solid rgba(16, 185, 129, 0.4)",
-                      color: "#10b981",
-                      padding: "4px 10px",
-                      borderRadius: "6px",
-                      fontSize: "10px",
-                      fontWeight: "bold",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                      flexShrink: 0
-                    },
-                    children: "\u{1F4CB} Salin Semua"
-                  }
-                )
-              ] }),
-              /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: "5px" }, children: item.keywords.split(",").map((tag, i) => tag.trim() && /* @__PURE__ */ (0,jsx_runtime.jsxs)(
-                "button",
-                {
-                  onClick: () => copySingleBadge(tag),
-                  title: `Klik untuk salin: ${tag.trim()}`,
-                  style: {
-                    backgroundColor: copiedBadge === tag.trim() ? "rgba(16, 185, 129, 0.35)" : "rgba(56, 189, 248, 0.08)",
-                    border: copiedBadge === tag.trim() ? "1px solid rgba(16, 185, 129, 0.7)" : "1px solid rgba(56, 189, 248, 0.2)",
-                    color: copiedBadge === tag.trim() ? "#10b981" : "#93c5fd",
-                    padding: "3px 8px",
-                    borderRadius: "20px",
-                    fontSize: "10px",
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                    fontWeight: copiedBadge === tag.trim() ? "bold" : "normal"
-                  },
-                  children: [
-                    copiedBadge === tag.trim() ? "\u2713 " : "",
-                    tag.trim()
-                  ]
-                },
-                i
-              )) })
-            ] }, item.id)),
-            savedItems.filter(
-              (item) => keywordSearch === "" || item.judul.toLowerCase().includes(keywordSearch.toLowerCase()) || item.keywords.toLowerCase().includes(keywordSearch.toLowerCase())
-            ).length === 0 && /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { textAlign: "center", padding: "30px", color: "#4b5563" }, children: /* @__PURE__ */ (0,jsx_runtime.jsxs)("p", { style: { fontSize: "13px" }, children: [
-              'Tidak ada hasil untuk "',
-              keywordSearch,
-              '"'
-            ] }) })
-          ] })
         ] }),
-        sidebarTab === "guide" && /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0,jsx_runtime.jsx)("p", { style: { fontSize: "13px", color: "#9ca3af", marginBottom: "18px", lineHeight: "1.5" }, children: "Pembeli di Adobe Stock mencari hasil visual, bukan istilah teknis kode. Konversikan istilah kode dan gunakan 3 Pilar Keyword." }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { backgroundColor: "rgba(30, 41, 59, 0.5)", border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", padding: "15px", marginBottom: "16px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("h4", { style: { fontSize: "13px", color: "#a855f7", marginBottom: "10px", fontWeight: "bold" }, children: "\u{1F504} Code \u2192 Visual Translation" }),
-            /* @__PURE__ */ (0,jsx_runtime.jsxs)("table", { style: { width: "100%", fontSize: "11px", borderCollapse: "collapse" }, children: [
-              /* @__PURE__ */ (0,jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid rgba(255, 255, 255, 0.1)", color: "#9ca3af", textAlign: "left" }, children: [
-                /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "4px" }, children: "Istilah Kode" }),
-                /* @__PURE__ */ (0,jsx_runtime.jsx)("th", { style: { padding: "4px" }, children: "Istilah Visual Stock" })
-              ] }) }),
-              /* @__PURE__ */ (0,jsx_runtime.jsxs)("tbody", { children: [
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }, children: [
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#f87171" }, children: "Keyframes, Easing" }),
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#34d399", fontWeight: "bold" }, children: "smooth animation, fluid movement" })
-                ] }),
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }, children: [
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#f87171" }, children: "UI Components" }),
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#34d399", fontWeight: "bold" }, children: "web overlay, app interface template" })
-                ] }),
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }, children: [
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#f87171" }, children: "SVG Animation" }),
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#34d399", fontWeight: "bold" }, children: "shape morphing, vector motion" })
-                ] }),
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }, children: [
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#f87171" }, children: "Canvas Particle" }),
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#34d399", fontWeight: "bold" }, children: "abstract particles, tech overlay" })
-                ] }),
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }, children: [
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#f87171" }, children: "Looping Animation" }),
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#34d399", fontWeight: "bold" }, children: "seamless loop, infinite loop" })
-                ] }),
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { style: { borderBottom: "1px solid rgba(255, 255, 255, 0.05)" }, children: [
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#f87171" }, children: "Math/Data logic" }),
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#34d399", fontWeight: "bold" }, children: "data visualization, animated infographics" })
-                ] }),
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("tr", { children: [
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#f87171" }, children: "Web Interaction" }),
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("td", { style: { padding: "6px 4px", color: "#34d399", fontWeight: "bold" }, children: "interactive design concept, motion template" })
-                ] })
-              ] })
-            ] })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { backgroundColor: "rgba(30, 41, 59, 0.5)", border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "10px", padding: "15px" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("h4", { style: { fontSize: "13px", color: "#a855f7", marginBottom: "12px", fontWeight: "bold" }, children: "\u{1F9F1} 3-Pillar Keyword Strategy" }),
-            /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "12px", fontSize: "12px" }, children: [
-              /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { padding: "10px", backgroundColor: "rgba(56, 189, 248, 0.08)", borderRadius: "8px", borderLeft: "3px solid #38bdf8" }, children: [
-                /* @__PURE__ */ (0,jsx_runtime.jsx)("strong", { style: { color: "#38bdf8" }, children: "Pilar 1: What (Isi/Aksi)" }),
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("p", { style: { color: "#9ca3af", fontSize: "11px", marginTop: "4px" }, children: [
-                  "Objek utama. Contoh: ",
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("code", { style: { color: "#34d399" }, children: "mouse click, subscribe button, loading bar" })
-                ] })
-              ] }),
-              /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { padding: "10px", backgroundColor: "rgba(168, 85, 247, 0.08)", borderRadius: "8px", borderLeft: "3px solid #a855f7" }, children: [
-                /* @__PURE__ */ (0,jsx_runtime.jsx)("strong", { style: { color: "#a855f7" }, children: "Pilar 2: Visual Style & Format" }),
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("p", { style: { color: "#9ca3af", fontSize: "11px", marginTop: "4px" }, children: [
-                  "Estetika. Contoh: ",
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("code", { style: { color: "#34d399" }, children: "minimalist, flat design, alpha channel, 4k" })
-                ] })
-              ] }),
-              /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { padding: "10px", backgroundColor: "rgba(16, 185, 129, 0.08)", borderRadius: "8px", borderLeft: "3px solid #10b981" }, children: [
-                /* @__PURE__ */ (0,jsx_runtime.jsx)("strong", { style: { color: "#10b981" }, children: "Pilar 3: Conceptual/Context" }),
-                /* @__PURE__ */ (0,jsx_runtime.jsxs)("p", { style: { color: "#9ca3af", fontSize: "11px", marginTop: "4px" }, children: [
-                  "Mengapa dibeli. Contoh: ",
-                  /* @__PURE__ */ (0,jsx_runtime.jsx)("code", { style: { color: "#34d399" }, children: "website promo, social media asset" })
-                ] })
-              ] }),
-              /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { padding: "8px 12px", backgroundColor: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "8px", fontSize: "11px" }, children: [
-                "\u2B50 ",
-                /* @__PURE__ */ (0,jsx_runtime.jsx)("strong", { children: "Pro-tip:" }),
-                " 7-10 keyword pertama paling menentukan ranking. Taruh ",
-                /* @__PURE__ */ (0,jsx_runtime.jsx)("code", { style: { color: "#38bdf8" }, children: "alpha channel" }),
-                " di awal jika video transparan."
-              ] })
-            ] })
-          ] })
+        /* @__PURE__ */ (0,jsx_runtime.jsxs)("td", { style: { padding: "12px", fontSize: "12px" }, children: [
+          item.statusPreview === "idle" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#6b7280" }, children: "Menunggu" }),
+          item.statusPreview === "processing" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#a855f7", fontWeight: "bold" }, children: "\u23F3 Injeksi & Cloud Render..." }),
+          item.statusPreview === "failed" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#ef4444" }, children: "\u274C Gagal Kirim" }),
+          item.statusPreview === "success" && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#34d399", fontWeight: "bold" }, children: "\u2705 Sukses! Cek Tab Actions GitHub" })
         ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { position: "fixed", top: "20px", right: "20px", zIndex: 999, display: "flex", gap: "8px" }, children: [
-      /* @__PURE__ */ (0,jsx_runtime.jsxs)(
-        "button",
-        {
-          onClick: () => openSidebar("keywords"),
-          style: {
-            backgroundColor: "rgba(16, 185, 129, 0.15)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid rgba(16, 185, 129, 0.5)",
-            color: "#10b981",
-            padding: "8px 16px",
-            borderRadius: "20px",
-            fontSize: "12px",
-            fontWeight: "bold",
-            cursor: "pointer",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 0.2s"
-          },
-          children: [
-            "\u{1F4CB} Menu Keyword ",
-            savedItems.length > 0 && /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { backgroundColor: "#10b981", color: "#000", borderRadius: "10px", padding: "0 6px", fontSize: "10px" }, children: savedItems.length })
-          ]
-        }
-      ),
-      /* @__PURE__ */ (0,jsx_runtime.jsx)(
-        "button",
-        {
-          onClick: () => openSidebar("guide"),
-          style: {
-            backgroundColor: "rgba(30, 41, 59, 0.75)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid rgba(56, 189, 248, 0.4)",
-            color: "#38bdf8",
-            padding: "8px 16px",
-            borderRadius: "20px",
-            fontSize: "12px",
-            fontWeight: "bold",
-            cursor: "pointer",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 0.2s"
-          },
-          children: "\u{1F4D6} SEO Guide"
-        }
-      )
-    ] }),
-    activePreviewItem !== null && /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      width: "100vw",
-      height: "100vh",
-      backgroundColor: "rgba(3, 7, 18, 0.85)",
-      backdropFilter: "blur(8px)",
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      zIndex: 2e3,
-      padding: "20px"
-    }, children: /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: {
-      width: "100%",
-      maxWidth: "1000px",
-      backgroundColor: "#0b0f19",
-      border: "1px solid rgba(56, 189, 248, 0.4)",
-      borderRadius: "16px",
-      boxShadow: "0 20px 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(56, 189, 248, 0.15)",
-      display: "flex",
-      flexDirection: "column",
-      maxHeight: "90vh",
-      overflow: "hidden"
-    }, children: [
-      /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "16px 24px",
-        borderBottom: "1px solid rgba(56, 189, 248, 0.2)",
-        backgroundColor: "#111827"
-      }, children: [
-        /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("h3", { style: { fontSize: "16px", color: "white", fontWeight: "bold" }, children: [
-            "\u{1F4FA} Live Preview: ",
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { color: "#38bdf8" }, children: activePreviewItem.judul })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("p", { style: { fontSize: "11px", color: "#9ca3af", marginTop: "2px" }, children: [
-            "ID: ",
-            activePreviewItem.id
-          ] })
-        ] }),
-        /* @__PURE__ */ (0,jsx_runtime.jsx)(
-          "button",
-          {
-            onClick: () => setActivePreviewItem(null),
-            style: {
-              background: "none",
-              border: "none",
-              color: "#9ca3af",
-              cursor: "pointer",
-              fontSize: "28px",
-              lineHeight: "1",
-              transition: "color 0.2s"
-            },
-            children: "\xD7"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { padding: "20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "15px", flex: 1 }, children: [
-        /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: {
-          backgroundColor: "#1e293b",
-          borderRadius: "8px",
-          overflow: "hidden",
-          border: "2px solid #1e293b",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-          aspectRatio: "16/9",
-          width: "100%",
-          maxHeight: "450px",
-          position: "relative"
-        }, children: activePreviewItem.previewUrl ? /* @__PURE__ */ (0,jsx_runtime.jsx)(
-          "video",
-          {
-            src: activePreviewItem.previewUrl,
-            controls: true,
-            autoPlay: true,
-            style: { width: "100%", height: "100%", objectFit: "contain" }
-          }
-        ) : /* @__PURE__ */ (0,jsx_runtime.jsx)(
-          "iframe",
-          {
-            srcDoc: activePreviewItem.htmlPreview,
-            style: { width: "100%", height: "100%", border: "none" },
-            title: `Preview ${activePreviewItem.id}`
-          }
-        ) }),
-        /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "10px" }, children: [
-          /* @__PURE__ */ (0,jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("span", { style: { fontSize: "12px", color: "#34d399", fontWeight: "bold" }, children: "\u{1F4BB} HTML Source Code:" }),
-            /* @__PURE__ */ (0,jsx_runtime.jsx)("div", { style: { display: "flex", gap: "8px" }, children: /* @__PURE__ */ (0,jsx_runtime.jsx)(
-              "button",
-              {
-                onClick: () => copyToClipboard(activePreviewItem.htmlPreview),
-                style: { backgroundColor: "rgba(56, 189, 248, 0.1)", border: "1px solid rgba(56, 189, 248, 0.3)", color: "#38bdf8", padding: "6px 12px", borderRadius: "6px", fontSize: "11px", fontWeight: "bold", cursor: "pointer" },
-                children: "\u{1F4CB} Salin HTML"
-              }
-            ) })
-          ] }),
-          /* @__PURE__ */ (0,jsx_runtime.jsx)(
-            "textarea",
-            {
-              readOnly: true,
-              style: {
-                width: "100%",
-                fontFamily: "monospace",
-                fontSize: "11px",
-                color: "#34d399",
-                backgroundColor: "#07130f",
-                border: "1px solid #10b981",
-                borderRadius: "6px",
-                padding: "10px",
-                resize: "vertical",
-                minHeight: "120px"
-              },
-              value: activePreviewItem.htmlPreview
-            }
-          )
-        ] })
-      ] })
-    ] }) })
-  ] });
+      ] }, item.id)) })
+    ] })
+  ] }) });
 };
 
 ;// ./src/Root.tsx

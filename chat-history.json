@@ -1,0 +1,205 @@
+[
+  {
+    "id": "session_1781176591007",
+    "title": "Halo tes",
+    "model": "gemini-3.5-flash",
+    "createdAt": "2026-06-11T11:16:31.007Z",
+    "updatedAt": "2026-06-11T11:16:41.193Z",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Halo tes",
+        "timestamp": "2026-06-11T11:16:36.039Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Halo! Tes berhasil didengar. Ada yang bisa saya bantu hari ini?",
+        "timestamp": "2026-06-11T11:16:41.192Z",
+        "model": "gemini-3.5-flash"
+      }
+    ]
+  },
+  {
+    "id": "session_1781164867780",
+    "title": "Jelaskan gambar ini dalam 1 kalimat.",
+    "model": "gemini-3.5-flash",
+    "createdAt": "2026-06-11T08:01:07.785Z",
+    "updatedAt": "2026-06-11T08:01:18.451Z",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Jelaskan gambar ini dalam 1 kalimat.",
+        "timestamp": "2026-06-11T08:01:08.087Z",
+        "imageUrl": "/chat-uploads/img_1781164868058.png"
+      },
+      {
+        "role": "assistant",
+        "content": "Gambar ini menampilkan antarmuka web platform \"Chat AI dengan Syntx\" bertema gelap, yang menunjukkan halaman utama untuk memulai percakapan baru atau memilih obrolan dari riwayat menggunakan model AI.",
+        "timestamp": "2026-06-11T08:01:18.450Z",
+        "model": "gemini-3.5-flash"
+      }
+    ]
+  },
+  {
+    "id": "session_1781164568849",
+    "title": "ini gambar apa",
+    "model": "gemini-3.5-flash",
+    "createdAt": "2026-06-11T07:56:08.851Z",
+    "updatedAt": "2026-06-11T07:57:32.675Z",
+    "messages": [
+      {
+        "role": "user",
+        "content": "ini gambar apa",
+        "timestamp": "2026-06-11T07:56:26.038Z",
+        "imageUrl": "/chat-uploads/img_1781164585999.png"
+      },
+      {
+        "role": "assistant",
+        "content": "Oops, something went wrong. Please try again later.",
+        "timestamp": "2026-06-11T07:56:34.699Z",
+        "model": "gemini-3.5-flash"
+      },
+      {
+        "role": "user",
+        "content": "ini gambar apa",
+        "timestamp": "2026-06-11T07:57:28.050Z",
+        "imageUrl": "/chat-uploads/img_1781164648035.png"
+      },
+      {
+        "role": "assistant",
+        "content": "Oops, something went wrong. Please try again later.",
+        "timestamp": "2026-06-11T07:57:32.674Z",
+        "model": "gemini-3.5-flash"
+      }
+    ]
+  },
+  {
+    "id": "session_1781159139347",
+    "title": "ini gambar apa?",
+    "model": "gemini-3.5-flash",
+    "createdAt": "2026-06-11T06:25:39.348Z",
+    "updatedAt": "2026-06-11T08:05:50.043Z",
+    "messages": [
+      {
+        "role": "user",
+        "content": "ini gambar apa?",
+        "timestamp": "2026-06-11T08:05:39.297Z",
+        "imageUrl": "/chat-uploads/img_1781165139263.png"
+      },
+      {
+        "role": "assistant",
+        "content": "Ini adalah ikon **gelembung percakapan** (*chat bubble* atau *speech bubble*) berwarna abu-abu dengan tiga titik di dalamnya. \n\nDalam aplikasi atau situs web, ikon ini biasanya digunakan untuk melambangkan:\n* **Fitur obrolan (chat)** atau pesan.\n* Kolom **komentar**.\n* Indikator bahwa seseorang sedang mengetik (*typing indicator*).\n* Layanan bantuan pelanggan (*customer support*).",
+        "timestamp": "2026-06-11T08:05:50.042Z",
+        "model": "gemini-3.5-flash"
+      }
+    ]
+  },
+  {
+    "id": "session_1781158923914",
+    "title": "Halo, kamu model versi berapa",
+    "model": "grok-3",
+    "createdAt": "2026-06-11T06:22:03.914Z",
+    "updatedAt": "2026-06-11T06:25:05.664Z",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Halo, kamu model versi berapa",
+        "timestamp": "2026-06-11T06:22:18.714Z"
+      },
+      {
+        "role": "user",
+        "content": "kamu versi berapa",
+        "timestamp": "2026-06-11T06:24:12.260Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Halo! Saya adalah Gemini, model kecerdasan buatan (AI) yang dikembangkan oleh Google. \n\nSaya tidak memiliki nomor versi spesifik yang statis (seperti aplikasi pada umumnya) karena sistem saya terus diperbarui dan ditingkatkan secara berkala oleh Google untuk memberikan hasil yang terbaik.\n\nAda yang bisa saya bantu hari ini?",
+        "timestamp": "2026-06-11T06:24:18.702Z",
+        "model": "gemini-3.5-flash"
+      },
+      {
+        "role": "user",
+        "content": "apakah kamu grok?",
+        "timestamp": "2026-06-11T06:24:54.808Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Tidak, saya bukan Grok. Saya adalah **Gemini**, model AI yang dikembangkan oleh Google. \n\nAda yang bisa saya bantu?",
+        "timestamp": "2026-06-11T06:25:05.663Z",
+        "model": "grok-3"
+      }
+    ]
+  },
+  {
+    "id": "session_1781158225053",
+    "title": "Buatkan kode HTML sederhana untuk tombol animasi glow dengan...",
+    "model": "gemini-3.5-flash",
+    "createdAt": "2026-06-11T06:10:25.053Z",
+    "updatedAt": "2026-06-11T07:48:19.179Z",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Buatkan kode HTML sederhana untuk tombol animasi glow dengan warna pink.",
+        "timestamp": "2026-06-11T06:15:00.018Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Tentu! Berikut adalah kode HTML dan CSS sederhana untuk membuat tombol dengan animasi *glow* (bercahaya) berwarna pink. \n\nAgar efek cahayanya (glow) terlihat sangat jelas, latar belakang halaman ini sengaja dibuat gelap (hitam/abu-abu gelap).\n\n```html\n<!DOCTYPE html>\n<html lang=\"id\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Tombol Glow Pink</title>\n    <style>\n        /* Mengatur halaman agar tombol berada di tengah */\n        body {\n            margin: 0;\n            padding: 0;\n            display: flex;\n            justify-content: center;\n            align-items: center;\n            height: 100vh;\n            background-color: #121212; /* Latar belakang gelap agar efek glow terlihat */\n            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n        }\n\n        /* Desain Tombol */\n        .glow-btn {\n            padding: 15px 35px;\n            font-size: 18px;\n            font-weight: bold;\n            color: #ffffff;\n            background-color: #ff007f; /* Warna pink dasar */\n            border: none;\n            border-radius: 50px; /* Membuat tombol lonjong/bulat di ujung */\n            cursor: pointer;\n            outline: none;\n            transition: all 0.3s ease-in-out;\n            text-transform: uppercase;\n            letter-spacing: 1px;\n            \n            /* Animasi glow otomatis */\n            animation: glowing 2s infinite;\n        }\n\n        /* Efek saat tombol diarahkan oleh kursor (Hover) */\n        .glow-btn:hover {\n            background-color: #ff3399;\n            transform: scale(1.05); /* Memperbesar sedikit tombol */\n        }\n\n        /* Efek saat tombol diklik (Active) */\n        .glow-btn:active {\n            transform: scale(0.98);\n        }\n\n        /* Animasi Glow Berdenyut (Pulse) */\n        @keyframes glowing {\n            0% {\n                box-shadow: 0 0 5px #ff007f, 0 0 10px #ff007f;\n            }\n            50% {\n                /* Efek glow membesar */\n                box-shadow: 0 0 20px #ff007f, 0 0 30px #ff3399, 0 0 40px #ff007f;\n            }\n            100% {\n                box-shadow: 0 0 5px #ff007f, 0 0 10px #ff007f;\n            }\n        }\n    </style>\n</head>\n<body>\n\n    <!-- Tombol -->\n    <button class=\"glow-btn\">Klik Di Sini</button>\n\n</body>\n</html>\n```\n\n### Cara Menggunakannya:\n1. Salin (copy) seluruh kode di atas.\n2. Tempelkan (paste) ke dalam aplikasi teks editor Anda (seperti Notepad, VS Code, atau Sublime Text).\n3. Simpan dengan nama berkas/file `index.html`.\n4. Buka file tersebut menggunakan browser (Chrome, Edge, Firefox, dll) untuk melihat hasilnya.\n\n### Fitur dari Kode ini:\n* **Efek Glow Berdenyut:** Menggunakan `@keyframes glowing` yang membuat cahaya pink di sekitar tombol membesar dan mengecil secara otomatis secara terus-menerus (*infinite*).\n* **Interaktif:** Saat kursor diarahkan ke tombol (*hover*), tombol akan sedikit membesar (`scale(1.05)`) untuk memberikan umpan balik visual yang menarik kepada pengguna.",
+        "timestamp": "2026-06-11T06:15:12.426Z",
+        "model": "gemini-3.5-flash"
+      },
+      {
+        "role": "user",
+        "content": "Tes Shortcut Enter",
+        "timestamp": "2026-06-11T07:47:59.159Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Tes shortcut Enter berhasil! 👍 Pesan Anda telah terkirim dengan baik. \n\nApakah ada yang ingin Anda tanyakan lagi, atau ada yang perlu disesuaikan dari kode HTML tombol *glow* pink sebelumnya? Saya siap membantu!",
+        "timestamp": "2026-06-11T07:48:19.178Z",
+        "model": "gemini-3.5-flash"
+      }
+    ]
+  },
+  {
+    "id": "session_1781155813558",
+    "title": "Halo! Siapa kamu dan apa yang bisa kamu bantu?",
+    "model": "gemini-3.5-flash",
+    "createdAt": "2026-06-11T05:30:13.558Z",
+    "updatedAt": "2026-06-11T05:40:50.482Z",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Halo! Siapa kamu dan apa yang bisa kamu bantu?",
+        "timestamp": "2026-06-11T05:31:14.802Z"
+      },
+      {
+        "role": "user",
+        "content": "Tes dengan model baru.",
+        "timestamp": "2026-06-11T05:33:05.969Z"
+      },
+      {
+        "role": "user",
+        "content": "Testing Gemini option.",
+        "timestamp": "2026-06-11T05:34:02.701Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Hello! It looks like your test with the Gemini option is working perfectly.\n\nI am a large language model trained by Google, acting as your AI assistant. I can help you with a wide variety of tasks, including:\n\n*   **Answering Questions:** Providing explanations, facts, and information on almost any topic.\n*   **Writing & Editing:** Drafting emails, essays, stories, code, or proofreading your existing text.\n*   **Brainstorming:** Generating creative ideas for projects, gifts, marketing, and more.\n*   **Translation:** Translating text between dozens of different languages (including Indonesian and English!).\n*   **Problem Solving:** Helping with math, coding bugs, logic puzzles, or planning.\n\nHow can I help you with your test today? Feel free to ask me anything!",
+        "timestamp": "2026-06-11T05:34:11.223Z",
+        "model": "gemini-3.5-flash"
+      },
+      {
+        "role": "user",
+        "content": "model apa kamu",
+        "timestamp": "2026-06-11T05:40:45.444Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Saya adalah **Gemini**, sebuah model bahasa besar (*large language model*) yang dikembangkan oleh **Google**. \n\nSebagai model Gemini, saya dirancang untuk memproses informasi, memahami bahasa manusia, dan membantu Anda dalam berbagai hal mulai dari menulis, coding, menganalisis data, hingga berdiskusi tentang berbagai topik. \n\nAda yang bisa saya bantu dengan kemampuan model ini hari ini?",
+        "timestamp": "2026-06-11T05:40:50.481Z",
+        "model": "gemini-3.5-flash"
+      }
+    ]
+  }
+]

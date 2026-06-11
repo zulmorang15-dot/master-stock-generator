@@ -1,6 +1,6 @@
 # 📋 Progress Proyek: Master Stock Generator
 
-> Terakhir diperbarui: 2026-06-08
+> Terakhir diperbarui: 2026-06-10
 
 ---
 
@@ -43,6 +43,9 @@ Sebuah dashboard fullstack untuk mengotomatisasi proses produksi video stock foo
 | Tombol quick toggle "Menu Keyword" (buka langsung ke tab keyword) | ✅ Selesai |
 | Exclude `src/Composition.tsx` dari TypeScript checks | ✅ Selesai |
 | Validasi nama artifact render.yml ↔ server.js | ✅ Selesai |
+| **Export keywords ke CSV** — Tombol unduh seluruh keyword ke CSV | ✅ Selesai |
+| **Batch Render 4K** — Pilih beberapa item sekaligus, render 4K dalam satu klik | ✅ Selesai |
+| **Dark/Light mode toggle** — Toggle tema dengan state tersimpan di localStorage | ✅ Selesai |
 
 ---
 
@@ -154,16 +157,16 @@ GITHUB_REPO=...             # Nama repository GitHub (contoh: master-stock-gener
 
 ### Prioritas Menengah
 
-- [ ] **Notifikasi visual saat copy keyword** — Badge ✓ sudah muncul 2 detik saat klik tag (sudah termasuk di implementasi badge), *DONE via copiedBadge state* ✅
-- [ ] **Tombol "Refresh" manual** di bagian Saved Keywords sidebar untuk me-reload data dari server tanpa reload halaman penuh
-- [ ] **Export keywords ke CSV** — Tombol untuk mengunduh seluruh keyword dari `saved-items.json` ke file CSV, siap upload ke Adobe Stock
+- [x] **Notifikasi visual saat copy keyword** — Badge ✓ sudah muncul 2 detik saat klik tag (sudah termasuk di implementasi badge), *DONE via copiedBadge state* ✅
+- [x] **Tombol "Refresh" manual** — Tombol Refresh ada di header section Results ✅
+- [x] **Export keywords ke CSV** — Tombol **Export CSV** di header Results langsung download file CSV dari `/api/export-keywords` ✅
 
 ### Prioritas Rendah / Nice to Have
 
-- [ ] **Auto-detect render progress di Saved Section** — Saat membuka halaman, jika `statusConvertTsx` masih `processing-preview`, otomatis mulai polling lagi
-- [ ] **Preview thumbnail** dari frame pertama video di dalam tabel saved items
-- [ ] **Batch render** — Pilih beberapa item sekaligus untuk dirender dalam satu klik
-- [ ] **Dark/Light mode toggle**
+- [x] **Auto-detect render progress di Saved Section** — Saat membuka halaman, `loadResults()` otomatis mulai SSE stream + polling untuk item yang masih processing ✅
+- [x] **Batch render** — Mode Batch aktif via tombol "Batch Render" di header Results. Checkbox per baris, tombol "Generate 4K Terpilih" batch trigger sekuensial ✅
+- [x] **Dark/Light mode toggle** — Toggle di pojok kanan header, state disimpan di localStorage ✅
+- [x] **Preview thumbnail** dari frame pertama video di dalam tabel saved items
 
 ---
 

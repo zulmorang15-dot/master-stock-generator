@@ -25,6 +25,53 @@
  */
 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const ACCOUNTS_FILE = path.join(__dirname, 'syntx-accounts.json');
+const MAX_MESSAGES_LIMIT = 5;
+
+// Load pool from file
+function loadAccountsPool() {
+  try {
+    if (fs.existsSync(ACCOUNTS_FILE)) {
+      const data = fs.readFileSync(ACCOUNTS_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error("❌ Gagal membaca syntx-accounts.json:", e.message);
+  }
+  return [];
+}
+
+// Save pool to file
+function saveAccountsPool(pool) {
+  try {
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(pool, null, 2));
+  } catch (e) {
+    console.error("❌ Gagal menyimpan syntx-accounts.json:", e.message);
+  }
+}
+
+function getPoolStatus() {
+  const pool = loadAccountsPool();
+  const activeAccounts = pool.filter(acc => {
+    const isTokenValid = acc.token && acc.expiresAt && Date.now() < acc.expiresAt;
+    const isUnderLimit = acc.messageCount < MAX_MESSAGES_LIMIT;
+    return isTokenValid && isUnderLimit && acc.isValid !== false;
+  });
+
+  return {
+    activeAccountsCount: activeAccounts.length,
+    totalAccountsCount: pool.length,
+    accounts: pool.map(acc => ({
+      email: acc.email,
+      messageCount: acc.messageCount,
+      messageLimit: MAX_MESSAGES_LIMIT,
+      expiresAt: acc.expiresAt,
+      isValid: !!(acc.isValid !== false && acc.messageCount < MAX_MESSAGES_LIMIT && Date.now() < acc.expiresAt)
+    }))
+  };
+}
 
 // ─────────────────────────────────────────────
 // CONSTANTS
@@ -39,8 +86,7 @@ let sessionState = {
   mailToken: null,      // mail.tm bearer token
   mailId: null,         // mail.tm account ID
   expiresAt: null,      // token expiry estimate (ms epoch)
-  messageCount: 0,      // jumlah pesan yang sudah dikirim di akun ini
-  messageLimit: 10,     // limit pesan per akun (dari API: "limit":10)
+  messageLimit: MAX_MESSAGES_LIMIT,     // limit pesan per akun (dari API: "limit":5)
 };
 
 // ─────────────────────────────────────────────
@@ -254,22 +300,38 @@ async function createChatSession(token, options) {
 }
 
 // ─────────────────────────────────────────────
-// STEP 5B: Kirim prompt ke syntx.ai Claude chat
-// API bersifat async – response dari Claude muncul di messages list
+// STEP 5B: Kirim prompt ke syntx.ai
+// API bersifat async – response dari AI muncul di messages list
 // ─────────────────────────────────────────────
-// Highest available models on Syntx (verified via API validation error):
-// Claude (cepat ke lambat): claude-haiku-4-5 < claude-sonnet-4-5 < claude-opus-4-8
-// Gemini (cepat ke lambat): gemini-flash-2-0 < gemini-3.5-flash
-// 
-// REKOMENDASI DEFAULT: claude-sonnet-4-5 (balance kualitas vs kecepatan)
-// Opus terlalu lambat (60-120s), Haiku kurang power untuk TSX besar
-async function sendPromptToSyntx(token, prompt, model = 'claude-sonnet-4-5', options = {}) {
-  const isGemini = model.toLowerCase().startsWith('gemini');
-  const aiName = isGemini ? 'gemini' : 'claude';
-  const label = isGemini ? 'Gemini' : 'Claude';
+// Model → AI Provider mapping (verified via Syntx UI):
+// Claude models → ai_name=claude
+// Gemini models → ai_name=gemini
+// ChatGPT/GPT   → ai_name=chatgpt
+// Grok          → ai_name=grok
+// Deepseek      → ai_name=deepseek
+// Perplexity    → ai_name=perplexity
+// Qwen          → ai_name=qwen
+
+function getAiName(model) {
+  const m = (model || '').toLowerCase();
+  if (m.startsWith('gemini')) return 'gemini';
+  if (m.startsWith('claude') || m.includes('fable')) return 'claude';
+  if (m.startsWith('gpt') || m.startsWith('chatgpt') || m.startsWith('o1') || m.startsWith('o3')) return 'chatgpt';
+  if (m.startsWith('grok')) return 'grok';
+  if (m.startsWith('deepseek')) return 'deepseek';
+  if (m.startsWith('perplexity') || m.startsWith('sonar')) return 'perplexity';
+  if (m.startsWith('qwen')) return 'qwen';
+  return 'claude'; // default
+}
+
+async function sendPromptToSyntx(token, prompt, model = 'claude-sonnet-4-5', options = {}, imageUrl = null) {
+  const aiName = getAiName(model);
+  const label = aiName.charAt(0).toUpperCase() + aiName.slice(1);
 
   logToTask(options, `🤖 [syntx-bot] Mengirim prompt ke syntx.ai ${label} (${model})...`, 'info');
   
+  logToTask(options, `🤖 [syntx-bot] Mengirim prompt ke syntx.ai ${label} (${model})${imageUrl ? ' + gambar' : ''}...`, 'info');
+
   const authHeaders = {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
@@ -281,15 +343,29 @@ async function sendPromptToSyntx(token, prompt, model = 'claude-sonnet-4-5', opt
   // Buat sesi chat baru → gunakan UUID untuk endpoint berikutnya
   const { uuid: chatUuid } = await createChatSession(token, options);
   
-  // Kirim pesan ke sesi chat (format dikonfirmasi dari Playwright intercept)
-  const messagePayload = {
-    message_object: {
-      object_type: 'text',
-      object_url: null,
-      object_text: prompt,
-      model_type: model
-    }
-  };
+  // Kirim pesan ke sesi chat
+  // Jika ada imageUrl, gunakan object_type=image dan sertakan teks sebagai caption
+  let messagePayload;
+  if (imageUrl) {
+    // Kirim gambar dulu, lalu teks sebagai pesan terpisah di sesi yang sama
+    messagePayload = {
+      message_object: {
+        object_type: 'image',
+        object_url: imageUrl,
+        object_text: prompt || '',
+        model_type: model
+      }
+    };
+  } else {
+    messagePayload = {
+      message_object: {
+        object_type: 'text',
+        object_url: null,
+        object_text: prompt,
+        model_type: model
+      }
+    };
+  }
   
   logToTask(options, `   📡 Mengirim ke: /api/v1/chats/${chatUuid}/messages?ai_name=${aiName}`, 'info');
   
@@ -803,12 +879,28 @@ async function loginAndGetToken(options = {}) {
 
   syntxToken = await verifySyntxOTP(email, otp, options);
   
-  sessionState.token = syntxToken;
-  sessionState.email = email;
-  sessionState.expiresAt = Date.now() + (23 * 60 * 60 * 1000); // 23 jam
-  sessionState.messageCount = 0; // reset counter saat akun baru
+  const newAccount = {
+    email: email,
+    token: syntxToken,
+    expiresAt: Date.now() + (23 * 60 * 60 * 1000), // 23 jam
+    messageCount: 0,
+    messageLimit: MAX_MESSAGES_LIMIT,
+    isValid: true,
+    createdAt: new Date().toISOString()
+  };
+
+  const pool = loadAccountsPool();
+  const existingIdx = pool.findIndex(acc => acc.email === email);
+  if (existingIdx !== -1) {
+    pool[existingIdx] = newAccount;
+  } else {
+    pool.push(newAccount);
+  }
+  saveAccountsPool(pool);
+
+  sessionState = { ...newAccount };
   
-  logToTask(options, '🎉 [syntx-bot] Login syntx.ai berhasil! Session tersimpan.\n', 'success');
+  logToTask(options, `🎉 [syntx-bot] Login syntx.ai berhasil! Akun ${email} ditambahkan ke pool.\n`, 'success');
   return syntxToken;
 }
 
@@ -816,52 +908,70 @@ async function loginAndGetToken(options = {}) {
 // PUBLIC API: callSyntx(prompt)
 // Auto-rotate akun saat mendekati/melebihi limit pesan
 // ─────────────────────────────────────────────
-async function callSyntx(prompt, model = 'claude-sonnet-4-5', options = {}) {
-  const isTokenValid = sessionState.token && 
-                       sessionState.expiresAt && 
-                       Date.now() < sessionState.expiresAt;
+async function callSyntx(prompt, model = 'claude-sonnet-4-5', options = {}, imageUrl = null) {
+  let pool = loadAccountsPool();
   
-  // Cek apakah mendekati limit – rotasi akun preventif
-  const nearLimit = sessionState.messageCount >= (sessionState.messageLimit - 1);
-  
-  if (!isTokenValid || nearLimit) {
-    if (nearLimit && isTokenValid) {
-      logToTask(options, `🔄 [syntx-bot] Mendekati limit pesan (${sessionState.messageCount}/${sessionState.messageLimit}), rotasi akun baru...`, 'info');
-    } else {
-      logToTask(options, '🔑 [syntx-bot] Token tidak ada atau expired, melakukan re-login...', 'info');
-    }
-    await loginAndGetToken(options);
+  // Cari akun yang valid di pool
+  let activeAccount = pool.find(acc => {
+    const isTokenValid = acc.token && acc.expiresAt && Date.now() < acc.expiresAt;
+    const isUnderLimit = acc.messageCount < MAX_MESSAGES_LIMIT;
+    return isTokenValid && isUnderLimit && acc.isValid !== false;
+  });
+
+  if (!activeAccount) {
+    logToTask(options, '🔑 [syntx-bot] Tidak ada akun valid di pool (semua limit/expired/kosong). Membuat akun baru...', 'info');
+    const token = await loginAndGetToken(options);
+    
+    // loginAndGetToken memperbarui sessionState dan menyimpannya ke pool, load ulang pool & cari
+    pool = loadAccountsPool();
+    activeAccount = pool.find(acc => acc.email === sessionState.email);
   }
 
+  if (!activeAccount) {
+    throw new Error("Gagal mendapatkan akun aktif untuk request Syntx.ai");
+  }
+
+  // Set current active sessionState
+  sessionState = { ...activeAccount };
+
   try {
-    const result = await sendPromptToSyntx(sessionState.token, prompt, model, options);
-    sessionState.messageCount++; // track jumlah pesan
-    logToTask(options, `📊 [syntx-bot] Pesan ke-${sessionState.messageCount}/${sessionState.messageLimit} di akun ini`, 'info');
+    const result = await sendPromptToSyntx(sessionState.token, prompt, model, options, imageUrl);
+    
+    // Sukses: update messageCount
+    pool = loadAccountsPool();
+    const idx = pool.findIndex(acc => acc.email === sessionState.email);
+    if (idx !== -1) {
+      pool[idx].messageCount++;
+      sessionState.messageCount = pool[idx].messageCount;
+      const limit = MAX_MESSAGES_LIMIT;
+      if (pool[idx].messageCount >= limit) {
+        logToTask(options, `❌ [syntx-bot] Akun ${sessionState.email} mencapai batas ${limit} pesan. Menghapus dari pool...`, 'warning');
+        pool.splice(idx, 1);
+        sessionState.token = null; // force login/rotation next time
+      }
+      saveAccountsPool(pool);
+    }
+    
+    logToTask(options, `📊 [syntx-bot] [${sessionState.email}] Pesan ke-${sessionState.messageCount}/${MAX_MESSAGES_LIMIT} di akun ini`, 'info');
     return result;
   } catch (err) {
     const status = err.response?.status;
+    const isAuthError = status === 401 || err.message === 'TOKEN_EXPIRED';
+    const isLimitError = status === 402 || status === 403 || 
+                         err.message?.toLowerCase().includes('limit') ||
+                         err.message?.toLowerCase().includes('quota');
     
-    // Handle token expired
-    if (err.message === 'TOKEN_EXPIRED' || status === 401) {
-      logToTask(options, '🔄 [syntx-bot] Token expired, re-login otomatis...', 'warning');
+    if (isAuthError || isLimitError) {
+      logToTask(options, `❌ [syntx-bot] Akun ${sessionState.email} bermasalah (status ${status}, ${err.message}). Menghapus dari pool...`, 'warning');
+      pool = loadAccountsPool();
+      const idx = pool.findIndex(acc => acc.email === sessionState.email);
+      if (idx !== -1) {
+        pool.splice(idx, 1);
+        saveAccountsPool(pool);
+      }
       sessionState.token = null;
-      await loginAndGetToken(options);
-      const result = await sendPromptToSyntx(sessionState.token, prompt, model, options);
-      sessionState.messageCount++;
-      return result;
-    }
-    
-    // Handle limit akun tercapai (402 Payment Required atau 403 Forbidden)
-    if (status === 402 || status === 403 || 
-        err.message?.toLowerCase().includes('limit') ||
-        err.message?.toLowerCase().includes('quota')) {
-      logToTask(options, `🔄 [syntx-bot] Limit akun tercapai (status ${status}), membuat akun baru...`, 'warning');
-      sessionState.token = null;
-      sessionState.messageCount = 0;
-      await loginAndGetToken(options);
-      const result = await sendPromptToSyntx(sessionState.token, prompt, model, options);
-      sessionState.messageCount++;
-      return result;
+      // Coba panggil ulang (dia akan cari akun lain atau bikin baru)
+      return callSyntx(prompt, model, options, imageUrl);
     }
     
     throw err;
@@ -875,6 +985,7 @@ module.exports = {
   callSyntx,
   loginAndGetToken,
   registerOtpProvider,
+  getPoolStatus,
   getSessionState: () => ({ ...sessionState, token: sessionState.token ? '***HIDDEN***' : null }),
 };
 

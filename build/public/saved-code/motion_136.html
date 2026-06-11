@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyberpunk Gaming Endscreen</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    
+    <style>
+        /* BASE RESET */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #030008;
+            font-family: sans-serif;
+        }
+
+        /* FIXED CANVAS CONTAINER */
+        #endscreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            transform-origin: top left;
+            overflow: hidden;
+            background: radial-gradient(circle at center, transparent 0%, #030008 100%);
+        }
+
+        /* THREE.JS BACKGROUND */
+        #bg-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            z-index: 1;
+        }
+
+        /* SCANLINE & FOG OVERLAY */
+        .vfx-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            z-index: 2;
+            background: repeating-linear-gradient(
+                to bottom,
+                rgba(0, 243, 255, 0.03) 0px,
+                rgba(0, 243, 255, 0.03) 2px,
+                transparent 2px,
+                transparent 4px
+            );
+            pointer-events: none;
+            box-shadow: inset 0 0 150px rgba(188, 19, 254, 0.15);
+        }
+
+        /* VIDEO PLACEHOLDERS */
+        .placeholder {
+            position: absolute;
+            z-index: 10;
+            width: 640px;
+            height: 360px;
+            top: 360px;
+            background: rgba(0, 15, 30, 0.6);
+            border: 2px solid #00f3ff;
+            border-radius: 12px;
+            box-shadow: 0 0 25px rgba(0, 243, 255, 0.3), inset 0 0 25px rgba(0, 243, 255, 0.15);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .placeholder.left {
+            left: 160px;
+        }
+
+        .placeholder.right {
+            right: 160px;
+        }
+
+        /* PLACEHOLDER HUD ELEMENTS */
+        .corner {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border: 2px solid #fff;
+            opacity: 0.8;
+            pointer-events: none;
+        }
+        .corner.tl { top: -2px; left: -2px; border-right: none; border-bottom: none; border-radius: 12px 0 0 0; border-color: #bc13fe; }
+        .corner.tr { top: -2px; right: -2px; border-left: none; border-bottom: none; border-radius: 0 12px 0 0; border-color: #bc13fe;}
+        .corner.bl { bottom: -2px; left: -2px; border-right: none; border-top: none; border-radius: 0 0 0 12px; border-color: #bc13fe;}
+        .corner.br { bottom: -2px; right: -2px; border-left: none; border-top: none; border-radius: 0 0 12px 0; border-color: #bc13fe;}
+
+        .grid-overlay {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image: linear-gradient(rgba(0, 243, 255, 0.1) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 243, 255, 0.1) 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center center;
+            opacity: 0.3;
+        }
+
+        /* SUBSCRIBE CIRCLE */
+        .subscribe-area {
+            position: absolute;
+            z-index: 15;
+            top: 415px; /* (1080 - 250) / 2 */
+            left: 835px; /* (1920 - 250) / 2 */
+            width: 250px;
+            height: 250px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .subscribe-circle {
+            width: 180px;
+            height: 180px;
+            background: rgba(20, 0, 40, 0.7);
+            border: 2px solid #bc13fe;
+            border-radius: 50%;
+            box-shadow: 0 0 40px rgba(188, 19, 254, 0.5), inset 0 0 40px rgba(188, 19, 254, 0.3);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            position: relative;
+            z-index: 20;
+        }
+
+        /* ROTATING NEON RINGS */
+        .ring {
+            position: absolute;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .ring.inner {
+            width: 210px;
+            height: 210px;
+            border: 2px solid transparent;
+            border-top: 2px solid #00f3ff;
+            border-bottom: 2px solid #00f3ff;
+            box-shadow: 0 10px 20px rgba(0, 243, 255, 0.2);
+            z-index: 19;
+        }
+
+        .ring.outer {
+            width: 240px;
+            height: 240px;
+            border: 2px solid transparent;
+            border-left: 2px dashed #bc13fe;
+            border-right: 2px dashed #bc13fe;
+            box-shadow: -10px 0 20px rgba(188, 19, 254, 0.2);
+            z-index: 18;
+        }
+
+        /* DECORATIVE HUD LINES */
+        .hud-line {
+            position: absolute;
+            background: #00f3ff;
+            box-shadow: 0 0 10px #00f3ff;
+            opacity: 0.6;
+        }
+        .hud-line.top { top: 120px; left: 160px; width: 1600px; height: 1px; }
+        .hud-line.bottom { bottom: 120px; left: 160px; width: 1600px; height: 1px; }
+        
+        .hud-dot {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #bc13fe;
+            box-shadow: 0 0 8px #bc13fe;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="endscreen">
+        <canvas id="bg-canvas"></canvas>
+        
+        <div class="vfx-overlay"></div>
+
+        <div class="hud-line top"></div>
+        <div class="hud-line bottom"></div>
+        <div class="hud-dot" style="top: 118px; left: 160px;"></div>
+        <div class="hud-dot" style="top: 118px; right: 160px;"></div>
+        <div class="hud-dot" style="bottom: 118px; left: 160px;"></div>
+        <div class="hud-dot" style="bottom: 118px; right: 160px;"></div>
+
+        <div class="placeholder left">
+            <div class="grid-overlay"></div>
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+        </div>
+
+        <div class="placeholder right">
+            <div class="grid-overlay"></div>
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+        </div>
+
+        <div class="subscribe-area">
+            <div class="ring outer"></div>
+            <div class="ring inner"></div>
+            <div class="subscribe-circle"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. RESOLUTION SCALING LOGIC ---
+        const endscreen = document.getElementById('endscreen');
+        
+        function handleResize() {
+            // Calculate scale based on standard 1920x1080 format
+            const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+            
+            // Calculate offsets to center the scaled canvas
+            const offsetX = (window.innerWidth - (1920 * scale)) / 2;
+            const offsetY = (window.innerHeight - (1080 * scale)) / 2;
+            
+            // Apply scale and positional offset via absolute positioning to strictly use transform: scale()
+            endscreen.style.left = `${offsetX}px`;
+            endscreen.style.top = `${offsetY}px`;
+            endscreen.style.transform = `scale(${scale})`;
+        }
+        
+        window.addEventListener('resize', handleResize);
+        handleResize();
+
+
+        // --- 2. THREE.JS CYBERPUNK ENVIRONMENT ---
+        const canvas = document.getElementById('bg-canvas');
+        const scene = new THREE.Scene();
+        
+        // Deep purple cinematic fog
+        scene.fog = new THREE.FogExp2(0x050012, 0.0035);
+
+        const camera = new THREE.PerspectiveCamera(60, 1920 / 1080, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+        
+        // Lock internal resolution to 1920x1080 for fixed scaling
+        renderer.setSize(1920, 1080);
+        renderer.setClearColor(0x020008, 1);
+
+        // -- Environment Elements --
+        
+        // Neon Grid Floor
+        const gridFloor = new THREE.GridHelper(800, 80, 0x00f3ff, 0xbc13fe);
+        gridFloor.position.y = -25;
+        scene.add(gridFloor);
+
+        // Neon Grid Ceiling
+        const gridCeiling = new THREE.GridHelper(800, 80, 0xbc13fe, 0x00f3ff);
+        gridCeiling.position.y = 45;
+        scene.add(gridCeiling);
+
+        // Holographic Particles (Stars/Dust)
+        const particleCount = 1500;
+        const particlesGeom = new THREE.BufferGeometry();
+        const particlesPos = new Float32Array(particleCount * 3);
+        
+        for(let i = 0; i < particleCount * 3; i++) {
+            particlesPos[i] = (Math.random() - 0.5) * 600;
+        }
+        
+        particlesGeom.setAttribute('position', new THREE.BufferAttribute(particlesPos, 3));
+        const particleMat = new THREE.PointsMaterial({
+            size: 2.0,
+            color: 0x00f3ff,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending
+        });
+        
+        const particleSystem = new THREE.Points(particlesGeom, particleMat);
+        scene.add(particleSystem);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+        scene.add(ambientLight);
+
+        const purpleLight = new THREE.PointLight(0xbc13fe, 3, 400);
+        purpleLight.position.set(-50, 10, 50);
+        scene.add(purpleLight);
+
+        const cyanLight = new THREE.PointLight(0x00f3ff, 2, 400);
+        cyanLight.position.set(50, -10, 50);
+        scene.add(cyanLight);
+
+        camera.position.z = 150;
+        camera.position.y = 10;
+
+
+        // -- Render Loop --
+        let clock = new THREE.Clock();
+
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+            const elapsedTime = clock.getElapsedTime();
+
+            // Simulate forward movement by scrolling the grids backwards
+            gridFloor.position.z = (elapsedTime * 40) % 10;
+            gridCeiling.position.z = (elapsedTime * 40) % 10;
+
+            // Ambient camera drift for a cinematic feel
+            camera.position.x = Math.sin(elapsedTime * 0.3) * 15;
+            camera.position.y = 10 + Math.cos(elapsedTime * 0.4) * 8;
+            camera.lookAt(0, 5, 0);
+
+            // Subtle particle rotation
+            particleSystem.rotation.y = elapsedTime * 0.05;
+            particleSystem.rotation.z = elapsedTime * 0.02;
+
+            renderer.render(scene, camera);
+        }
+        animate3D();
+
+
+        // --- 3. GSAP UI ANIMATIONS ---
+        
+        // Pulse the video placeholders (Electric Blue)
+        gsap.to(".placeholder", {
+            boxShadow: "0 0 45px rgba(0, 243, 255, 0.6), inset 0 0 30px rgba(0, 243, 255, 0.2)",
+            borderColor: "rgba(0, 243, 255, 1)",
+            duration: 2.5,
+            yoyo: true,
+            repeat: -1,
+            ease: "sine.inOut",
+            stagger: 0.2 // slight offset between left and right
+        });
+
+        // Ambient floating for placeholders
+        gsap.to(".placeholder", {
+            y: -10,
+            duration: 4,
+            yoyo: true,
+            repeat: -1,
+            ease: "sine.inOut",
+            stagger: 0.5
+        });
+
+        // Pulse the subscribe center (Neon Purple)
+        gsap.to(".subscribe-circle", {
+            boxShadow: "0 0 60px rgba(188, 19, 254, 0.8), inset 0 0 50px rgba(188, 19, 254, 0.5)",
+            duration: 2,
+            yoyo: true,
+            repeat: -1,
+            ease: "sine.inOut"
+        });
+
+        // Floating for subscribe area
+        gsap.to(".subscribe-area", {
+            y: 8,
+            duration: 3,
+            yoyo: true,
+            repeat: -1,
+            ease: "sine.inOut"
+        });
+
+        // Rotate Holographic Rings continuously
+        gsap.to(".ring.inner", {
+            rotation: 360,
+            duration: 10,
+            repeat: -1,
+            ease: "none"
+        });
+
+        gsap.to(".ring.outer", {
+            rotation: -360,
+            duration: 15,
+            repeat: -1,
+            ease: "none"
+        });
+
+        // Subtle opacity pulsing on HUD lines
+        gsap.to(".hud-line", {
+            opacity: 0.2,
+            duration: 3,
+            yoyo: true,
+            repeat: -1,
+            ease: "power1.inOut"
+        });
+    </script>
+</body>
+</html>

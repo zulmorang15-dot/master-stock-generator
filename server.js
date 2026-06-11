@@ -7,6 +7,7 @@ const fs = require("fs");
 const { execSync } = require("child_process");
 const { GoogleGenAI } = require("@google/genai");
 const syntxBot = require('./syntx-bot');
+const multer = require('multer');
 
 const path = require("path");
 
@@ -26,7 +27,25 @@ app.use(express.static(path.join(__dirname, "public"), {
 // Ensure necessary directories exist
 fs.mkdirSync(path.join(__dirname, "public", "previews"), { recursive: true });
 fs.mkdirSync(path.join(__dirname, "public", "saved-code"), { recursive: true });
+fs.mkdirSync(path.join(__dirname, "public", "chat-uploads"), { recursive: true });
 fs.mkdirSync(path.join(__dirname, "out"), { recursive: true });
+
+// Multer setup for image uploads
+const chatUploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, 'public', 'chat-uploads')),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `img_${Date.now()}${ext}`);
+  }
+});
+const chatUpload = multer({
+  storage: chatUploadStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files allowed'));
+  }
+});
 
 // Initialize database file if not exists
 const dbPath = path.join(__dirname, "saved-items.json");
@@ -301,66 +320,45 @@ async function callAIWithFallback(prompt, options = {}) {
   // Jika preferModel adalah specific provider, langsung route ke sana
   if (preferModel && preferModel !== 'auto') {
     log(`Mencoba model spesifik pilihan: ${preferModel}...`, 'info');
-  }
-
-  if (preferModel === 'groq') {
-    try {
+    if (preferModel === 'groq') {
       const result = await callGroq(prompt);
       if (isValid(result, 'Groq')) {
         log(`✅ Sukses menggunakan Groq AI!`, 'success');
         return result;
       }
-    } catch (err) {
-      log(`❌ Groq gagal: ${err.message}`, 'warning');
-      errors.push({ provider: 'groq', error: err.message });
-    }
-  } else if (preferModel === 'syntx-claude') {
-    try {
+      throw new Error("Groq returned invalid response");
+    } else if (preferModel === 'syntx-claude') {
       const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-5', syntxOptions);
       if (isValid(result, 'Syntx Claude')) {
         log(`✅ Sukses menggunakan Syntx Claude!`, 'success');
         return result;
       }
-    } catch (err) {
-      log(`❌ Syntx Claude gagal: ${err.message}`, 'warning');
-      errors.push({ provider: 'syntx-claude', error: err.message });
-    }
-  } else if (preferModel === 'syntx-gemini') {
-    try {
+      throw new Error("Syntx Claude returned invalid response");
+    } else if (preferModel === 'syntx-gemini') {
       const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
       if (isValid(result, 'Syntx Gemini')) {
         log(`✅ Sukses menggunakan Syntx Gemini!`, 'success');
         return result;
       }
-    } catch (err) {
-      log(`❌ Syntx Gemini gagal: ${err.message}`, 'warning');
-      errors.push({ provider: 'syntx-gemini', error: err.message });
-    }
-  } else if (preferModel === 'gemini') {
-    try {
+      throw new Error("Syntx Gemini returned invalid response");
+    } else if (preferModel === 'gemini') {
       if (genAI) {
         const result = await callGemini(prompt);
         if (isValid(result, 'Gemini')) {
           log(`✅ Sukses menggunakan Gemini AI!`, 'success');
           return result;
         }
+        throw new Error("Gemini returned invalid response");
       } else {
         throw new Error("Gemini AI belum diinisialisasi (GEMINI_API_KEY kosong)");
       }
-    } catch (err) {
-      log(`❌ Gemini gagal: ${err.message}`, 'warning');
-      errors.push({ provider: 'gemini', error: err.message });
-    }
-  } else if (preferModel === 'openrouter') {
-    try {
+    } else if (preferModel === 'openrouter') {
       const result = await callOpenRouter(prompt);
       if (isValid(result, 'OpenRouter')) {
         log(`✅ Sukses menggunakan OpenRouter!`, 'success');
         return result;
       }
-    } catch (err) {
-      log(`❌ OpenRouter gagal: ${err.message}`, 'warning');
-      errors.push({ provider: 'openrouter', error: err.message });
+      throw new Error("OpenRouter returned invalid response");
     }
   }
 
@@ -1053,7 +1051,7 @@ app.get("/api/saved-items", (req, res) => {
   }
 });
 
-// GET: Export all keywords to CSV for download
+// GET: Export all keywords to CSV for download (legacy)
 app.get("/api/export-keywords", (req, res) => {
   try {
     const dbPath = path.join(__dirname, "saved-items.json");
@@ -1070,6 +1068,47 @@ app.get("/api/export-keywords", (req, res) => {
     res.send(csv);
   } catch (error) {
     console.error("❌ Failed to export keywords:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET: Export all keywords/data to platform-specific CSV for download
+app.get("/api/export-csv", (req, res) => {
+  try {
+    const { platform } = req.query;
+    const dbPath = path.join(__dirname, "saved-items.json");
+    const data = fs.readFileSync(dbPath, "utf-8");
+    const items = JSON.parse(data);
+
+    if (platform === "adobe") {
+      let csv = "Filename,Title,Keywords,Category,Releases\n";
+      items.forEach((item) => {
+        const filename = `${item.id}-4k.mov`;
+        const title = (item.judul || "").replace(/"/g, '""');
+        const keywords = (item.keywords || "").replace(/"/g, '""');
+        const category = (item.adobeCategory || "").replace(/"/g, '""');
+        csv += `"${filename}","${title}","${keywords}","${category}",""\n`;
+      });
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment; filename=adobe_stock_upload.csv");
+      return res.send(csv);
+    } else if (platform === "shutterstock") {
+      let csv = "Filename,Description,Keywords,Categories,Editorial,Mature content,illustration\n";
+      items.forEach((item) => {
+        const filename = `${item.id}-4k.mov`;
+        const description = (item.judul || "").replace(/"/g, '""');
+        const keywords = (item.keywords || "").replace(/"/g, '""');
+        const categories = (item.shutterstockCategory || "").replace(/"/g, '""');
+        csv += `"${filename}","${description}","${keywords}","${categories}","no","no","no"\n`;
+      });
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment; filename=shutterstock_upload.csv");
+      return res.send(csv);
+    } else {
+      return res.status(400).json({ error: "Platform tidak valid. Gunakan 'adobe' or 'shutterstock'." });
+    }
+  } catch (error) {
+    console.error("❌ Failed to export CSV:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1133,6 +1172,48 @@ app.delete("/api/delete-item/:id", (req, res) => {
   }
 });
 
+// POST: Batch Hapus beberapa item sekaligus beserta file lokalnya
+app.post("/api/batch-delete", (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "Parameter 'ids' harus berupa array ID yang valid" });
+    }
+
+    const dbPath = path.join(__dirname, "saved-items.json");
+    const data = fs.readFileSync(dbPath, "utf-8");
+    let items = JSON.parse(data);
+
+    const beforeCount = items.length;
+
+    // Filter out deleted items and unlink their local files
+    items = items.filter(item => {
+      if (ids.includes(item.id)) {
+        const htmlLocalPath = path.join(__dirname, "public", "saved-code", `${item.id}.html`);
+        const tsxLocalPath = path.join(__dirname, "public", "saved-code", `${item.id}.tsx`);
+        try {
+          if (fs.existsSync(htmlLocalPath)) fs.unlinkSync(htmlLocalPath);
+          if (fs.existsSync(tsxLocalPath)) fs.unlinkSync(tsxLocalPath);
+        } catch (fileErr) {
+          console.warn(`Gagal menghapus file lokal untuk ${item.id}:`, fileErr.message);
+        }
+        return false;
+      }
+      return true;
+    });
+
+    const deletedCount = beforeCount - items.length;
+
+    fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+    console.log(`🗑 Berhasil menghapus ${deletedCount} item terpilih beserta kode lokalnya`);
+    res.json({ success: true, deletedCount });
+  } catch (error) {
+    console.error("❌ Gagal batch hapus item:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // POST: Render low-res preview MP4 lokal
 app.post("/api/render-preview", async (req, res) => {
   const { item } = req.body;
@@ -1149,13 +1230,14 @@ app.post("/api/render-preview", async (req, res) => {
 
     // 2. Tulis props sementara
     const props = {
-      durationInFrames: Number(item.durationInFrames) || 150
+      durationInFrames: Number(item.durationInFrames) || 150,
+      fps: Number(item.fps) || 30
     };
     fs.writeFileSync(tempPropsFile, JSON.stringify(props));
 
     // 3. Jalankan render lokal
     const previewFile = path.join("public", "previews", `${item.id}.mp4`);
-    const cmd = `npx remotion render Composition "${previewFile}" --scale=0.5 --props="${tempPropsFile}"`;
+    const cmd = `npx remotion render Composition "${previewFile}" --scale=0.5 --props="${tempPropsFile}" --muted`;
     console.log(`Running CLI: ${cmd}`);
 
     execSync(cmd, { stdio: "inherit" });
@@ -1193,13 +1275,14 @@ app.post("/api/render-4k", async (req, res) => {
 
     // 2. Tulis props sementara
     const props = {
-      durationInFrames: Number(item.durationInFrames) || 150
+      durationInFrames: Number(item.durationInFrames) || 150,
+      fps: Number(item.fps) || 30
     };
     fs.writeFileSync(tempPropsFile, JSON.stringify(props));
 
     // 3. Jalankan render 4K ProRes
     const outputFile = path.join("out", `${item.id}_4k.mov`);
-    const cmd = `npx remotion render Composition "${outputFile}" --codec=prores --props="${tempPropsFile}"`;
+    const cmd = `npx remotion render Composition "${outputFile}" --codec=prores --props="${tempPropsFile}" --muted`;
     console.log(`Running CLI: ${cmd}`);
 
     execSync(cmd, { stdio: "inherit" });
@@ -1224,7 +1307,7 @@ app.post("/api/render-4k", async (req, res) => {
         const tempOutputFile = path.join("out", `temp_${item.id}_4k.mov`);
         const title = item.judul || "Stock Video";
         const comment = item.keywords || "motion, abstract, loop";
-        const ffmpegCmd = `ffmpeg -y -i "${outputFile}" -metadata title="${title.replace(/"/g, '\\"')}" -metadata comment="${comment.replace(/"/g, '\\"')}" -codec copy "${tempOutputFile}"`;
+        const ffmpegCmd = `ffmpeg -y -i "${outputFile}" -metadata title="${title.replace(/"/g, '\\"')}" -metadata keywords="${comment.replace(/"/g, '\\"')}" -an -codec copy "${tempOutputFile}"`;
         execSync(ffmpegCmd, { stdio: "inherit" });
         fs.renameSync(tempOutputFile, outputFile);
         console.log("✅ Metadata berhasil disematkan!");
@@ -1539,6 +1622,131 @@ async function waitForRender(id, renderType, jobId) {
   throw new Error("Timeout rendering video di GitHub Actions.");
 }
 
+// Helper: Normalisasi kategori Adobe Stock dan Shutterstock
+function normalizeCategories(seoData) {
+  // Adobe Category Normalization
+  let rawAdobeCat = seoData.adobeCategory || seoData.adobe_category || seoData.adobe || '';
+  let adobeCat = String(rawAdobeCat).trim();
+  const matchNum = adobeCat.match(/^\d+/);
+  if (matchNum) {
+    adobeCat = matchNum[0];
+  } else {
+    const adobeMap = {
+      'animals': '1', 'buildings': '2', 'architecture': '2', 'business': '3',
+      'drinks': '4', 'environment': '5', 'states of mind': '6', 'food': '7',
+      'graphic': '8', 'hobbies': '9', 'industry': '10', 'landscape': '11',
+      'lifestyle': '12', 'people': '13', 'plants': '14', 'flowers': '14',
+      'culture': '15', 'religion': '15', 'science': '16', 'social': '17',
+      'sports': '18', 'technology': '19', 'transport': '20', 'travel': '21'
+    };
+    const cleanName = adobeCat.toLowerCase();
+    for (const [kw, idVal] of Object.entries(adobeMap)) {
+      if (cleanName.includes(kw)) {
+        adobeCat = idVal;
+        break;
+      }
+    }
+  }
+
+  // Shutterstock Category Normalization
+  let rawShutterCat = seoData.shutterstockCategory || seoData.shutterstock_category || seoData.shutterstock || seoData.kategori || '';
+  let shutterCat = String(rawShutterCat).trim();
+  
+  if (shutterCat.includes(",")) {
+    shutterCat = shutterCat.split(",")[0].trim();
+  }
+
+  const shutterMap = {
+    'animal': 'Animals/Wildlife',
+    'wildlife': 'Animals/Wildlife',
+    'art': 'Arts',
+    'background': 'Backgrounds/Textures',
+    'texture': 'Backgrounds/Textures',
+    'building': 'Buildings/Landmarks',
+    'landmark': 'Buildings/Landmarks',
+    'business': 'Business/Finance',
+    'finance': 'Business/Finance',
+    'education': 'Education',
+    'food': 'Food and drink',
+    'drink': 'Food and drink',
+    'healthcare': 'Healthcare/Medical',
+    'medical': 'Healthcare/Medical',
+    'holiday': 'Holidays',
+    'industrial': 'Industrial',
+    'industry': 'Industrial',
+    'nature': 'Nature',
+    'object': 'Objects',
+    'people': 'People',
+    'person': 'People',
+    'religion': 'Religion',
+    'science': 'Science',
+    'sign': 'Signs/Symbols',
+    'symbol': 'Signs/Symbols',
+    'sport': 'Sports/Recreation',
+    'recreation': 'Sports/Recreation',
+    'technology': 'Technology',
+    'transport': 'Transportation',
+    'transportation': 'Transportation'
+  };
+
+  const cleanShutter = shutterCat.toLowerCase().trim();
+  let matchedShutter = '';
+  
+  for (const [kw, val] of Object.entries(shutterMap)) {
+    if (cleanShutter.includes(kw)) {
+      matchedShutter = val;
+      break;
+    }
+  }
+
+  if (!matchedShutter) {
+    const validLowerMap = {
+      'animals/wildlife': 'Animals/Wildlife',
+      'arts': 'Arts',
+      'backgrounds/textures': 'Backgrounds/Textures',
+      'buildings/landmarks': 'Buildings/Landmarks',
+      'business/finance': 'Business/Finance',
+      'education': 'Education',
+      'food and drink': 'Food and drink',
+      'healthcare/medical': 'Healthcare/Medical',
+      'holidays': 'Holidays',
+      'industrial': 'Industrial',
+      'nature': 'Nature',
+      'objects': 'Objects',
+      'people': 'People',
+      'religion': 'Religion',
+      'science': 'Science',
+      'signs/symbols': 'Signs/Symbols',
+      'sports/recreation': 'Sports/Recreation',
+      'technology': 'Technology',
+      'transportation': 'Transportation'
+    };
+    if (validLowerMap[cleanShutter]) {
+      matchedShutter = validLowerMap[cleanShutter];
+    }
+  }
+
+  if (matchedShutter) {
+    shutterCat = matchedShutter;
+  } else {
+    const validShutterCats = [
+      "Animals/Wildlife", "Arts", "Backgrounds/Textures", "Buildings/Landmarks",
+      "Business/Finance", "Education", "Food and drink", "Healthcare/Medical",
+      "Holidays", "Industrial", "Nature", "Objects", "People", "Religion",
+      "Science", "Signs/Symbols", "Sports/Recreation", "Technology", "Transportation"
+    ];
+    for (const cat of validShutterCats) {
+      if (cat.toLowerCase().includes(cleanShutter) || cleanShutter.includes(cat.toLowerCase())) {
+        shutterCat = cat;
+        break;
+      }
+    }
+  }
+
+  return { adobeCat, shutterCat };
+}
+
+
 // Helper: Sanitasi keywords & title agar sesuai dengan aturan kepatuhan Shutterstock & Adobe Stock
 function sanitizeKeywordsAndTitle(seoData) {
   if (!seoData) return seoData;
@@ -1792,6 +2000,11 @@ async function executeSingleTask(itemId) {
       item.keywords = seoData.keywords;
       item.deskripsi = seoData.deskripsi;
       item.kategori = seoData.kategori;
+      
+      const { adobeCat, shutterCat } = normalizeCategories(seoData);
+      item.adobeCategory = adobeCat;
+      item.shutterstockCategory = shutterCat;
+
       item.seoAiUsed = item.aiModel || 'auto';
       saveOrUpdateItem(item);
 
@@ -1802,10 +2015,12 @@ async function executeSingleTask(itemId) {
     addTaskLog(itemId, "Mengonversi HTML ke kode Remotion TSX...", "info");
     const animationDuration = item.animationDuration || 10;
     const durationFrames = item.durationInFrames || 300;
+    const fps = item.fps || 30;
 
     const conversionPrompt = promptsData.conversionPrompt
       .replace(/{{ANIMATION_DURATION}}/g, String(animationDuration))
       .replace(/{{DURATION_FRAMES}}/g, String(durationFrames))
+      .replace(/{{FPS}}/g, String(fps))
       .replace(/{{HTML_CONTENT}}/g, item.htmlPreview);
 
     let tsxResponse = "";
@@ -1881,9 +2096,15 @@ async function executeSingleTask(itemId) {
     addTaskLog(itemId, `File TSX disimpan secara lokal di /saved-code/${itemId}.tsx`, "info");
 
     addTaskLog(itemId, `Konversi HTML ke TSX berhasil! Kode disimpan di /saved-code/${itemId}.tsx`, "success");
-    addTaskLog(itemId, `Silakan klik tombol GEN PREVIEW untuk merender video preview di cloud.`, "info");
-    item.statusConvertTsx = 'waiting-preview';
+    
+    // Auto-trigger rendering preview immediately
+    addTaskLog(itemId, "Menjalankan render preview otomatis ke Cloud...", "info");
+    item.statusConvertTsx = 'processing-preview';
     saveOrUpdateItem(item);
+
+    runPreviewRenderBackground(itemId).catch(err => {
+      console.error(`Error in auto runPreviewRenderBackground for ${itemId}:`, err);
+    });
 
   } catch (err) {
     if (err.message === "Cancelled by user" || signal.aborted) {
@@ -1964,8 +2185,9 @@ async function waitForRenderSingle(id, renderType, signal) {
   throw new Error("Timeout rendering video di GitHub Actions.");
 }
 
-function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, animationDuration }) {
-  const durationFrames = (Number(animationDuration) || 10) * 30;
+function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, animationDuration, fps }) {
+  const targetFps = Number(fps) || 30;
+  const durationFrames = (Number(animationDuration) || 10) * targetFps;
 
   const itemData = {
     id: id,
@@ -1976,6 +2198,7 @@ function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, an
     kategori: "",
     durationInFrames: durationFrames,
     animationDuration: Number(animationDuration) || 10,
+    fps: targetFps,
     htmlPreview: htmlContent,
     loop: !!loop,
     transparent: !!transparent,
@@ -2052,6 +2275,7 @@ app.post("/api/trigger-github-render", async (req, res) => {
         inputs: {
           composition_id: item.id,
           duration_frames: String(Number(item.durationInFrames) || 150),
+          fps: String(item.fps || 30),
           judul: item.judul || "Stock Video",
           keywords: item.keywords || "motion, abstract, loop"
         }
@@ -2086,7 +2310,7 @@ app.post("/api/trigger-github-render", async (req, res) => {
 });
 
 app.post("/api/process-html-batch", (req, res) => {
-  const { files, loop, transparent, aiModel, animationDuration } = req.body;
+  const { files, loop, transparent, aiModel, animationDuration, fps } = req.body;
   if (!files || !Array.isArray(files) || files.length === 0) {
     return res.status(400).json({ error: "Data batch file tidak valid atau kosong" });
   }
@@ -2103,7 +2327,8 @@ app.post("/api/process-html-batch", (req, res) => {
       loop,
       transparent,
       aiModel,
-      animationDuration
+      animationDuration,
+      fps
     });
     enqueuedIds.push(sanitizedId);
   }
@@ -2113,7 +2338,7 @@ app.post("/api/process-html-batch", (req, res) => {
 
 // POST: Generate dari paste kode HTML langsung
 app.post("/api/paste-html", (req, res) => {
-  const { id, htmlContent, loop, transparent, aiModel, animationDuration } = req.body;
+  const { id, htmlContent, loop, transparent, aiModel, animationDuration, fps } = req.body;
   if (!htmlContent || !htmlContent.trim()) {
     return res.status(400).json({ error: "Konten HTML kosong" });
   }
@@ -2132,7 +2357,8 @@ app.post("/api/paste-html", (req, res) => {
     loop,
     transparent,
     aiModel,
-    animationDuration
+    animationDuration,
+    fps
   });
 
   res.json({ success: true, id: sanitizedId });
@@ -2141,7 +2367,7 @@ app.post("/api/paste-html", (req, res) => {
 // POST: Retry task yang gagal / dibatalkan
 app.post("/api/retry-task/:id", (req, res) => {
   const { id } = req.params;
-  const { aiModel, animationDuration } = req.body;
+  const { aiModel, animationDuration, fps } = req.body;
 
   // Baca item dari DB
   const dbPath = path.join(__dirname, "saved-items.json");
@@ -2170,9 +2396,11 @@ app.post("/api/retry-task/:id", (req, res) => {
   item.previewUrl = '';
   item.promptCode = '';
   if (aiModel) item.aiModel = aiModel;
+  const targetFps = Number(fps) || item.fps || 30;
+  item.fps = targetFps;
   if (animationDuration) {
     item.animationDuration = Number(animationDuration);
-    item.durationInFrames = Number(animationDuration) * 30;
+    item.durationInFrames = Number(animationDuration) * targetFps;
   }
 
   if (!item.logs) item.logs = [];
@@ -2396,6 +2624,7 @@ async function runPreviewRenderBackground(itemId) {
           inputs: {
             composition_id: itemId,
             duration_frames: String(item.durationInFrames || 300),
+            fps: String(item.fps || 30),
             judul: item.judul || "Stock Video",
             keywords: item.keywords || "motion, abstract, loop"
           }
@@ -2510,6 +2739,7 @@ async function run4kRenderBackground(itemId) {
           inputs: {
             composition_id: itemId,
             duration_frames: String(item.durationInFrames || 300),
+            fps: String(item.fps || 30),
             judul: item.judul || "Stock Video",
             keywords: item.keywords || "motion, abstract, loop"
           }
@@ -2690,8 +2920,17 @@ app.get("/api/download-4k-zip/:id", async (req, res) => {
 
     const redirectUrl = downloadRes.headers.location;
     if (redirectUrl) {
-      console.log(`➡️ Redirecting client langsung ke URL S3: ${redirectUrl.substring(0, 50)}...`);
-      return res.redirect(redirectUrl);
+      console.log(`➡️ Streaming download artifact zip untuk ${id} dari cloud storage...`);
+      res.setHeader('Content-Disposition', `attachment; filename="${id}-4k.zip"`);
+      res.setHeader('Content-Type', 'application/zip');
+
+      const s3Stream = await axios({
+        method: 'get',
+        url: redirectUrl,
+        responseType: 'stream'
+      });
+
+      s3Stream.data.pipe(res);
     } else {
       throw new Error("Gagal mendapatkan lokasi redirect artifact dari GitHub");
     }
@@ -2774,13 +3013,21 @@ app.get("/api/check-render-status/:id/:renderType", async (req, res) => {
 
 // GET: Cek status session syntx.ai
 app.get("/api/syntx-status", (req, res) => {
+  const poolStatus = syntxBot.getPoolStatus ? syntxBot.getPoolStatus() : { activeAccountsCount: 0, totalAccountsCount: 0, accounts: [] };
   const state = syntxBot.getSessionState();
   const isActive = !!state.token && state.expiresAt && Date.now() < state.expiresAt;
+  
+  const waitingOtp = !!pendingOtpResolvers['manual'];
+  const otpEmail = waitingOtp ? pendingOtpResolvers['manual'].email : null;
+
   res.json({
     isActive,
     email: state.email,
     expiresAt: state.expiresAt ? new Date(state.expiresAt).toISOString() : null,
-    hasToken: !!state.token
+    hasToken: !!state.token,
+    pool: poolStatus,
+    waitingOtp,
+    otpEmail
   });
 });
 
@@ -2799,7 +3046,7 @@ app.post("/api/syntx-login", async (req, res) => {
       success: true,
       email: state.email,
       expiresAt: state.expiresAt ? new Date(state.expiresAt).toISOString() : null,
-      message: "Login syntx.ai berhasil! Token tersimpan di session."
+      message: "Login syntx.ai berhasil! Token tersimpan di session dan pool."
     });
   } catch (err) {
     console.error("❌ Gagal login syntx.ai:", err.message);
@@ -2875,6 +3122,7 @@ app.post("/api/batch-trigger-4k", async (req, res) => {
           inputs: {
             composition_id: id,
             duration_frames: String(Number(item.durationInFrames) || 150),
+            fps: String(item.fps || 30),
             judul: item.judul || "Stock Video",
             keywords: item.keywords || "motion, abstract, loop"
           }
@@ -2928,7 +3176,7 @@ app.post("/api/prompts", (req, res) => {
 // POST: Mulai task yang sedang menunggu (waiting)
 app.post("/api/start-task/:id", (req, res) => {
   const { id } = req.params;
-  const { aiModel } = req.body; // opsional: model AI yang dipilih user
+  const { aiModel, animationDuration, fps } = req.body; // opsional: model AI, durasi, fps yang dipilih user
 
   // Baca item dari DB
   const dbPath = path.join(__dirname, "saved-items.json");
@@ -2959,6 +3207,12 @@ app.post("/api/start-task/:id", (req, res) => {
   // Update status ke queued, simpan aiModel jika ada
   item.statusConvertTsx = 'queued';
   if (aiModel) item.aiModel = aiModel;
+  const targetFps = Number(fps) || item.fps || 30;
+  item.fps = targetFps;
+  if (animationDuration) {
+    item.animationDuration = Number(animationDuration);
+    item.durationInFrames = Number(animationDuration) * targetFps;
+  }
   
   if (!item.logs) item.logs = [];
   const timeStr = new Date().toLocaleTimeString('id-ID');
@@ -3354,6 +3608,11 @@ app.post("/api/regenerate-seo/:id", async (req, res) => {
     item.keywords = seoData.keywords;
     item.deskripsi = seoData.deskripsi;
     item.kategori = seoData.kategori;
+    
+    const { adobeCat, shutterCat } = normalizeCategories(seoData);
+    item.adobeCategory = adobeCat;
+    item.shutterstockCategory = shutterCat;
+
     item.seoAiUsed = aiModel || 'auto';
     
     saveOrUpdateItem(item);
@@ -3378,6 +3637,381 @@ app.post("/api/regenerate-seo/:id", async (req, res) => {
   }
 });
 
-app.listen(5000, () => {
-  console.log("Server Jembatan Kode Bebas aktif di port 5000");
-});
+// ─────────────────────────────────────────────────────────────────────────
+// CHAT AI PAGE — Gemini-style Chat with Syntx Integration
+// ─────────────────────────────────────────────────────────────────────────
+
+const CHAT_HISTORY_FILE = path.join(__dirname, "chat-history.json");
+
+function loadChatHistory() {
+  try {
+    if (fs.existsSync(CHAT_HISTORY_FILE)) {
+      return JSON.parse(fs.readFileSync(CHAT_HISTORY_FILE, "utf-8"));
+    }
+  } catch (e) {
+    console.error("Failed to read chat-history.json:", e.message);
+  }
+  return [];
+}
+
+function saveChatHistory(sessions) {
+  try {
+    fs.writeFileSync(CHAT_HISTORY_FILE, JSON.stringify(sessions, null, 2));
+  } catch (e) {
+    console.error("Failed to save chat-history.json:", e.message);
+  }
+}
+
+// GET /chat → serve chat.html
+app.get("/chat", (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.sendFile(path.join(__dirname, "public", "chat.html"));
+});
+
+// GET /api/chat/models → available syntx models (all providers)
+app.get("/api/chat/models", (req, res) => {
+  const models = [
+    // Gemini (most reliable)
+    { id: "gemini-3.5-flash",     label: "Gemini 3.5 Flash",    group: "gemini",     speed: "🌟 Terbaik",   default: true },
+    { id: "gemini-flash-2-0",     label: "Gemini Flash 2.0",    group: "gemini",     speed: "⚡ Cepat" },
+    // Claude models (from Syntx UI)
+    { id: "Claude 4.6 Sonnet",    label: "Claude 4.6 Sonnet",   group: "claude",     speed: "⭐ Terbaru" },
+    { id: "Claude Fable 5",        label: "Claude Fable 5",      group: "claude",     speed: "🧠 Canggih" },
+    { id: "Claude 4.5 Sonnet",    label: "Claude 4.5 Sonnet",   group: "claude",     speed: "⚖️ Seimbang" },
+    { id: "Claude 4.8 Opus",      label: "Claude 4.8 Opus",     group: "claude",     speed: "💪 Kuat" },
+    { id: "Claude 4.7 Opus",      label: "Claude 4.7 Opus",     group: "claude",     speed: "💪 Kuat" },
+    { id: "Claude 4.6 Opus",      label: "Claude 4.6 Opus",     group: "claude",     speed: "💪 Kuat" },
+    { id: "Claude 4.5 Opus",      label: "Claude 4.5 Opus",     group: "claude",     speed: "💪 Kuat" },
+    { id: "Claude 4 Sonnet",      label: "Claude 4 Sonnet",     group: "claude",     speed: "⚡ Cepat" },
+    { id: "claude-haiku-4-5",     label: "Claude Haiku 4.5",    group: "claude",     speed: "⚡ Tercepat" },
+    // ChatGPT
+    { id: "gpt-4o",               label: "GPT-4o",              group: "chatgpt",    speed: "🔥 Populer" },
+    // Grok
+    { id: "grok-3",               label: "Grok 3",              group: "grok",       speed: "⚡ Cepat" },
+    // Deepseek
+    { id: "deepseek-chat",        label: "Deepseek Chat",       group: "deepseek",   speed: "💡 Pintar" },
+    // Perplexity
+    { id: "sonar-large",          label: "Sonar Large",         group: "perplexity", speed: "🔍 Search" },
+    // Qwen
+    { id: "qwen-max",             label: "Qwen Max",            group: "qwen",       speed: "🧠 Kuat" },
+  ];
+  const pool = syntxBot.getPoolStatus ? syntxBot.getPoolStatus() : {};
+  res.json({ models, poolStatus: pool });
+});
+
+// POST /api/chat/upload-image → upload image for chat attachment
+app.post("/api/chat/upload-image", chatUpload.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+  const publicUrl = `/chat-uploads/${req.file.filename}`;
+  res.json({ success: true, url: publicUrl, filename: req.file.filename });
+});
+
+// GET /api/chat/sessions → list all sessions (no messages, just metadata)
+app.get("/api/chat/sessions", (req, res) => {
+  try {
+    const sessions = loadChatHistory();
+    const meta = sessions.map(s => ({
+      id: s.id,
+      title: s.title || "Percakapan Baru",
+      model: s.model,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      messageCount: (s.messages || []).length
+    }));
+    res.json({ sessions: meta });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/chat/sessions → create new session
+app.post("/api/chat/sessions", (req, res) => {
+  try {
+    const { model = "claude-sonnet-4-5", title = "Percakapan Baru" } = req.body || {};
+    const sessions = loadChatHistory();
+    const newSession = {
+      id: `session_${Date.now()}`,
+      title,
+      model,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: []
+    };
+    sessions.unshift(newSession);
+    saveChatHistory(sessions);
+    res.json({ success: true, session: newSession });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/chat/sessions/:id → get session with all messages
+app.get("/api/chat/sessions/:id", (req, res) => {
+  try {
+    const sessions = loadChatHistory();
+    const session = sessions.find(s => s.id === req.params.id);
+    if (!session) return res.status(404).json({ error: "Sesi tidak ditemukan" });
+    res.json({ session });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/chat/sessions/:id → delete session
+app.delete("/api/chat/sessions/:id", (req, res) => {
+  try {
+    let sessions = loadChatHistory();
+    const before = sessions.length;
+    sessions = sessions.filter(s => s.id !== req.params.id);
+    if (sessions.length === before) return res.status(404).json({ error: "Sesi tidak ditemukan" });
+    saveChatHistory(sessions);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/chat/sessions/:id → rename session title
+app.patch("/api/chat/sessions/:id", (req, res) => {
+  try {
+    const { title } = req.body || {};
+    const sessions = loadChatHistory();
+    const idx = sessions.findIndex(s => s.id === req.params.id);
+    if (idx === -1) return res.status(404).json({ error: "Sesi tidak ditemukan" });
+    if (title) sessions[idx].title = title;
+    sessions[idx].updatedAt = new Date().toISOString();
+    saveChatHistory(sessions);
+    res.json({ success: true, session: sessions[idx] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper to upload a local file to tmpfiles.org and return a direct download URL
+async function uploadToTmpFiles(localFilePath) {
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(localFilePath)) {
+      console.warn(`[TmpFiles] File not found: ${localFilePath}`);
+      return null;
+    }
+    const fileBuffer = fs.readFileSync(localFilePath);
+    const fileBlob = new Blob([fileBuffer], { type: 'image/png' });
+    
+    const formData = new FormData();
+    formData.append('file', fileBlob, path.basename(localFilePath));
+    
+    console.log(`[TmpFiles] Uploading ${path.basename(localFilePath)}...`);
+    const response = await fetch('https://tmpfiles.org/api/v1/upload', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Upload failed with status ${response.status}`);
+    }
+    
+    const result = await response.json();
+    if (result.status === 'success' && result.data && result.data.url) {
+      const downloadUrl = result.data.url.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
+      console.log(`[TmpFiles] Upload success: ${downloadUrl}`);
+      return downloadUrl;
+    }
+    throw new Error('Invalid response payload');
+  } catch (err) {
+    console.error(`[TmpFiles] Error uploading to tmpfiles.org:`, err.message);
+    return null;
+  }
+}
+
+// POST /api/chat/sessions/:id/message → send message to AI and save
+app.post("/api/chat/sessions/:id/message", async (req, res) => {
+  const sessionId = req.params.id;
+  const { content, model } = req.body || {};
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: "Pesan tidak boleh kosong" });
+  }
+
+  try {
+    let sessions = loadChatHistory();
+    let session = sessions.find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: "Sesi tidak ditemukan" });
+
+    const activeModel = model || session.model || "gemini-3.5-flash";
+    const imageUrl = req.body.imageUrl || null; // local relative image URL (e.g. /chat-uploads/img_...)
+
+    // Save user message immediately
+    const userMsg = {
+      role: "user",
+      content: content.trim(),
+      timestamp: new Date().toISOString(),
+      imageUrl: imageUrl || undefined
+    };
+    session.messages.push(userMsg);
+
+    // Update session title from first user message
+    if (session.messages.filter(m => m.role === "user").length === 1) {
+      session.title = content.trim().slice(0, 60) + (content.trim().length > 60 ? "..." : "");
+    }
+
+    session.model = activeModel;
+    session.updatedAt = new Date().toISOString();
+    saveChatHistory(sessions);
+
+    // Build context prompt: include recent conversation history for context
+    const historyMsgs = session.messages.slice(-12); // last 12 messages for context
+    let contextPrompt = "";
+    for (const m of historyMsgs) {
+      if (m.role === "user") contextPrompt += `Human: ${m.content}\n`;
+      else if (m.role === "assistant") contextPrompt += `Assistant: ${m.content}\n`;
+    }
+
+    // Translate local relative imageUrl to public tmpfiles URL for Syntx AI
+    let publicImageUrl = null;
+    if (imageUrl && imageUrl.startsWith('/chat-uploads/')) {
+      const localPath = path.join(__dirname, 'public', imageUrl);
+      publicImageUrl = await uploadToTmpFiles(localPath);
+    }
+
+    // Call Syntx AI (account rotation is handled automatically by syntx-bot)
+    // Pass publicImageUrl if successfully generated, otherwise fallback to imageUrl
+    const aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl || imageUrl);
+
+    // Save assistant message
+    const assistantMsg = {
+      role: "assistant",
+      content: aiResponse,
+      timestamp: new Date().toISOString(),
+      model: activeModel
+    };
+
+    // Reload sessions to avoid stale state
+    sessions = loadChatHistory();
+    session = sessions.find(s => s.id === sessionId);
+    if (session) {
+      session.messages.push(assistantMsg);
+      session.updatedAt = new Date().toISOString();
+      saveChatHistory(sessions);
+    }
+
+    res.json({
+      success: true,
+      userMessage: userMsg,
+      assistantMessage: assistantMsg,
+      session: { id: session.id, title: session.title, model: session.model }
+    });
+
+  } catch (err) {
+    console.error("Chat AI error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/chat/sessions/:id/message/:messageIndex/edit → edit user message, truncate history, regenerate response
+app.post("/api/chat/sessions/:id/message/:messageIndex/edit", async (req, res) => {
+  const sessionId = req.params.id;
+  const messageIndex = parseInt(req.params.messageIndex, 10);
+  const { content, model } = req.body || {};
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: "Pesan tidak boleh kosong" });
+  }
+
+  try {
+    let sessions = loadChatHistory();
+    let session = sessions.find(s => s.id === sessionId);
+    if (!session) return res.status(404).json({ error: "Sesi tidak ditemukan" });
+
+    if (isNaN(messageIndex) || messageIndex < 0 || messageIndex >= session.messages.length) {
+      return res.status(400).json({ error: "Index pesan tidak valid" });
+    }
+
+    const targetMsg = session.messages[messageIndex];
+    if (targetMsg.role !== "user") {
+      return res.status(400).json({ error: "Hanya pesan user yang dapat diedit" });
+    }
+
+    const activeModel = model || session.model || "gemini-3.5-flash";
+    
+    // Determine imageUrl: if body explicitly has imageUrl, use it (can be null/empty)
+    // If not specified, we can keep the old one, but the user may choose to remove it.
+    let imageUrl = targetMsg.imageUrl;
+    if (req.body.hasOwnProperty('imageUrl')) {
+      imageUrl = req.body.imageUrl || null;
+    }
+
+    // Truncate messages: keep only up to messageIndex
+    session.messages = session.messages.slice(0, messageIndex + 1);
+
+    // Update target message
+    session.messages[messageIndex].content = content.trim();
+    if (imageUrl) {
+      session.messages[messageIndex].imageUrl = imageUrl;
+    } else {
+      delete session.messages[messageIndex].imageUrl;
+    }
+    session.messages[messageIndex].timestamp = new Date().toISOString();
+
+    // Update session model and title (if it is the first user message)
+    session.model = activeModel;
+    if (messageIndex === 0) {
+      session.title = content.trim().slice(0, 60) + (content.trim().length > 60 ? "..." : "");
+    }
+    session.updatedAt = new Date().toISOString();
+    saveChatHistory(sessions);
+
+    // Build context prompt: include the truncated conversation history
+    const historyMsgs = session.messages;
+    let contextPrompt = "";
+    for (const m of historyMsgs) {
+      if (m.role === "user") contextPrompt += `Human: ${m.content}\n`;
+      else if (m.role === "assistant") contextPrompt += `Assistant: ${m.content}\n`;
+    }
+
+    // Translate local relative imageUrl to public tmpfiles URL for Syntx AI
+    let publicImageUrl = null;
+    if (imageUrl && imageUrl.startsWith('/chat-uploads/')) {
+      const localPath = path.join(__dirname, 'public', imageUrl);
+      publicImageUrl = await uploadToTmpFiles(localPath);
+    }
+
+    // Call Syntx AI
+    const aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl || imageUrl);
+
+    // Save assistant message
+    const assistantMsg = {
+      role: "assistant",
+      content: aiResponse,
+      timestamp: new Date().toISOString(),
+      model: activeModel
+    };
+
+    // Reload sessions to avoid stale state
+    sessions = loadChatHistory();
+    session = sessions.find(s => s.id === sessionId);
+    if (session) {
+      session.messages = session.messages.slice(0, messageIndex + 1);
+      session.messages.push(assistantMsg);
+      session.updatedAt = new Date().toISOString();
+      saveChatHistory(sessions);
+    }
+
+    res.json({
+      success: true,
+      userMessage: session ? session.messages[messageIndex] : null,
+      assistantMessage: assistantMsg,
+      session: session ? { id: session.id, title: session.title, model: session.model } : null
+    });
+
+  } catch (err) {
+    console.error("Edit Chat AI error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server Jembatan Kode Bebas aktif di port ${PORT}`);
+});
+
