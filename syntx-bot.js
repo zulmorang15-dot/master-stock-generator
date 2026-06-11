@@ -908,7 +908,11 @@ async function loginAndGetToken(options = {}) {
 // PUBLIC API: callSyntx(prompt)
 // Auto-rotate akun saat mendekati/melebihi limit pesan
 // ─────────────────────────────────────────────
-async function callSyntx(prompt, model = 'claude-sonnet-4-5', options = {}, imageUrl = null) {
+async function callSyntx(prompt, model = 'claude-sonnet-4-5', options = {}, imageUrl = null, _retryCount = 0) {
+  const MAX_RETRIES = 5;
+  if (_retryCount >= MAX_RETRIES) {
+    throw new Error(`Gagal setelah ${MAX_RETRIES} percobaan: semua akun Syntx rate-limited atau expired. Coba lagi nanti atau tambahkan akun baru.`);
+  }
   let pool = loadAccountsPool();
   
   // Cari akun yang valid di pool
@@ -957,9 +961,11 @@ async function callSyntx(prompt, model = 'claude-sonnet-4-5', options = {}, imag
   } catch (err) {
     const status = err.response?.status;
     const isAuthError = status === 401 || err.message === 'TOKEN_EXPIRED';
-    const isLimitError = status === 402 || status === 403 || 
+    const isLimitError = status === 402 || status === 403 || status === 429 ||
                          err.message?.toLowerCase().includes('limit') ||
-                         err.message?.toLowerCase().includes('quota');
+                         err.message?.toLowerCase().includes('quota') ||
+                         err.message?.toLowerCase().includes('rate') ||
+                         err.message?.toLowerCase().includes('429');
     
     if (isAuthError || isLimitError) {
       logToTask(options, `❌ [syntx-bot] Akun ${sessionState.email} bermasalah (status ${status}, ${err.message}). Menghapus dari pool...`, 'warning');
@@ -971,7 +977,7 @@ async function callSyntx(prompt, model = 'claude-sonnet-4-5', options = {}, imag
       }
       sessionState.token = null;
       // Coba panggil ulang (dia akan cari akun lain atau bikin baru)
-      return callSyntx(prompt, model, options, imageUrl);
+      return callSyntx(prompt, model, options, imageUrl, _retryCount + 1);
     }
     
     throw err;
