@@ -114,23 +114,31 @@ function logToTask(options, message, type = 'info') {
 }
 
 // ─────────────────────────────────────────────
-// OPENINBOX: Create inbox + fetch OTP
+// OPENINBOX: Create inbox + fetch OTP (free, no API key)
+// Uses internal web endpoints with session cookies
 // ─────────────────────────────────────────────
 const OPENINBOX_API = 'https://api.openinbox.io/api';
 
-async function createOpenInboxEmail(options) {
-  const apiKey = process.env.OPENINBOX_API_KEY;
-  if (!apiKey) throw new Error('OPENINBOX_API_KEY tidak dikonfigurasi');
-
-  logToTask(options, '📧 [syntx-bot] Membuat inbox via OpenInbox.io...', 'info');
-
-  const res = await axios.post(`${OPENINBOX_API}/v1/inboxes`, {}, {
+function _openInboxSession() {
+  return axios.create({
+    baseURL: OPENINBOX_API,
+    withCredentials: true,
+    timeout: 15000,
     headers: {
       'Content-Type': 'application/json',
-      'X-API-Key': apiKey
-    },
-    timeout: 15000
+      'Origin': 'https://openinbox.io',
+      'Referer': 'https://openinbox.io/',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
   });
+}
+
+async function createOpenInboxEmail(options) {
+  logToTask(options, '📧 [syntx-bot] Membuat inbox via OpenInbox.io (gratis)...', 'info');
+
+  const session = _openInboxSession();
+  const fingerprint = require('crypto').randomBytes(16).toString('hex');
+  const res = await session.post('/inbox', { fingerprint });
 
   const inboxId = res.data.id;
   const email = res.data.email;
@@ -138,24 +146,21 @@ async function createOpenInboxEmail(options) {
     throw new Error('OpenInbox gagal membuat inbox: ' + JSON.stringify(res.data));
   }
 
-  logToTask(options, `✅ [syntx-bot] OpenInbox dibuat: ${email} (ID: ${inboxId})`, 'success');
-  return { email, inboxId };
+  logToTask(options, `✅ [syntx-bot] OpenInbox dibuat: ${email} (expire: ${res.data.expiresAt || '~10min'})`, 'success');
+  return { email, inboxId, session };
 }
 
-async function fetchOTPFromOpenInbox(apiKey, inboxId, maxWaitMs = 60000, options) {
-  logToTask(options, `🔍 [syntx-bot] Menunggu OTP di OpenInbox (${inboxId})...`, 'info');
+async function fetchOTPFromOpenInbox(session, inboxId, maxWaitMs = 60000, options) {
+  logToTask(options, `🔍 [syntx-bot] Menunggu OTP di OpenInbox...`, 'info');
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
     await sleep(5000);
 
     try {
-      const listRes = await axios.get(`${OPENINBOX_API}/v1/inboxes/${inboxId}/emails`, {
-        headers: { 'X-API-Key': apiKey },
-        timeout: 15000
-      });
+      const listRes = await session.get(`/emails/inbox/${inboxId}?page=1&limit=30`);
 
-      const emails = listRes.data.emails || listRes.data.data || listRes.data || [];
+      const emails = listRes.data.emails || [];
       if (emails.length === 0) {
         logToTask(options, `   ⏳ OpenInbox masih kosong, tunggu 5s... (${Math.floor((Date.now() - startTime)/1000)}s)`, 'info');
         continue;
@@ -164,16 +169,18 @@ async function fetchOTPFromOpenInbox(apiKey, inboxId, maxWaitMs = 60000, options
       // Read the first email's full content
       const firstEmail = emails[0];
       const emailId = firstEmail.id || firstEmail.emailId;
-      let body = firstEmail.body || firstEmail.text || firstEmail.html || '';
+      let body = firstEmail.body || firstEmail.text || firstEmail.html || firstEmail.textBody || firstEmail.htmlBody || '';
       let subject = firstEmail.subject || '';
 
       if (emailId && !body) {
-        const detailRes = await axios.get(`${OPENINBOX_API}/v1/emails/${emailId}`, {
-          headers: { 'X-API-Key': apiKey },
-          timeout: 15000
-        });
-        body = detailRes.data.body || detailRes.data.text || detailRes.data.html || '';
-        subject = detailRes.data.subject || subject;
+        try {
+          const detailRes = await session.get(`/emails/${emailId}`);
+          const d = detailRes.data;
+          body = d.textBody || d.htmlBody || d.body || d.text || d.html || '';
+          subject = d.subject || subject;
+        } catch (e) {
+          logToTask(options, `⚠️ [syntx-bot] Gagal ambil detail email: ${e.message}`, 'warning');
+        }
       }
 
       // Extract 6-digit OTP
@@ -184,7 +191,7 @@ async function fetchOTPFromOpenInbox(apiKey, inboxId, maxWaitMs = 60000, options
         return otp;
       }
 
-      logToTask(options, `⚠️ [syntx-bot] Email masuk tapi OTP tidak ditemukan di body/subject`, 'warning');
+      logToTask(options, `⚠️ [syntx-bot] Email masuk dari ${firstEmail.from || '?'} tapi OTP tidak ditemukan`, 'warning');
     } catch (err) {
       logToTask(options, `⚠️ [syntx-bot] Error cek OpenInbox: ${err.message}`, 'warning');
     }
@@ -873,27 +880,26 @@ function registerOtpProvider(fn) {
 async function loginAndGetToken(options = {}) {
   logToTask(options, '\n🔄 [syntx-bot] Memulai proses login syntx.ai...', 'info');
   
-  // Prioritas: 1) OpenInbox (API, stabil), 2) dot-variant, 3) Emailnator, 4) Gmailnator, 5) Mail.tm
+  // Prioritas: 1) OpenInbox (gratis, stabil), 2) dot-variant, 3) Emailnator, 4) Gmailnator, 5) Mail.tm
   const rapidApiKey = process.env.RAPIDAPI_KEY;
   const baseEmail = process.env.SYNTX_BASE_EMAIL;
-  const openInboxApiKey = process.env.OPENINBOX_API_KEY;
   let email;
   let syntxToken;
   let emailnatorCookies = null;
   let emailnatorXsrf = null;
-  let openInboxId = null; // track jika pakai OpenInbox
+  let openInboxId = null;
+  let openInboxSession = null;
 
-  // === OPSI 1: OpenInbox.io (paling stabil, butuh API key) ===
-  if (openInboxApiKey) {
-    try {
-      logToTask(options, '📧 [syntx-bot] Mencoba OpenInbox.io...', 'info');
-      const { email: oiEmail, inboxId } = await createOpenInboxEmail(options);
-      email = oiEmail;
-      openInboxId = inboxId;
-    } catch (oiErr) {
-      logToTask(options, `⚠️ [syntx-bot] OpenInbox gagal: ${oiErr.message}`, 'warning');
-      openInboxId = null;
-    }
+  // === OPSI 1: OpenInbox.io (gratis, tanpa API key) ===
+  try {
+    logToTask(options, '📧 [syntx-bot] Mencoba OpenInbox.io (gratis)...', 'info');
+    const { email: oiEmail, inboxId, session } = await createOpenInboxEmail(options);
+    email = oiEmail;
+    openInboxId = inboxId;
+    openInboxSession = session;
+  } catch (oiErr) {
+    logToTask(options, `⚠️ [syntx-bot] OpenInbox gagal: ${oiErr.message}`, 'warning');
+    openInboxId = null;
   }
 
   // === OPSI 2: Gmail dot-variant (jika OpenInbox gagal & ada base email) ===
@@ -941,10 +947,10 @@ async function loginAndGetToken(options = {}) {
 
   // Retrieve OTP sesuai sumber email
   let otp;
-  if (openInboxId && openInboxApiKey) {
-    // OpenInbox inbox
+  if (openInboxId && openInboxSession) {
+    // OpenInbox inbox (free, no API key)
     try {
-      otp = await fetchOTPFromOpenInbox(openInboxApiKey, openInboxId, 60000, options);
+      otp = await fetchOTPFromOpenInbox(openInboxSession, openInboxId, 60000, options);
     } catch (err) {
       logToTask(options, `⚠️ Gagal mengambil OTP dari OpenInbox: ${err.message}`, 'warning');
     }
