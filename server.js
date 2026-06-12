@@ -1890,11 +1890,14 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 **3. Deterministic Rendering:**
 - Never use Math.random() inside the component render. Pre-calculate random elements (particles, positions, delays) in a static const array OUTSIDE the component function.
 
-**4. 4K Auto-Fit Landscape Scaling (CRITICAL):**
+**4. FULLSCREEN 16:9 FILL (CRITICAL \u2014 NO BLACK BARS):**
 - Define: const ORIGINAL_WIDTH = 1920; const ORIGINAL_HEIGHT = 1080;
 - Inside the component: const { width, height, fps } = useVideoConfig();
-- const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
-- Apply transform: scale(\${scaleFactor}) and transformOrigin: 'center center' to the main wrapper div.
+- const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+- The main wrapper div MUST have these exact styles: width: ORIGINAL_WIDTH, height: ORIGINAL_HEIGHT, position: 'absolute', top: '50%', left: '50%', transform: \`translate(-50%, -50%) scale(\${scaleFactor})\`, transformOrigin: 'center center', overflow: 'hidden'.
+- NEVER multiply the scale by 0.85 or any value less than 1. The content MUST fill the entire 1920x1080 canvas edge-to-edge with NO black borders, NO margins, NO padding around the outer frame.
+- If the original HTML content does NOT naturally fill 1920x1080 (e.g. it was designed for a smaller viewport like 800x600 or uses centered content with empty space), you MUST adapt it: scale up the inner elements, stretch backgrounds to cover, reposition elements to use the full canvas. The final output must look like a fullscreen 16:9 video with ZERO empty/black space.
+- All background colors, gradients, and patterns MUST extend to cover the entire 1920x1080 area. Use 'backgroundSize: cover' or explicit width/height: '100%' on background layers.
 
 **5. Absolute Seamless Looping & Duration (CRITICAL):**
 - The animation MUST loop seamlessly and exactly match a duration of {{ANIMATION_DURATION}} seconds ({{DURATION_FRAMES}} frames at 30fps).
