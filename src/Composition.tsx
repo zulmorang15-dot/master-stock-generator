@@ -1,294 +1,478 @@
 import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
 
-// ==========================================
-// STATIC DETERMINISTIC PARTICLES (Pre-calculated)
-// ==========================================
-const PARTICLE_COUNT = 150;
-const SEED_PARTICLES = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
-  // Deterministic pseudo-random generation based on index to avoid Math.random() in render
-  const xSeed = Math.sin(i * 12.9898) * 43758.5453;
-  const ySeed = Math.cos(i * 78.233) * 43758.5453;
-  const speedSeed = Math.sin(i * 45.123) * 43758.5453;
-  const sizeSeed = Math.cos(i * 92.456) * 43758.5453;
-
-  return {
-    startX: Math.abs(xSeed % 1) * 1920,
-    startY: Math.abs(ySeed % 1) * 1080,
-    speed: 0.8 + Math.abs(speedSeed % 1) * 1.5,
-    size: 2 + Math.abs(sizeSeed % 1) * 5,
-    opacity: 0.15 + Math.abs(speedSeed % 1) * 0.6,
-    phase: Math.abs(ySeed % 1) * Math.PI * 2,
-    amplitude: 15 + Math.abs(xSeed % 1) * 30,
-    frequency: 1 + Math.floor(Math.abs(sizeSeed % 1) * 3),
-  };
-});
-
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const LuxuryBlackGoldEndscreen = () => {
-  const frame = useCurrentFrame();
+// High-fidelity pre-calculated static values for deterministic visual rendering
+const JITTER_SHADOWS = [
+  "0 0 40px rgba(0, 255, 255, 0.4), inset 0 0 50px rgba(0, 255, 255, 0.2)",
+  "0 0 70px rgba(0, 255, 255, 0.8), inset 0 0 80px rgba(0, 255, 255, 0.4)",
+  "0 0 45px rgba(0, 255, 255, 0.5), inset 0 0 55px rgba(0, 255, 255, 0.25)",
+  "0 0 60px rgba(0, 255, 255, 0.7), inset 0 0 70px rgba(0, 255, 255, 0.35)",
+  "0 0 38px rgba(0, 255, 255, 0.38), inset 0 0 48px rgba(0, 255, 255, 0.18)",
+  "0 0 75px rgba(0, 255, 255, 0.9), inset 0 0 85px rgba(0, 255, 255, 0.45)",
+  "0 0 50px rgba(0, 255, 255, 0.5), inset 0 0 60px rgba(0, 255, 255, 0.25)",
+  "0 0 42px rgba(0, 255, 255, 0.42), inset 0 0 52px rgba(0, 255, 255, 0.22)",
+  "0 0 65px rgba(0, 255, 255, 0.75), inset 0 0 75px rgba(0, 255, 255, 0.38)",
+  "0 0 55px rgba(0, 255, 255, 0.6), inset 0 0 65px rgba(0, 255, 255, 0.3)"
+];
+
+const RINGS_DATA = [
+  { size: 400, color: '#00ffff', rotX: 40, rotY: 25, speed: 1, dash: '10 15' },
+  { size: 550, color: '#ff00ff', rotX: -30, rotY: 45, speed: -0.7, dash: '40 10 5 10' },
+  { size: 700, color: '#00ffff', rotX: 55, rotY: -20, speed: 0.5, dash: '15 30' },
+  { size: 850, color: '#ff00ff', rotX: 15, rotY: 35, speed: -0.4, dash: 'none' },
+  { size: 1000, color: '#00ffff', rotX: -35, rotY: -35, speed: 0.3, dash: '100 20 10 20' },
+];
+
+const PARTICLE_COUNT = 100;
+const PARTICLES = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
+  const seed = Math.sin(i * 456.789) * 10000;
+  const x = (Math.abs(seed * 1.7) % 2400) - 1200;
+  const y = (Math.abs(seed * 2.3) % 1400) - 700;
+  const size = 2 + (Math.abs(seed * 3.1) % 4);
+  const depthStart = Math.abs(seed * 7.9) % 1000;
+  const color = i % 2 === 0 ? '#00ffff' : '#ff00ff';
+  return { x, y, size, depthStart, color };
+});
+
+const S1_Y_OFFSETS = [0, 40, -30, 10, -20];
+const S2_Y_OFFSETS = [0, -50, 30, -10];
+const S3_Y_OFFSETS = [0, 20, -40, 50, -15, 10];
+
+export const CyberpunkEsportsEndscreen = () => {
   const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
 
-  // 10-second seamless loop setup (300 frames)
-  const loopDuration = 300;
-  const localFrame = frame % loopDuration;
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // 4K Auto-Fit Landscape Scaling
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT) * 0.85;
+  // Parallax floating background simulation
+  const timeSec = frame / fps;
+  const parallaxX = Math.sin(timeSec * 0.628) * 12;
+  const parallaxY = Math.cos(timeSec * 0.628) * 6;
 
-  // --- Particle Loop Math ---
-  const particles = SEED_PARTICLES.map((p) => {
-    // Perfect seamless loop over 300 frames
-    // travelDistance is a multiple of 1080 to ensure seamless wrap-around
-    const travelDistance = 1080; 
-    const progress = localFrame / loopDuration;
-    const currentY = (p.startY - progress * travelDistance + 1080) % 1080;
-    
-    // Swaying X motion (perfect seamless sine loop)
-    const sway = Math.sin(progress * Math.PI * 2 * p.frequency + p.phase) * p.amplitude;
-    const currentX = (p.startX + sway) % 1920;
+  // Infinite holographic grid motion
+  const gridOffset1 = interpolate(frame % 30, [0, 30], [0, 40], { extrapolateRight: 'clamp' });
+  const gridOffset2 = interpolate(frame % 30, [0, 30], [0, 80], { extrapolateRight: 'clamp' });
 
-    return {
-      x: currentX,
-      y: currentY,
-      size: p.size,
-      opacity: p.opacity,
-    };
+  // Border rough flickering effect (10-frame perfect cycle loops inside 300 frames)
+  const leftPlaceholderShadow = JITTER_SHADOWS[frame % 10];
+  const rightPlaceholderShadow = JITTER_SHADOWS[(frame + 4) % 10];
+
+  // Moving scanline animation (Looping every 4 seconds = 120 frames)
+  const scanlineY = interpolate(frame % 120, [0, 120], [-100, 338], {
+    easing: Easing.linear,
   });
 
-  // --- Animation Timelines ---
+  // Subscribe portal animations
+  const rotCW = interpolate(frame % 300, [0, 300], [0, 360]);
+  const rotCCW = interpolate(frame % 300, [0, 300], [360, 0]);
 
-  // 1. Video Boxes Hover Floating (5s / 150 frames period - fits twice in 10s loop)
-  const floatOffsetLeft = Math.sin((localFrame / 150) * Math.PI * 2) * 8;
-  const floatOffsetRight = Math.cos((localFrame / 150) * Math.PI * 2) * 8;
+  // Core glow pulse (Symmetrical loop every 60 frames = 2 seconds)
+  const coreGlowFrame = frame % 60;
+  const coreScale = interpolate(coreGlowFrame, [0, 30, 60], [0.9, 1.1, 0.9], {
+    easing: Easing.inOut(Easing.quad),
+  });
+  const coreGlowIntensity = interpolate(coreGlowFrame, [0, 30, 60], [60, 110, 60], {
+    easing: Easing.inOut(Easing.quad),
+  });
 
-  // 2. Subscribe Circle Breathing (2.5s / 75 frames period - fits 4 times in 10s loop)
-  const breatheProgress = Math.sin((localFrame / 75) * Math.PI * 2);
-  const circleScale = interpolate(breatheProgress, [-1, 1], [0.98, 1.03]);
-  const circleGlow = interpolate(breatheProgress, [-1, 1], [30, 60]);
+  // Target radar scaling (Loops every 30 frames = 1 second)
+  const coreTargetFrame = frame % 30;
+  const targetScale = interpolate(coreTargetFrame, [0, 30], [0.1, 3], {
+    easing: Easing.out(Easing.quad),
+  });
+  const targetOpacity = interpolate(coreTargetFrame, [0, 10, 30], [1, 1, 0], {
+    easing: Easing.out(Easing.quad),
+  });
 
-  // 3. Rotating Inner Ring (10s continuous rotation)
-  const ringRotation = (localFrame / loopDuration) * 360;
+  // GSAP Replica: Sweeping laser streaks
+  // Streak 1: 60 frames (2s)
+  const s1Frame = frame % 60;
+  const s1X = interpolate(s1Frame, [0, 60], [-800, 2200], { easing: Easing.inOut(Easing.quad) });
+  const s1CurrentY = S1_Y_OFFSETS[Math.floor(frame / 60) % 5];
+  const s1Opacity = interpolate(s1Frame, [0, 10, 50, 60], [0, 1, 1, 0]);
 
-  // 4. Ambient Sweep Effect over Videos (5s / 150 frames period)
-  const sweepProgress = localFrame % 150;
-  // Sweep runs for 105 frames (3.5s) and rests for 45 frames (1.5s)
-  const sweepX = interpolate(
-    sweepProgress, 
-    [0, 105], 
-    [-100, 250], 
-    {
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-      easing: Easing.inOut(Easing.quad),
-    }
-  );
+  // Streak 2 (Magenta): 75 frames (2.5s)
+  const s2Frame = frame % 75;
+  const s2X = interpolate(s2Frame, [0, 75], [-1000, 2200], { easing: Easing.inOut(Easing.quad) });
+  const s2CurrentY = S2_Y_OFFSETS[Math.floor(frame / 75) % 4];
+  const s2Opacity = interpolate(s2Frame, [0, 12, 63, 75], [0, 1, 1, 0]);
 
-  // 5. Ambient text pulse
-  const textOpacity = interpolate(
-    Math.sin((localFrame / 100) * Math.PI * 2),
-    [-1, 1],
-    [0.4, 0.8]
-  );
+  // Streak 3: 50 frames (1.66s)
+  const s3Frame = frame % 50;
+  const s3X = interpolate(s3Frame, [0, 50], [-700, 2200], { easing: Easing.inOut(Easing.quad) });
+  const s3CurrentY = S3_Y_OFFSETS[Math.floor(frame / 50) % 6];
+  const s3Opacity = interpolate(s3Frame, [0, 8, 42, 50], [0, 1, 1, 0]);
+
+  // Point light pulsing intensity values
+  const lightPulseCyan = 4 + Math.sin(timeSec * 3) * 1.5;
+  const lightPulseMagenta = 4 + Math.cos(timeSec * 2.5) * 1.5;
 
   return (
     <div
       style={{
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
-        backgroundColor: '#050505',
         position: 'absolute',
         top: '50%',
         left: '50%',
-        overflow: 'hidden',
         transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
+        overflow: 'hidden',
+        backgroundColor: '#010105',
+        background: 'radial-gradient(circle at center, #020412 0%, #000000 100%)',
       }}
     >
-      {/* Dynamic Floor Grid & Ambient Reflection Simulation */}
+      {/* Background 3D Perspective Environment */}
       <div
         style={{
           position: 'absolute',
-          bottom: 0,
-          left: 0,
-          width: '100%',
-          height: '40%',
-          background: 'linear-gradient(to top, rgba(15, 12, 5, 0.6) 0%, rgba(5, 5, 5, 0) 100%)',
-          zIndex: 1,
-        }}
-      />
-
-      {/* Luxury Deterministic Particles Layer */}
-      <svg
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
           width: '100%',
           height: '100%',
-          zIndex: 2,
-          pointerEvents: 'none',
+          perspective: '1000px',
+          transformStyle: 'preserve-3d',
+          transform: `translate3d(${parallaxX}px, ${parallaxY}px, 0px)`,
         }}
       >
-        <defs>
-          <radialGradient id="particleGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#ffd700" stopOpacity="1" />
-            <stop offset="40%" stopColor="#d4af37" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="#d4af37" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        {particles.map((particle, index) => (
-          <circle
-            key={index}
-            cx={particle.x}
-            cy={particle.y}
-            r={particle.size}
-            fill="url(#particleGlow)"
-            style={{ opacity: particle.opacity }}
-          />
-        ))}
-      </svg>
-
-      {/* Vignette Layer */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          background: 'radial-gradient(circle at center, transparent 30%, rgba(0, 0, 0, 0.85) 80%, #000000 100%)',
-          zIndex: 3,
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* UI Layer */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          zIndex: 4,
-          pointerEvents: 'none',
-        }}
-      >
-        {/* Left Video Box */}
+        {/* Holographic Cyan Grid Floor */}
         <div
           style={{
             position: 'absolute',
-            width: '610px',
-            height: '343px',
-            top: '368px',
-            left: '160px',
-            borderRadius: '12px',
-            background: 'rgba(10, 8, 5, 0.45)',
-            border: '1.5px solid rgba(212, 175, 55, 0.5)',
-            boxShadow: `0 0 30px rgba(212, 175, 55, 0.15), inset 0 0 20px rgba(212, 175, 55, 0.1)`,
-            backdropFilter: 'blur(8px)',
-            overflow: 'hidden',
-            transform: `translateY(${floatOffsetLeft}px)`,
+            width: '300%',
+            height: '300%',
+            top: '25%',
+            left: '-100%',
+            backgroundImage: 'linear-gradient(rgba(0, 255, 255, 0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.12) 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+            backgroundPosition: `0px ${gridOffset1}px`,
+            transform: 'rotateX(75deg) translateY(200px)',
+            transformOrigin: 'center top',
+            opacity: 0.4,
           }}
-        >
-          {/* Sweep Light Effect */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '-50%',
-              left: '-50%',
-              width: '200%',
-              height: '200%',
-              background: 'linear-gradient(to right, transparent 45%, rgba(212, 175, 55, 0.25) 50%, transparent 55%)',
-              transform: `rotate(45deg) translateX(${sweepX}%)`,
-            }}
-          />
+        />
+
+        {/* Holographic Magenta Grid Floor */}
+        <div
+          style={{
+            position: 'absolute',
+            width: '300%',
+            height: '300%',
+            top: '25.5%',
+            left: '-100%',
+            backgroundImage: 'linear-gradient(rgba(255, 0, 255, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 0, 255, 0.08) 1px, transparent 1px)',
+            backgroundSize: '80px 80px',
+            backgroundPosition: `0px ${gridOffset2}px`,
+            transform: 'rotateX(75deg) translateY(200px)',
+            transformOrigin: 'center top',
+            opacity: 0.25,
+          }}
+        />
+
+        {/* Rotating Concentric Rings (3D Background) */}
+        <div style={{ position: 'absolute', width: '100%', height: '100%', transformStyle: 'preserve-3d' }}>
+          {RINGS_DATA.map((ring, i) => {
+            const ringAngle = interpolate(frame % 300, [0, 300], [0, 360 * ring.speed]);
+            return (
+              <svg
+                key={i}
+                width={ring.size}
+                height={ring.size}
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  marginLeft: -ring.size / 2,
+                  marginTop: -ring.size / 2,
+                  transform: `translateZ(-500px) rotateX(${ring.rotX}deg) rotateY(${ring.rotY}deg) rotateZ(${ringAngle}deg)`,
+                  transformOrigin: 'center center',
+                  overflow: 'visible',
+                }}
+              >
+                <circle
+                  cx={ring.size / 2}
+                  cy={ring.size / 2}
+                  r={ring.size / 2 - 4}
+                  fill="none"
+                  stroke={ring.color}
+                  strokeWidth="3"
+                  strokeDasharray={ring.dash}
+                  style={{
+                    filter: `drop-shadow(0 0 15px ${ring.color})`,
+                    opacity: 0.35,
+                  }}
+                />
+              </svg>
+            );
+          })}
         </div>
 
-        {/* Center Subscribe Circle */}
-        <div
-          style={{
-            position: 'absolute',
-            width: '240px',
-            height: '240px',
-            top: '420px',
-            left: '840px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at center, rgba(212, 175, 55, 0.12) 0%, rgba(5, 5, 5, 0.9) 70%)',
-            border: '2px solid rgba(212, 175, 55, 0.8)',
-            boxShadow: `0 0 ${circleGlow}px rgba(212, 175, 55, 0.35), inset 0 0 30px rgba(212, 175, 55, 0.2)`,
-            transform: `scale(${circleScale})`,
-          }}
-        >
-          {/* Rotating Inner Ring */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '10px',
-              left: '10px',
-              right: '10px',
-              bottom: '10px',
-              borderRadius: '50%',
-              border: '1.5px dashed rgba(212, 175, 55, 0.4)',
-              transform: `rotate(${ringRotation}deg)`,
-            }}
-          />
-        </div>
-
-        {/* Right Video Box */}
-        <div
-          style={{
-            position: 'absolute',
-            width: '610px',
-            height: '343px',
-            top: '368px',
-            right: '160px',
-            borderRadius: '12px',
-            background: 'rgba(10, 8, 5, 0.45)',
-            border: '1.5px solid rgba(212, 175, 55, 0.5)',
-            boxShadow: `0 0 30px rgba(212, 175, 55, 0.15), inset 0 0 20px rgba(212, 175, 55, 0.1)`,
-            backdropFilter: 'blur(8px)',
-            overflow: 'hidden',
-            transform: `translateY(${floatOffsetRight}px)`,
-          }}
-        >
-          {/* Sweep Light Effect */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '-50%',
-              left: '-50%',
-              width: '200%',
-              height: '200%',
-              background: 'linear-gradient(to right, transparent 45%, rgba(212, 175, 55, 0.25) 50%, transparent 55%)',
-              transform: `rotate(45deg) translateX(${sweepX}%)`,
-            }}
-          />
-        </div>
-
-        {/* Bottom Ambient Hint Text */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '120px',
-            width: '100%',
-            textAlign: 'center',
-            color: 'rgba(212, 175, 55, 0.7)',
-            fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
-            fontSize: '14px',
-            letterSpacing: '6px',
-            textTransform: 'uppercase',
-            opacity: textOpacity,
-          }}
-        >
-          Thanks For Watching
+        {/* Volumetric Digital Data Flow (Camera-bound particles) */}
+        <div style={{ position: 'absolute', width: '100%', height: '100%', transformStyle: 'preserve-3d' }}>
+          {PARTICLES.map((p, i) => {
+            const speed = 4;
+            const movement = (frame * speed) % 1000;
+            const currentDepth = (p.depthStart - movement + 1000) % 1000;
+            const z = interpolate(currentDepth, [0, 1000], [350, -1200]);
+            const opacity = interpolate(currentDepth, [0, 120, 880, 1000], [0, 0.75, 0.75, 0], {
+              extrapolateLeft: 'clamp',
+              extrapolateRight: 'clamp',
+            });
+            return (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  width: p.size,
+                  height: p.size,
+                  borderRadius: '50%',
+                  backgroundColor: p.color,
+                  left: '50%',
+                  top: '50%',
+                  boxShadow: `0 0 12px ${p.color}`,
+                  opacity,
+                  transform: `translate3d(${p.x}px, ${p.y}px, ${z}px)`,
+                  transformOrigin: 'center center',
+                }}
+              />
+            );
+          })}
         </div>
       </div>
+
+      {/* Cyber Ambient Backdrop Lights (Overlay effects) */}
+      <div
+        style={{
+          position: 'absolute',
+          width: '500px',
+          height: '500px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(0, 255, 255, 0.15) 0%, transparent 70%)',
+          top: '10%',
+          left: '15%',
+          transform: `scale(${1 + Math.sin(timeSec) * 0.1})`,
+          opacity: lightPulseCyan / 5,
+          mixBlendMode: 'screen',
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          width: '550px',
+          height: '550px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(255, 0, 255, 0.12) 0%, transparent 70%)',
+          bottom: '10%',
+          right: '15%',
+          transform: `scale(${1 + Math.cos(timeSec) * 0.1})`,
+          opacity: lightPulseMagenta / 5,
+          mixBlendMode: 'screen',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* 2D Interface / Interactive Elements Layer */}
+      <div className="ui-layer" style={{ position: 'absolute', width: '100%', height: '100%', zIndex: 10, pointerEvents: 'none' }}>
+        
+        {/* Left Video Placeholder */}
+        <div
+          className="placeholder left"
+          style={{
+            position: 'absolute',
+            width: '600px',
+            height: '338px',
+            top: '371px',
+            left: '100px',
+            background: 'rgba(1, 4, 15, 0.75)',
+            border: '3px solid #00ffff',
+            boxShadow: leftPlaceholderShadow,
+            backdropFilter: 'blur(8px)',
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ position: 'absolute', width: '100%', height: '100%', backgroundImage: 'linear-gradient(rgba(0, 255, 255, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.08) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+          <div style={{ position: 'absolute', width: '100%', height: '100px', background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.35), transparent)', top: -100, transform: `translateY(${scanlineY}px)` }} />
+          
+          {/* Glowing Tech Corners */}
+          <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', top: -4, left: -4, borderRight: 'none', borderBottom: 'none' }} />
+          <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', top: -4, right: -4, borderLeft: 'none', borderBottom: 'none' }} />
+          <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', bottom: -4, left: -4, borderRight: 'none', borderTop: 'none' }} />
+          <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', bottom: -4, right: -4, borderLeft: 'none', borderTop: 'none' }} />
+        </div>
+
+        {/* Right Video Placeholder */}
+        <div
+          className="placeholder right"
+          style={{
+            position: 'absolute',
+            width: '600px',
+            height: '338px',
+            top: '371px',
+            right: '100px',
+            background: 'rgba(1, 4, 15, 0.75)',
+            border: '3px solid #00ffff',
+            boxShadow: rightPlaceholderShadow,
+            backdropFilter: 'blur(8px)',
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ position: 'absolute', width: '100%', height: '100%', backgroundImage: 'linear-gradient(rgba(0, 255, 255, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.08) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+          <div style={{ position: 'absolute', width: '100%', height: '100px', background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.35), transparent)', top: -100, transform: `translateY(${scanlineY}px)` }} />
+          
+          {/* Glowing Tech Corners */}
+          <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', top: -4, left: -4, borderRight: 'none', borderBottom: 'none' }} />
+          <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', top: -4, right: -4, borderLeft: 'none', borderBottom: 'none' }} />
+          <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', bottom: -4, left: -4, borderRight: 'none', borderTop: 'none' }} />
+          <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', bottom: -4, right: -4, borderLeft: 'none', borderTop: 'none' }} />
+        </div>
+
+        {/* Subscribe Portal Circle */}
+        <div
+          className="subscribe-portal"
+          style={{
+            position: 'absolute',
+            width: '360px',
+            height: '360px',
+            left: '780px',
+            top: '360px',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderRadius: '50%',
+          }}
+        >
+          {/* Outer Reactor Ring */}
+          <div
+            className="ring-outer"
+            style={{
+              position: 'absolute',
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+              border: '4px solid transparent',
+              borderTop: '4px solid #00ffff',
+              borderBottom: '4px solid #00ffff',
+              boxShadow: '0 0 30px #00ffff, inset 0 0 20px #00ffff',
+              transform: `rotate(${rotCW}deg)`,
+            }}
+          />
+
+          {/* Inner Magenta Ring */}
+          <div
+            className="ring-inner"
+            style={{
+              position: 'absolute',
+              width: '80%',
+              height: '80%',
+              borderRadius: '50%',
+              border: '4px dashed #ff00ff',
+              boxShadow: '0 0 40px #ff00ff, inset 0 0 20px #ff00ff',
+              transform: `rotate(${rotCCW}deg)`,
+            }}
+          />
+
+          {/* Central Holographic Core */}
+          <div
+            className="core-glow"
+            style={{
+              position: 'absolute',
+              width: '45%',
+              height: '45%',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle at center, #ffffff 0%, #00ffff 40%, transparent 70%)',
+              boxShadow: `0 0 ${coreGlowIntensity}px #00ffff, 0 0 ${coreGlowIntensity + 40}px #00ffff`,
+              transform: `scale(${coreScale})`,
+            }}
+          />
+
+          {/* Core Target Radar Circle */}
+          <div
+            className="core-target"
+            style={{
+              position: 'absolute',
+              width: '25%',
+              height: '25%',
+              borderRadius: '50%',
+              border: '6px solid #fff',
+              boxShadow: '0 0 20px #fff',
+              transform: `scale(${targetScale})`,
+              opacity: targetOpacity,
+            }}
+          />
+        </div>
+
+        {/* Cinematic Fast Light Streaks */}
+        {/* Streak 1 */}
+        <div
+          className="light-streak"
+          style={{
+            position: 'absolute',
+            height: '2px',
+            width: '600px',
+            background: 'linear-gradient(90deg, transparent, #00ffff, #ffffff)',
+            boxShadow: '0 0 20px #00ffff, 0 0 40px #00ffff',
+            borderRadius: '50%',
+            top: '250px',
+            left: 0,
+            transform: `translate3d(${s1X}px, ${s1CurrentY}px, 0px)`,
+            opacity: s1Opacity,
+            mixBlendMode: 'screen',
+          }}
+        />
+
+        {/* Streak 2 (Magenta) */}
+        <div
+          className="light-streak magenta"
+          style={{
+            position: 'absolute',
+            height: '2px',
+            width: '800px',
+            background: 'linear-gradient(90deg, transparent, #ff00ff, #ffffff)',
+            boxShadow: '0 0 20px #ff00ff, 0 0 40px #ff00ff',
+            borderRadius: '50%',
+            top: '850px',
+            left: 0,
+            transform: `translate3d(${s2X}px, ${s2CurrentY}px, 0px)`,
+            opacity: s2Opacity,
+            mixBlendMode: 'screen',
+          }}
+        />
+
+        {/* Streak 3 */}
+        <div
+          className="light-streak"
+          style={{
+            position: 'absolute',
+            height: '2px',
+            width: '500px',
+            background: 'linear-gradient(90deg, transparent, #00ffff, #ffffff)',
+            boxShadow: '0 0 20px #00ffff, 0 0 40px #00ffff',
+            borderRadius: '50%',
+            top: '450px',
+            left: 0,
+            transform: `translate3d(${s3X}px, ${s3CurrentY}px, 0px)`,
+            opacity: s3Opacity,
+            mixBlendMode: 'screen',
+          }}
+        />
+      </div>
+
+      {/* Cyberpunk Vignette Layer */}
+      <div
+        className="vignette"
+        style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          boxShadow: 'inset 0 0 250px rgba(0, 0, 0, 0.95)',
+          zIndex: 20,
+          pointerEvents: 'none',
+        }}
+      />
     </div>
   );
 };
 
-export default LuxuryBlackGoldEndscreen;
+export default CyberpunkEsportsEndscreen;
 // END_OF_FILE
