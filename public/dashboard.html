@@ -100,6 +100,10 @@
       background: radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
       pointer-events: none;
     }
+    .input-card.drag-over {
+      border: 1px dashed var(--cyan) !important;
+      background: var(--cyan-dim) !important;
+    }
     /* ── DROP ZONE ─────────────────────────────── */
     .drop-zone {
       border: 2px dashed rgba(56,189,248,0.25);
@@ -1469,7 +1473,7 @@
     <div style="display:flex; flex-direction:column; gap:24px;">
       
       <!-- Editor Card -->
-      <div class="input-card" style="padding:28px;">
+      <div class="input-card" id="compilerEditorCard" style="padding:28px; transition: border-color 0.25s, background-color 0.25s;">
         <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
           <div>
             <h3 style="font-size:18px; font-weight:800; color:var(--cyan); margin:0;">💻 HTML Compiler & Live Preview</h3>
@@ -1852,6 +1856,43 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.html'));
     addFiles(files);
   });
+
+  // HTML Compiler Drag & Drop support
+  const compilerEditorCard = document.getElementById('compilerEditorCard');
+  if (compilerEditorCard) {
+    compilerEditorCard.addEventListener('dragover', e => {
+      e.preventDefault();
+      compilerEditorCard.classList.add('drag-over');
+    });
+    compilerEditorCard.addEventListener('dragleave', () => {
+      compilerEditorCard.classList.remove('drag-over');
+    });
+    compilerEditorCard.addEventListener('drop', async e => {
+      e.preventDefault();
+      compilerEditorCard.classList.remove('drag-over');
+      
+      const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.html'));
+      if (files.length === 0) {
+        showToast('⚠️ Hanya file .html yang dapat di-drop di compiler!', 'warning');
+        return;
+      }
+      
+      try {
+        const file = files[0];
+        const content = await readFileText(file);
+        
+        const editor = document.getElementById('compilerHtmlCode');
+        if (editor) {
+          editor.value = content;
+          saveCompilerState();
+          runHtmlCompiler();
+          showToast(`✅ File "${file.name}" berhasil di-load ke compiler!`, 'success');
+        }
+      } catch (err) {
+        showToast('❌ Gagal membaca file: ' + err.message, 'error');
+      }
+    });
+  }
 
   function handleFileSelect(files) {
     addFiles(Array.from(files));
