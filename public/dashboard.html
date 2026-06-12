@@ -2642,16 +2642,123 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       ? `<td rowspan="3" style="text-align:center;vertical-align:middle; border-bottom:2px solid var(--border);"><input type="checkbox" class="row-checkbox" data-id="${item.id}" ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" /></td>`
       : '';
 
+    let rowBg = 'rgba(56,189,248,0.02)'; // default background
+    let statusBadge = '';
+    
+    if (item.statusConvertTsx === 'queued') {
+      rowBg = 'rgba(245, 158, 11, 0.04)'; // subtle amber
+      statusBadge = `<span class="status-badge" style="background:rgba(245,158,11,0.12); color:#f59e0b; border:1px solid rgba(245,158,11,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">⏳ Di Antrean</span>`;
+    } else if (item.statusConvertTsx === 'processing-tsx') {
+      rowBg = 'rgba(168, 85, 247, 0.05)'; // subtle purple
+      statusBadge = `<span class="status-badge" style="background:rgba(168,85,247,0.12); color:#c084fc; border:1px solid rgba(168,85,247,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">⚙️ Mengonversi TSX...</span>`;
+    } else if (item.statusConvertTsx === 'processing-preview') {
+      rowBg = 'rgba(6, 182, 212, 0.05)'; // subtle cyan
+      statusBadge = `<span class="status-badge" style="background:rgba(6,182,212,0.12); color:#22d3ee; border:1px solid rgba(6,182,212,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">🎬 Merender Preview...</span>`;
+    } else if (item.previewUrl) {
+      rowBg = 'rgba(16, 185, 129, 0.04)'; // subtle emerald green
+      statusBadge = `<span class="status-badge" style="background:rgba(16,185,129,0.12); color:#34d399; border:1px solid rgba(16,185,129,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">✅ Selesai Preview</span>`;
+    } else if (item.statusConvertTsx === 'failed') {
+      rowBg = 'rgba(239, 68, 68, 0.04)'; // subtle red
+      statusBadge = `<span class="status-badge" style="background:rgba(239,68,68,0.12); color:#f87171; border:1px solid rgba(239,68,68,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">❌ Gagal</span>`;
+    }
+
     return `
       <!-- Baris 1: No, Nama File, Aksi -->
-      <tr id="row_1_${item.id}" style="background: rgba(56,189,248,0.02);">
+      <tr id="row_1_${item.id}" style="background: ${rowBg};">
         ${checkboxCell}
         <td class="td-no" rowspan="3" style="text-align:center; vertical-align:middle; font-weight:700; border-bottom:2px solid var(--border); border-right:1px solid var(--border);">${no}</td>
         <td colspan="3" style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--cyan); font-weight:700; padding:10px 14px; border-bottom:1px solid rgba(56,189,248,0.15); vertical-align:middle;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
-            <span>📄 ${escHtml(item.fileName || item.id)}</span>
-            <div style="display:flex; align-items:center; gap:6px;">
-              <!-- Pengaturan video lokal baris ini -->
+            <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
+              <span>📄 ${escHtml(item.fileName || item.id)}</span>
+              ${statusBadge}
+            </div>
+            
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+              <!-- Row 1: Kategori & Status Upload -->
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                <!-- Dropdown upload status (catatan saya) -->
+                <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0;" onchange="saveField('${item.id}', 'uploadStatus', this.value)" title="Status Upload / Catatan Saya">
+                  <option value="belum_upload" ${item.uploadStatus !== 'upload' ? 'selected' : ''}>❌ Belum Upload</option>
+                  <option value="upload" ${item.uploadStatus === 'upload' ? 'selected' : ''}>✅ Sudah Upload</option>
+                </select>
+
+                <!-- Dropdown Adobe Stock Category -->
+                <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(168,85,247,0.4);" onchange="saveField('${item.id}', 'adobeCategory', this.value)" title="Kategori Adobe Stock">
+                  <option value="">Kategori Adobe...</option>
+                  <option value="1" ${item.adobeCategory === '1' ? 'selected' : ''}>1. Animals</option>
+                  <option value="2" ${item.adobeCategory === '2' ? 'selected' : ''}>2. Buildings & Architecture</option>
+                  <option value="3" ${item.adobeCategory === '3' ? 'selected' : ''}>3. Business</option>
+                  <option value="4" ${item.adobeCategory === '4' ? 'selected' : ''}>4. Drinks</option>
+                  <option value="5" ${item.adobeCategory === '5' ? 'selected' : ''}>5. The Environment</option>
+                  <option value="6" ${item.adobeCategory === '6' ? 'selected' : ''}>6. States of Mind</option>
+                  <option value="7" ${item.adobeCategory === '7' ? 'selected' : ''}>7. Food</option>
+                  <option value="8" ${item.adobeCategory === '8' ? 'selected' : ''}>8. Graphic Resources</option>
+                  <option value="9" ${item.adobeCategory === '9' ? 'selected' : ''}>9. Hobbies & Leisure</option>
+                  <option value="10" ${item.adobeCategory === '10' ? 'selected' : ''}>10. Industry</option>
+                  <option value="11" ${item.adobeCategory === '11' ? 'selected' : ''}>11. Landscape</option>
+                  <option value="12" ${item.adobeCategory === '12' ? 'selected' : ''}>12. Lifestyle</option>
+                  <option value="13" ${item.adobeCategory === '13' ? 'selected' : ''}>13. People</option>
+                  <option value="14" ${item.adobeCategory === '14' ? 'selected' : ''}>14. Plants & Flowers</option>
+                  <option value="15" ${item.adobeCategory === '15' ? 'selected' : ''}>15. Culture & Religion</option>
+                  <option value="16" ${item.adobeCategory === '16' ? 'selected' : ''}>16. Science</option>
+                  <option value="17" ${item.adobeCategory === '17' ? 'selected' : ''}>17. Social Issues</option>
+                  <option value="18" ${item.adobeCategory === '18' ? 'selected' : ''}>18. Sports</option>
+                  <option value="19" ${item.adobeCategory === '19' ? 'selected' : ''}>19. Technology</option>
+                  <option value="20" ${item.adobeCategory === '20' ? 'selected' : ''}>20. Transport</option>
+                  <option value="21" ${item.adobeCategory === '21' ? 'selected' : ''}>21. Travel</option>
+                </select>
+
+                <!-- Dropdown Shutterstock Category 1 -->
+                <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory', this.value)" title="Kategori Shutterstock 1">
+                  <option value="">Kategori Shutter 1...</option>
+                  <option value="Animals/Wildlife" ${item.shutterstockCategory === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
+                  <option value="Arts" ${item.shutterstockCategory === 'Arts' ? 'selected' : ''}>Arts</option>
+                  <option value="Backgrounds/Textures" ${item.shutterstockCategory === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
+                  <option value="Buildings/Landmarks" ${item.shutterstockCategory === 'Buildings/Landmarks' ? 'selected' : ''}>Buildings/Landmarks</option>
+                  <option value="Business/Finance" ${item.shutterstockCategory === 'Business/Finance' ? 'selected' : ''}>Business/Finance</option>
+                  <option value="Education" ${item.shutterstockCategory === 'Education' ? 'selected' : ''}>Education</option>
+                  <option value="Food and drink" ${item.shutterstockCategory === 'Food and drink' ? 'selected' : ''}>Food and drink</option>
+                  <option value="Healthcare/Medical" ${item.shutterstockCategory === 'Healthcare/Medical' ? 'selected' : ''}>Healthcare/Medical</option>
+                  <option value="Holidays" ${item.shutterstockCategory === 'Holidays' ? 'selected' : ''}>Holidays</option>
+                  <option value="Industrial" ${item.shutterstockCategory === 'Industrial' ? 'selected' : ''}>Industrial</option>
+                  <option value="Nature" ${item.shutterstockCategory === 'Nature' ? 'selected' : ''}>Nature</option>
+                  <option value="Objects" ${item.shutterstockCategory === 'Objects' ? 'selected' : ''}>Objects</option>
+                  <option value="People" ${item.shutterstockCategory === 'People' ? 'selected' : ''}>People</option>
+                  <option value="Religion" ${item.shutterstockCategory === 'Religion' ? 'selected' : ''}>Religion</option>
+                  <option value="Science" ${item.shutterstockCategory === 'Science' ? 'selected' : ''}>Science</option>
+                  <option value="Signs/Symbols" ${item.shutterstockCategory === 'Signs/Symbols' ? 'selected' : ''}>Signs/Symbols</option>
+                  <option value="Sports/Recreation" ${item.shutterstockCategory === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
+                  <option value="Technology" ${item.shutterstockCategory === 'Technology' ? 'selected' : ''}>Technology</option>
+                  <option value="Transportation" ${item.shutterstockCategory === 'Transportation' ? 'selected' : ''}>Transportation</option>
+                </select>
+
+                <!-- Dropdown Shutterstock Category 2 -->
+                <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory2', this.value)" title="Kategori Shutterstock 2">
+                  <option value="">Kategori Shutter 2...</option>
+                  <option value="Animals/Wildlife" ${item.shutterstockCategory2 === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
+                  <option value="Arts" ${item.shutterstockCategory2 === 'Arts' ? 'selected' : ''}>Arts</option>
+                  <option value="Backgrounds/Textures" ${item.shutterstockCategory2 === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
+                  <option value="Buildings/Landmarks" ${item.shutterstockCategory2 === 'Buildings/Landmarks' ? 'selected' : ''}>Buildings/Landmarks</option>
+                  <option value="Business/Finance" ${item.shutterstockCategory2 === 'Business/Finance' ? 'selected' : ''}>Business/Finance</option>
+                  <option value="Education" ${item.shutterstockCategory2 === 'Education' ? 'selected' : ''}>Education</option>
+                  <option value="Food and drink" ${item.shutterstockCategory2 === 'Food and drink' ? 'selected' : ''}>Food and drink</option>
+                  <option value="Healthcare/Medical" ${item.shutterstockCategory2 === 'Healthcare/Medical' ? 'selected' : ''}>Healthcare/Medical</option>
+                  <option value="Holidays" ${item.shutterstockCategory2 === 'Holidays' ? 'selected' : ''}>Holidays</option>
+                  <option value="Industrial" ${item.shutterstockCategory2 === 'Industrial' ? 'selected' : ''}>Industrial</option>
+                  <option value="Nature" ${item.shutterstockCategory2 === 'Nature' ? 'selected' : ''}>Nature</option>
+                  <option value="Objects" ${item.shutterstockCategory2 === 'Objects' ? 'selected' : ''}>Objects</option>
+                  <option value="People" ${item.shutterstockCategory2 === 'People' ? 'selected' : ''}>People</option>
+                  <option value="Religion" ${item.shutterstockCategory2 === 'Religion' ? 'selected' : ''}>Religion</option>
+                  <option value="Science" ${item.shutterstockCategory2 === 'Science' ? 'selected' : ''}>Science</option>
+                  <option value="Signs/Symbols" ${item.shutterstockCategory2 === 'Signs/Symbols' ? 'selected' : ''}>Signs/Symbols</option>
+                  <option value="Sports/Recreation" ${item.shutterstockCategory2 === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
+                  <option value="Technology" ${item.shutterstockCategory2 === 'Technology' ? 'selected' : ''}>Technology</option>
+                  <option value="Transportation" ${item.shutterstockCategory2 === 'Transportation' ? 'selected' : ''}>Transportation</option>
+                </select>
+              </div>
+              
+              <!-- Row 2: Pengaturan video lokal (Loop, Trans, Durasi, FPS) -->
               <div style="display:flex; align-items:center; gap:4px; padding: 2px 6px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 6px;">
                 <select id="loop_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="saveField('${item.id}', 'loop', this.value === 'true')" title="Loop Video">
                   <option value="true" ${item.loop !== false ? 'selected' : ''}>🔄 Loop</option>
@@ -2675,85 +2782,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
                   <option value="60" ${item.fps === 60 ? 'selected' : ''}>60 FPS</option>
                 </select>
               </div>
-              <!-- Dropdown upload status (catatan saya) -->
-              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0;" onchange="saveField('${item.id}', 'uploadStatus', this.value)" title="Status Upload / Catatan Saya">
-                <option value="belum_upload" ${item.uploadStatus !== 'upload' ? 'selected' : ''}>❌ Belum Upload</option>
-                <option value="upload" ${item.uploadStatus === 'upload' ? 'selected' : ''}>✅ Sudah Upload</option>
-              </select>
-
-              <!-- Dropdown Adobe Stock Category -->
-              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(168,85,247,0.4);" onchange="saveField('${item.id}', 'adobeCategory', this.value)" title="Kategori Adobe Stock">
-                <option value="">Kategori Adobe...</option>
-                <option value="1" ${item.adobeCategory === '1' ? 'selected' : ''}>1. Animals</option>
-                <option value="2" ${item.adobeCategory === '2' ? 'selected' : ''}>2. Buildings & Architecture</option>
-                <option value="3" ${item.adobeCategory === '3' ? 'selected' : ''}>3. Business</option>
-                <option value="4" ${item.adobeCategory === '4' ? 'selected' : ''}>4. Drinks</option>
-                <option value="5" ${item.adobeCategory === '5' ? 'selected' : ''}>5. The Environment</option>
-                <option value="6" ${item.adobeCategory === '6' ? 'selected' : ''}>6. States of Mind</option>
-                <option value="7" ${item.adobeCategory === '7' ? 'selected' : ''}>7. Food</option>
-                <option value="8" ${item.adobeCategory === '8' ? 'selected' : ''}>8. Graphic Resources</option>
-                <option value="9" ${item.adobeCategory === '9' ? 'selected' : ''}>9. Hobbies & Leisure</option>
-                <option value="10" ${item.adobeCategory === '10' ? 'selected' : ''}>10. Industry</option>
-                <option value="11" ${item.adobeCategory === '11' ? 'selected' : ''}>11. Landscape</option>
-                <option value="12" ${item.adobeCategory === '12' ? 'selected' : ''}>12. Lifestyle</option>
-                <option value="13" ${item.adobeCategory === '13' ? 'selected' : ''}>13. People</option>
-                <option value="14" ${item.adobeCategory === '14' ? 'selected' : ''}>14. Plants & Flowers</option>
-                <option value="15" ${item.adobeCategory === '15' ? 'selected' : ''}>15. Culture & Religion</option>
-                <option value="16" ${item.adobeCategory === '16' ? 'selected' : ''}>16. Science</option>
-                <option value="17" ${item.adobeCategory === '17' ? 'selected' : ''}>17. Social Issues</option>
-                <option value="18" ${item.adobeCategory === '18' ? 'selected' : ''}>18. Sports</option>
-                <option value="19" ${item.adobeCategory === '19' ? 'selected' : ''}>19. Technology</option>
-                <option value="20" ${item.adobeCategory === '20' ? 'selected' : ''}>20. Transport</option>
-                <option value="21" ${item.adobeCategory === '21' ? 'selected' : ''}>21. Travel</option>
-              </select>
-
-              <!-- Dropdown Shutterstock Category 1 -->
-              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory', this.value)" title="Kategori Shutterstock 1">
-                <option value="">Kategori Shutter 1...</option>
-                <option value="Animals/Wildlife" ${item.shutterstockCategory === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
-                <option value="Arts" ${item.shutterstockCategory === 'Arts' ? 'selected' : ''}>Arts</option>
-                <option value="Backgrounds/Textures" ${item.shutterstockCategory === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
-                <option value="Buildings/Landmarks" ${item.shutterstockCategory === 'Buildings/Landmarks' ? 'selected' : ''}>Buildings/Landmarks</option>
-                <option value="Business/Finance" ${item.shutterstockCategory === 'Business/Finance' ? 'selected' : ''}>Business/Finance</option>
-                <option value="Education" ${item.shutterstockCategory === 'Education' ? 'selected' : ''}>Education</option>
-                <option value="Food and drink" ${item.shutterstockCategory === 'Food and drink' ? 'selected' : ''}>Food and drink</option>
-                <option value="Healthcare/Medical" ${item.shutterstockCategory === 'Healthcare/Medical' ? 'selected' : ''}>Healthcare/Medical</option>
-                <option value="Holidays" ${item.shutterstockCategory === 'Holidays' ? 'selected' : ''}>Holidays</option>
-                <option value="Industrial" ${item.shutterstockCategory === 'Industrial' ? 'selected' : ''}>Industrial</option>
-                <option value="Nature" ${item.shutterstockCategory === 'Nature' ? 'selected' : ''}>Nature</option>
-                <option value="Objects" ${item.shutterstockCategory === 'Objects' ? 'selected' : ''}>Objects</option>
-                <option value="People" ${item.shutterstockCategory === 'People' ? 'selected' : ''}>People</option>
-                <option value="Religion" ${item.shutterstockCategory === 'Religion' ? 'selected' : ''}>Religion</option>
-                <option value="Science" ${item.shutterstockCategory === 'Science' ? 'selected' : ''}>Science</option>
-                <option value="Signs/Symbols" ${item.shutterstockCategory === 'Signs/Symbols' ? 'selected' : ''}>Signs/Symbols</option>
-                <option value="Sports/Recreation" ${item.shutterstockCategory === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
-                <option value="Technology" ${item.shutterstockCategory === 'Technology' ? 'selected' : ''}>Technology</option>
-                <option value="Transportation" ${item.shutterstockCategory === 'Transportation' ? 'selected' : ''}>Transportation</option>
-              </select>
-
-              <!-- Dropdown Shutterstock Category 2 -->
-              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory2', this.value)" title="Kategori Shutterstock 2">
-                <option value="">Kategori Shutter 2...</option>
-                <option value="Animals/Wildlife" ${item.shutterstockCategory2 === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
-                <option value="Arts" ${item.shutterstockCategory2 === 'Arts' ? 'selected' : ''}>Arts</option>
-                <option value="Backgrounds/Textures" ${item.shutterstockCategory2 === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
-                <option value="Buildings/Landmarks" ${item.shutterstockCategory2 === 'Buildings/Landmarks' ? 'selected' : ''}>Buildings/Landmarks</option>
-                <option value="Business/Finance" ${item.shutterstockCategory2 === 'Business/Finance' ? 'selected' : ''}>Business/Finance</option>
-                <option value="Education" ${item.shutterstockCategory2 === 'Education' ? 'selected' : ''}>Education</option>
-                <option value="Food and drink" ${item.shutterstockCategory2 === 'Food and drink' ? 'selected' : ''}>Food and drink</option>
-                <option value="Healthcare/Medical" ${item.shutterstockCategory2 === 'Healthcare/Medical' ? 'selected' : ''}>Healthcare/Medical</option>
-                <option value="Holidays" ${item.shutterstockCategory2 === 'Holidays' ? 'selected' : ''}>Holidays</option>
-                <option value="Industrial" ${item.shutterstockCategory2 === 'Industrial' ? 'selected' : ''}>Industrial</option>
-                <option value="Nature" ${item.shutterstockCategory2 === 'Nature' ? 'selected' : ''}>Nature</option>
-                <option value="Objects" ${item.shutterstockCategory2 === 'Objects' ? 'selected' : ''}>Objects</option>
-                <option value="People" ${item.shutterstockCategory2 === 'People' ? 'selected' : ''}>People</option>
-                <option value="Religion" ${item.shutterstockCategory2 === 'Religion' ? 'selected' : ''}>Religion</option>
-                <option value="Science" ${item.shutterstockCategory2 === 'Science' ? 'selected' : ''}>Science</option>
-                <option value="Signs/Symbols" ${item.shutterstockCategory2 === 'Signs/Symbols' ? 'selected' : ''}>Signs/Symbols</option>
-                <option value="Sports/Recreation" ${item.shutterstockCategory2 === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
-                <option value="Technology" ${item.shutterstockCategory2 === 'Technology' ? 'selected' : ''}>Technology</option>
-                <option value="Transportation" ${item.shutterstockCategory2 === 'Transportation' ? 'selected' : ''}>Transportation</option>
-              </select>
             </div>
           </div>
         </td>
@@ -2763,7 +2791,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       </tr>
       
       <!-- Baris 2: Rekomendasi Judul -->
-      <tr id="row_2_${item.id}">
+      <tr id="row_2_${item.id}" style="background: ${rowBg};">
         <td colspan="3" style="padding:8px 14px; border-bottom:1px solid rgba(56,189,248,0.15); vertical-align:middle;">
           <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:4px; letter-spacing:0.5px;">Rekomendasi Judul</div>
           <div class="edit-wrap">
@@ -2775,7 +2803,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       </tr>
       
       <!-- Baris 3: Preview, Log Proses, Keywords -->
-      <tr id="row_3_${item.id}" style="border-bottom:2px solid var(--border);">
+      <tr id="row_3_${item.id}" style="background: ${rowBg}; border-bottom:2px solid var(--border);">
         <!-- Preview Cell -->
         <td class="preview-cell" style="width:180px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:2px solid var(--border);">
           <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px; text-align:center;">Preview</div>
