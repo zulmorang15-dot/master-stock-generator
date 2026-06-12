@@ -3,555 +3,385 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const CYAN = '#00ffff';
-const MAGENTA = '#ff00ff';
-const YELLOW = '#ffff00';
-const BG_COLOR = '#050505';
-const KEY_COLOR = '#00FF00';
+// Deterministic particles pre-calculated outside the component to avoid Math.random()
+const PARTICLE_COUNT = 80;
+const particles = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
+    const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
+    const radius = 150 + Math.abs(Math.sin(i * 987.654)) * 350;
+    const x = 960 + Math.cos(angle) * radius;
+    const zBase = 540 + Math.sin(angle) * radius * 0.4;
+    const phase = (i / PARTICLE_COUNT) * Math.PI * 2;
+    const size = 1.5 + Math.abs(Math.cos(i * 123.45)) * 3;
+    const opacity = 0.2 + Math.abs(Math.sin(i * 456.78)) * 0.5;
+    return { x, zBase, phase, size, opacity };
+});
 
-// Pre-calculated particle data (static, outside component)
-const PARTICLES = [
-  { width: 3, height: 15, left: '20%', color: CYAN, duration: 5, delay: 0 },
-  { width: 4, height: 4, left: '80%', color: MAGENTA, duration: 10, delay: 2 },
-  { width: 10, height: 2, left: '50%', color: YELLOW, duration: 2.5, delay: 1 },
-  { width: 2, height: 20, left: '35%', color: CYAN, duration: 5, delay: 3 },
-  { width: 5, height: 5, left: '65%', color: MAGENTA, duration: 5, delay: 4 },
-];
+const DUST_COUNT = 40;
+const dustParticles = Array.from({ length: DUST_COUNT }).map((_, i) => {
+    const x = Math.abs(Math.sin(i * 345.67)) * 1920;
+    const yStart = Math.abs(Math.cos(i * 765.43)) * 1080;
+    const speed = 0.4 + Math.abs(Math.sin(i * 12.34)) * 1.2;
+    const size = 1 + Math.abs(Math.cos(i * 89.12)) * 2;
+    const opacity = 0.15 + Math.abs(Math.sin(i * 56.78)) * 0.3;
+    return { x, yStart, speed, size, opacity };
+});
 
-const SynthwaveGreenScreenOverlay: React.FC = () => {
-  const { width, height, fps } = useVideoConfig();
-  const frame = useCurrentFrame();
+const HudCrosshair = ({ style }: { style: React.CSSProperties }) => {
+    return (
+        <div style={{ ...style, position: 'absolute', width: 20, height: 20 }}>
+            <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: 2, backgroundColor: '#0055ff', transform: 'translateY(-50%)' }} />
+            <div style={{ position: 'absolute', top: 0, left: '50%', width: 2, height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }} />
+        </div>
+    );
+};
 
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+export const FuturisticEsportsEndScreen = () => {
+    const { width, height, fps } = useVideoConfig();
+    const frame = useCurrentFrame();
+    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  const totalFrames = 360; // 12s at 30fps
-  const localFrame = frame % totalFrames;
+    // Grid animation: loop every 30 frames (1 second)
+    const gridProgress = (frame % 30) / 30;
+    const horizonY = 500;
+    const gridHeight = 580;
+    const lineCount = 24;
 
-  // --- GRID MOVE ANIMATION ---
-  // gridMove: 5s cycle, background-position: 0 0 -> 0 15%
-  const gridCycleFrames = 5 * fps;
-  const gridLocalFrame = localFrame % gridCycleFrames;
-  const gridBgPosY = interpolate(gridLocalFrame, [0, gridCycleFrames], [0, 15], {
-    easing: Easing.linear,
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
-  // --- AMBIENT LIGHT PULSE ---
-  // pulse: 5s ease-in-out alternate, 0% opacity:0.15 scale:0.9 -> 100% opacity:0.35 scale:1.1
-  const pulseCycleFrames = 5 * fps; // full cycle = 10s (alternate means 5s each way)
-  // left light: no delay
-  const pulseLeftLocal = localFrame % (pulseCycleFrames * 2);
-  const pulseLeftT = pulseLeftLocal < pulseCycleFrames
-    ? pulseLeftLocal / pulseCycleFrames
-    : 1 - (pulseLeftLocal - pulseCycleFrames) / pulseCycleFrames;
-  const pulseLeftOpacity = 0.15 + (0.35 - 0.15) * pulseLeftT;
-  const pulseLeftScale = 0.9 + (1.1 - 0.9) * pulseLeftT;
-
-  // right light: delay -2.5s means offset by 2.5s = 75 frames
-  const pulseRightOffset = 75;
-  const pulseRightLocal = (localFrame + pulseRightOffset) % (pulseCycleFrames * 2);
-  const pulseRightT = pulseRightLocal < pulseCycleFrames
-    ? pulseRightLocal / pulseCycleFrames
-    : 1 - (pulseRightLocal - pulseCycleFrames) / pulseCycleFrames;
-  const pulseRightOpacity = 0.15 + (0.35 - 0.15) * pulseRightT;
-  const pulseRightScale = 0.9 + (1.1 - 0.9) * pulseRightT;
-
-  // --- ROTATE BORDER (left video box) ---
-  // rotateBorder: 5s linear, 0->360deg
-  const rotateBorderLeftCycle = 5 * fps;
-  const rotateBorderLeftLocal = localFrame % rotateBorderLeftCycle;
-  const rotateBorderLeftDeg = interpolate(
-    rotateBorderLeftLocal,
-    [0, rotateBorderLeftCycle],
-    [0, 360],
-    { easing: Easing.linear, extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-  );
-
-  // rotateBorder right: reverse direction (5s)
-  const rotateBorderRightDeg = -rotateBorderLeftDeg;
-
-  // --- ROTATE BORDER CIRCLE ---
-  // rotateBorder 2.5s linear
-  const rotateBorderCircleCycle = 2.5 * fps;
-  const rotateBorderCircleLocal = localFrame % rotateBorderCircleCycle;
-  const rotateBorderCircleDeg = interpolate(
-    rotateBorderCircleLocal,
-    [0, rotateBorderCircleCycle],
-    [0, 360],
-    { easing: Easing.linear, extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-  );
-
-  // --- MASTER GLITCH ---
-  // masterGlitch: 10s cycle (use 12s = totalFrames for seamless loop)
-  // Keyframes: 0%,48%,51%,96%,100% = no glitch; 49%=glitch1; 50%=glitch2; 97%=glitch3; 98%=glitch4
-  const glitchProgress = localFrame / totalFrames; // 0 to 1 over 360 frames
-
-  let glitchX = 0;
-  let glitchY = 0;
-  let glitchFilter = 'none';
-
-  if (glitchProgress >= 0.49 && glitchProgress < 0.495) {
-    glitchX = -3;
-    glitchY = 2;
-    glitchFilter = `drop-shadow(4px 0 0 ${CYAN}) drop-shadow(-4px 0 0 ${MAGENTA})`;
-  } else if (glitchProgress >= 0.495 && glitchProgress < 0.51) {
-    glitchX = 3;
-    glitchY = -2;
-    glitchFilter = `drop-shadow(-4px 0 0 ${CYAN}) drop-shadow(4px 0 0 ${MAGENTA})`;
-  } else if (glitchProgress >= 0.97 && glitchProgress < 0.975) {
-    glitchX = 2;
-    glitchY = 3;
-    glitchFilter = `drop-shadow(5px 0 0 ${CYAN}) drop-shadow(-5px 0 0 ${MAGENTA})`;
-  } else if (glitchProgress >= 0.975 && glitchProgress < 0.985) {
-    glitchX = -4;
-    glitchY = -1;
-    glitchFilter = `drop-shadow(-5px 0 0 ${CYAN}) drop-shadow(5px 0 0 ${MAGENTA})`;
-  }
-
-  // --- GLITCH LINE (scanlineJump) ---
-  // scanlineJump: 5s cycle
-  // 0-90%: opacity:0, top:0
-  // 91%: opacity:1, top:20%
-  // 92%: opacity:0, top:20%
-  // 93%: opacity:1, top:75%
-  // 94%: opacity:0, top:75%
-  // 95%: opacity:1, top:40%
-  // 96%: opacity:0, top:40%
-  // 100%: opacity:0
-  const glitchLineCycle = 5 * fps; // 150 frames
-  const glitchLineLocal = localFrame % glitchLineCycle;
-  const glitchLineProgress = glitchLineLocal / glitchLineCycle;
-
-  let glitchLineOpacity = 0;
-  let glitchLineTop = '0%';
-
-  if (glitchLineProgress >= 0.91 && glitchLineProgress < 0.92) {
-    glitchLineOpacity = 1;
-    glitchLineTop = '20%';
-  } else if (glitchLineProgress >= 0.92 && glitchLineProgress < 0.93) {
-    glitchLineOpacity = 0;
-    glitchLineTop = '20%';
-  } else if (glitchLineProgress >= 0.93 && glitchLineProgress < 0.94) {
-    glitchLineOpacity = 1;
-    glitchLineTop = '75%';
-  } else if (glitchLineProgress >= 0.94 && glitchLineProgress < 0.95) {
-    glitchLineOpacity = 0;
-    glitchLineTop = '75%';
-  } else if (glitchLineProgress >= 0.95 && glitchLineProgress < 0.96) {
-    glitchLineOpacity = 1;
-    glitchLineTop = '40%';
-  } else if (glitchLineProgress >= 0.96 && glitchLineProgress < 1.0) {
-    glitchLineOpacity = 0;
-    glitchLineTop = '40%';
-  }
-
-  // --- PARTICLES ---
-  const particleAnimations = PARTICLES.map((p) => {
-    const durationFrames = p.duration * fps;
-    const delayFrames = p.delay * fps;
-    const adjustedFrame = (localFrame + delayFrames) % durationFrames;
-    const t = adjustedFrame / durationFrames;
-
-    // floatUp: 0%: translateY(0) scale(1) opacity:0; 10%: opacity:0.8; 90%: opacity:0.8; 100%: translateY(-1080px) scale(0.5) opacity:0
-    const translateY = interpolate(t, [0, 1], [0, -ORIGINAL_HEIGHT], {
-      easing: Easing.linear,
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    });
-
-    const scaleVal = interpolate(t, [0, 1], [1, 0.5], {
-      easing: Easing.linear,
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    });
-
-    let opacity = 0;
-    if (t < 0.1) {
-      opacity = interpolate(t, [0, 0.1], [0, 0.8], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-    } else if (t <= 0.9) {
-      opacity = 0.8;
-    } else {
-      opacity = interpolate(t, [0.9, 1], [0.8, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+    const perspectiveLines = [];
+    for (let i = 0; i <= lineCount; i++) {
+        const progress = i / lineCount;
+        const xStart = 960;
+        const xEnd = -400 + progress * 2720;
+        perspectiveLines.push({ xStart, yStart: horizonY, xEnd, yEnd: 1080 });
     }
 
-    return { translateY, scaleVal, opacity };
-  });
+    const horizontalLines = [];
+    const horizontalLineCount = 15;
+    for (let i = 0; i < horizontalLineCount; i++) {
+        const ratio = (i + gridProgress) / horizontalLineCount;
+        const y = horizonY + Math.pow(ratio, 2) * gridHeight;
+        horizontalLines.push(y);
+    }
 
-  // Video box dimensions: 36% of 1920 = 691.2px wide, aspect 16:9 = 388.8px tall
-  const videoBoxWidth = ORIGINAL_WIDTH * 0.36;
-  const videoBoxHeight = videoBoxWidth * (9 / 16);
+    // Rotating Rings Rotations
+    const rotateOuterDeg = interpolate(frame % 360, [0, 360], [0, 360]);
+    const rotateDashedDeg = interpolate(frame % 360, [0, 360], [0, 360]);
+    const rotateInnerDeg = interpolate(frame % 360, [0, 360], [720, 0]);
 
-  // Subscribe box: 14% of 1920 = 268.8px
-  const subscribeSize = ORIGINAL_WIDTH * 0.14;
+    // HUD subtle scale pulse
+    const hudScale = interpolate(
+        frame % 120,
+        [0, 60, 120],
+        [1, 1.15, 1],
+        { easing: Easing.inOut(Easing.sin) }
+    );
+    const hudOpacity = interpolate(
+        frame % 120,
+        [0, 60, 120],
+        [0.3, 0.6, 0.3],
+        { easing: Easing.inOut(Easing.sin) }
+    );
 
-  return (
-    <div
-      style={{
+    // Scanline & Sweep Positions
+    const scanlineLeftY = interpolate(frame % 120, [0, 120], [-100, 100]);
+    const scanlineRightY = interpolate((frame + 60) % 120, [0, 120], [-100, 100]);
+
+    const sweepLeftX = interpolate(
+        frame % 180,
+        [0, 36, 180],
+        [-100, 200, 200],
+        { easing: Easing.bezier(0.19, 1, 0.22, 1) }
+    );
+    const sweepRightX = interpolate(
+        (frame + 90) % 180,
+        [0, 36, 180],
+        [-100, 200, 200],
+        { easing: Easing.bezier(0.19, 1, 0.22, 1) }
+    );
+
+    const containerStyle: React.CSSProperties = {
+        position: 'absolute',
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
-        position: 'absolute',
         top: '50%',
         left: '50%',
         transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
         overflow: 'hidden',
-      }}
-    >
-      {/* Main container with glitch */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundColor: BG_COLOR,
-          overflow: 'hidden',
-          boxShadow: 'inset 0 0 100px rgba(0,0,0,0.9)',
-          transform: `translate(${glitchX}px, ${glitchY}px)`,
-          filter: glitchFilter,
-          width: '100%',
-          height: '100%',
-        }}
-      >
-        {/* Ambient Light Left */}
-        <div
-          style={{
-            position: 'absolute',
-            borderRadius: '50%',
-            filter: 'blur(80px)',
-            opacity: pulseLeftOpacity,
-            zIndex: 0,
-            top: '10%',
-            left: '5%',
-            width: '40%',
-            height: '60%',
-            background: CYAN,
-            transform: `scale(${pulseLeftScale})`,
-            transformOrigin: 'center center',
-          }}
-        />
+        background: 'radial-gradient(circle at center, #020b1f 0%, #010308 100%)',
+    };
 
-        {/* Ambient Light Right */}
-        <div
-          style={{
-            position: 'absolute',
-            borderRadius: '50%',
-            filter: 'blur(80px)',
-            opacity: pulseRightOpacity,
-            zIndex: 0,
-            top: '10%',
-            right: '5%',
-            width: '40%',
-            height: '60%',
-            background: MAGENTA,
-            transform: `scale(${pulseRightScale})`,
-            transformOrigin: 'center center',
-          }}
-        />
+    const uiLayerStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 2,
+        pointerEvents: 'none',
+    };
 
-        {/* Grid Wrapper */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '-20%',
-            left: '-50%',
-            width: '200%',
-            height: '70%',
-            perspective: '800px',
-            zIndex: 1,
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              width: '100%',
-              height: '100%',
-              backgroundImage: `linear-gradient(to right, rgba(0,255,255,0.2) 2px, transparent 2px), linear-gradient(to top, rgba(255,0,255,0.4) 2px, transparent 2px)`,
-              backgroundSize: '3% 15%',
-              backgroundPosition: `0 ${gridBgPosY}%`,
-              transform: 'rotateX(75deg)',
-              transformOrigin: 'center top',
-              boxShadow: `inset 0 100px 100px ${BG_COLOR}`,
-            }}
-          />
+    const placeholderBaseStyle: React.CSSProperties = {
+        position: 'absolute',
+        width: 580,
+        height: 326,
+        top: 377,
+        background: 'rgba(0, 15, 30, 0.4)',
+        border: '2px solid rgba(0, 255, 255, 0.3)',
+        boxShadow: '0 0 30px rgba(0, 255, 255, 0.1), inset 0 0 40px rgba(0, 85, 255, 0.2)',
+        backdropFilter: 'blur(8px)',
+        overflow: 'hidden',
+    };
+
+    const cornerBaseStyle: React.CSSProperties = {
+        position: 'absolute',
+        width: 40,
+        height: 40,
+        borderColor: '#00ffff',
+        borderStyle: 'solid',
+        borderWidth: 0,
+        boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)',
+        zIndex: 3,
+    };
+
+    const cornerTL: React.CSSProperties = { ...cornerBaseStyle, top: -2, left: -2, borderTopWidth: 4, borderLeftWidth: 4 };
+    const cornerTR: React.CSSProperties = { ...cornerBaseStyle, top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4 };
+    const cornerBL: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4 };
+    const cornerBR: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4 };
+
+    return (
+        <div style={containerStyle}>
+            {/* Holographic grid and particles background */}
+            <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}>
+                <defs>
+                    <linearGradient id="gridFade" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#00ffff" stopOpacity="0" />
+                        <stop offset="20%" stopColor="#0055ff" stopOpacity="0.1" />
+                        <stop offset="100%" stopColor="#00ffff" stopOpacity="0.5" />
+                    </linearGradient>
+                </defs>
+
+                {/* Perspective lines */}
+                {perspectiveLines.map((line, idx) => (
+                    <line
+                        key={`p-${idx}`}
+                        x1={line.xStart}
+                        y1={line.yStart}
+                        x2={line.xEnd}
+                        y2={line.yEnd}
+                        stroke="url(#gridFade)"
+                        strokeWidth="1.5"
+                    />
+                ))}
+
+                {/* Moving horizontal lines */}
+                {horizontalLines.map((y, idx) => {
+                    const opacity = interpolate(y, [horizonY, 1080], [0, 0.6]);
+                    return (
+                        <line
+                            key={`h-${idx}`}
+                            x1="0"
+                            y1={y}
+                            x2="1920"
+                            y2={y}
+                            stroke="#00ffff"
+                            strokeWidth="1.5"
+                            strokeOpacity={opacity}
+                        />
+                    );
+                })}
+
+                {/* Glowing Energy Waves */}
+                {particles.map((p, idx) => {
+                    const waveCycle = (frame / 360) * Math.PI * 2 * 6;
+                    const yOffset = Math.sin(p.phase + waveCycle) * 25;
+                    const currentY = p.zBase + yOffset;
+                    return (
+                        <circle
+                            key={`p-dot-${idx}`}
+                            cx={p.x}
+                            cy={currentY}
+                            r={p.size}
+                            fill="#00aaff"
+                            fillOpacity={p.opacity}
+                            style={{ filter: 'drop-shadow(0px 0px 4px #00ffff)' }}
+                        />
+                    );
+                })}
+
+                {/* Floating Emissive Dust */}
+                {dustParticles.map((p, idx) => {
+                    let y = p.yStart - (frame * p.speed);
+                    if (y < 0) {
+                        y = 1080 + (y % 1080);
+                    }
+                    const edgeFade = Math.sin((y / 1080) * Math.PI);
+                    const currentOpacity = p.opacity * edgeFade;
+
+                    return (
+                        <circle
+                            key={`dust-${idx}`}
+                            cx={p.x}
+                            cy={y}
+                            r={p.size}
+                            fill="#00ffff"
+                            fillOpacity={currentOpacity}
+                            style={{ filter: 'drop-shadow(0px 0px 3px #00ffff)' }}
+                        />
+                    );
+                })}
+            </svg>
+
+            <div style={uiLayerStyle}>
+                <div style={{ position: 'absolute', top: 150, left: 0, width: '100%', height: 1, backgroundColor: '#00ffff', opacity: 0.2 }} />
+                <div style={{ position: 'absolute', bottom: 150, left: 0, width: '100%', height: 1, backgroundColor: '#00ffff', opacity: 0.2 }} />
+                
+                <HudCrosshair style={{ top: 140, left: 140, transform: `scale(${hudScale})`, opacity: hudOpacity }} />
+                <HudCrosshair style={{ top: 140, right: 140, transform: `scale(${hudScale})`, opacity: hudOpacity }} />
+                <HudCrosshair style={{ bottom: 140, left: 140, transform: `scale(${hudScale})`, opacity: hudOpacity }} />
+                <HudCrosshair style={{ bottom: 140, right: 140, transform: `scale(${hudScale})`, opacity: hudOpacity }} />
+
+                {/* LEFT PLACEHOLDER */}
+                <div style={{ ...placeholderBaseStyle, left: 140 }}>
+                    <div style={cornerTL} />
+                    <div style={cornerTR} />
+                    <div style={cornerBL} />
+                    <div style={cornerBR} />
+                    
+                    {/* Scanline */}
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
+                        transform: `translateY(${scanlineLeftY}%)`,
+                    }} />
+
+                    {/* Sweep */}
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '50%',
+                        height: '100%',
+                        background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.25) 50%, rgba(0, 255, 255, 0) 100%)',
+                        transform: `skewX(-25deg) translateX(${sweepLeftX}%)`,
+                    }} />
+                </div>
+
+                {/* RIGHT PLACEHOLDER */}
+                <div style={{ ...placeholderBaseStyle, right: 140 }}>
+                    <div style={cornerTL} />
+                    <div style={cornerTR} />
+                    <div style={cornerBL} />
+                    <div style={cornerBR} />
+
+                    {/* Scanline */}
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
+                        transform: `translateY(${scanlineRightY}%)`,
+                    }} />
+
+                    {/* Sweep */}
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '50%',
+                        height: '100%',
+                        background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.25) 50%, rgba(0, 255, 255, 0) 100%)',
+                        transform: `skewX(-25deg) translateX(${sweepRightX}%)`,
+                    }} />
+                </div>
+
+                {/* CENTER SUBSCRIBE AREA */}
+                <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 340,
+                    height: 340,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                }}>
+                    {/* Ring Outer */}
+                    <div style={{
+                        position: 'absolute',
+                        borderRadius: '50%',
+                        width: 340,
+                        height: 340,
+                        borderTop: '4px solid #00ffff',
+                        borderBottom: '4px solid #0055ff',
+                        boxShadow: '0 0 40px rgba(0, 255, 255, 0.3)',
+                        transform: `rotate(${rotateOuterDeg}deg)`,
+                    }} />
+
+                    {/* Ring Dashed */}
+                    <div style={{
+                        position: 'absolute',
+                        borderRadius: '50%',
+                        width: 310,
+                        height: 310,
+                        border: '2px dashed rgba(0, 255, 255, 0.5)',
+                        transform: `rotate(${rotateDashedDeg}deg)`,
+                    }} />
+
+                    {/* Ring Inner */}
+                    <div style={{
+                        position: 'absolute',
+                        borderRadius: '50%',
+                        width: 280,
+                        height: 280,
+                        borderLeft: '3px solid #0055ff',
+                        borderRight: '3px solid #00ffff',
+                        transform: `rotate(${rotateInnerDeg}deg)`,
+                    }} />
+
+                    {/* Holographic wireframe spheres behind core */}
+                    <div style={{
+                        position: 'absolute',
+                        width: 200,
+                        height: 200,
+                        borderRadius: '50%',
+                        border: '1px solid rgba(0, 255, 255, 0.25)',
+                        transform: `rotateY(${rotateOuterDeg}deg) rotateX(45deg)`,
+                        transformStyle: 'preserve-3d',
+                    }} />
+                    <div style={{
+                        position: 'absolute',
+                        width: 200,
+                        height: 200,
+                        borderRadius: '50%',
+                        border: '1px solid rgba(0, 85, 255, 0.2)',
+                        transform: `rotateX(${rotateOuterDeg}deg) rotateY(45deg)`,
+                        transformStyle: 'preserve-3d',
+                    }} />
+
+                    {/* Subscribe Core */}
+                    <div style={{
+                        width: 220,
+                        height: 220,
+                        borderRadius: '50%',
+                        background: 'rgba(0, 20, 40, 0.6)',
+                        border: '4px solid #00ffff',
+                        boxShadow: '0 0 50px rgba(0, 255, 255, 0.5), inset 0 0 40px rgba(0, 85, 255, 0.5)',
+                        backdropFilter: 'blur(12px)',
+                        position: 'relative',
+                        zIndex: 10,
+                    }} />
+                </div>
+            </div>
         </div>
-
-        {/* Particles */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 5,
-          }}
-        >
-          {PARTICLES.map((p, i) => {
-            const anim = particleAnimations[i];
-            return (
-              <div
-                key={i}
-                style={{
-                  position: 'absolute',
-                  width: p.width,
-                  height: p.height,
-                  left: p.left,
-                  bottom: '-10%',
-                  background: p.color,
-                  opacity: anim.opacity,
-                  transform: `translateY(${anim.translateY}px) scale(${anim.scaleVal})`,
-                  transformOrigin: 'center center',
-                }}
-              />
-            );
-          })}
-        </div>
-
-        {/* Glitch Line */}
-        <div
-          style={{
-            position: 'absolute',
-            width: '100%',
-            height: 2,
-            background: 'rgba(255,255,255,0.8)',
-            boxShadow: `0 0 10px ${CYAN}, 0 0 10px ${MAGENTA}`,
-            zIndex: 90,
-            opacity: glitchLineOpacity,
-            top: glitchLineTop,
-          }}
-        />
-
-        {/* Video Box Left */}
-        <div
-          style={{
-            position: 'absolute',
-            width: videoBoxWidth,
-            height: videoBoxHeight,
-            top: '16%',
-            left: '9%',
-            zIndex: 10,
-          }}
-        >
-          {/* Border Wrapper Left - rotating conic gradient */}
-          <div
-            style={{
-              position: 'absolute',
-              top: -4,
-              left: -4,
-              right: -4,
-              bottom: -4,
-              background: '#222',
-              overflow: 'hidden',
-              zIndex: -1,
-              boxShadow: '0 0 25px rgba(0,255,255,0.4)',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: '-50%',
-                left: '-50%',
-                width: '200%',
-                height: '200%',
-                background: `conic-gradient(from ${rotateBorderLeftDeg}deg, transparent 60%, ${CYAN} 100%)`,
-              }}
-            />
-          </div>
-          {/* Green Screen Rect */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundColor: KEY_COLOR,
-              zIndex: 2,
-            }}
-          />
-          {/* Tech Corners - Top Left */}
-          <div
-            style={{
-              position: 'absolute',
-              top: -10,
-              left: -10,
-              right: -10,
-              bottom: -10,
-              zIndex: 3,
-            }}
-          >
-            {/* Top-left corner */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: 20,
-                height: 20,
-                borderTop: '2px solid #fff',
-                borderLeft: '2px solid #fff',
-                opacity: 0.7,
-              }}
-            />
-            {/* Bottom-right corner */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                right: 0,
-                width: 20,
-                height: 20,
-                borderBottom: '2px solid #fff',
-                borderRight: '2px solid #fff',
-                opacity: 0.7,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Video Box Right */}
-        <div
-          style={{
-            position: 'absolute',
-            width: videoBoxWidth,
-            height: videoBoxHeight,
-            top: '16%',
-            right: '9%',
-            zIndex: 10,
-          }}
-        >
-          {/* Border Wrapper Right - rotating conic gradient reverse */}
-          <div
-            style={{
-              position: 'absolute',
-              top: -4,
-              left: -4,
-              right: -4,
-              bottom: -4,
-              background: '#222',
-              overflow: 'hidden',
-              zIndex: -1,
-              boxShadow: '0 0 25px rgba(255,0,255,0.4)',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: '-50%',
-                left: '-50%',
-                width: '200%',
-                height: '200%',
-                background: `conic-gradient(from ${rotateBorderRightDeg}deg, transparent 60%, ${MAGENTA} 100%)`,
-              }}
-            />
-          </div>
-          {/* Green Screen Rect */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundColor: KEY_COLOR,
-              zIndex: 2,
-            }}
-          />
-          {/* Tech Corners */}
-          <div
-            style={{
-              position: 'absolute',
-              top: -10,
-              left: -10,
-              right: -10,
-              bottom: -10,
-              zIndex: 3,
-            }}
-          >
-            {/* Top-left corner */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: 20,
-                height: 20,
-                borderTop: '2px solid #fff',
-                borderLeft: '2px solid #fff',
-                opacity: 0.7,
-              }}
-            />
-            {/* Bottom-right corner */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                right: 0,
-                width: 20,
-                height: 20,
-                borderBottom: '2px solid #fff',
-                borderRight: '2px solid #fff',
-                opacity: 0.7,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Subscribe Box */}
-        <div
-          style={{
-            position: 'absolute',
-            width: subscribeSize,
-            height: subscribeSize,
-            bottom: '12%',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 10,
-            borderRadius: '50%',
-          }}
-        >
-          {/* Border Circle */}
-          <div
-            style={{
-              position: 'absolute',
-              top: -4,
-              left: -4,
-              right: -4,
-              bottom: -4,
-              borderRadius: '50%',
-              overflow: 'hidden',
-              boxShadow: '0 0 30px rgba(255,255,0,0.4)',
-              zIndex: -1,
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: '-50%',
-                left: '-50%',
-                width: '200%',
-                height: '200%',
-                background: `conic-gradient(from ${rotateBorderCircleDeg}deg, transparent 40%, ${CYAN} 60%, ${MAGENTA} 80%, ${YELLOW} 100%)`,
-              }}
-            />
-          </div>
-          {/* Green Screen Circle */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundColor: KEY_COLOR,
-              borderRadius: '50%',
-              zIndex: 2,
-            }}
-          />
-        </div>
-
-        {/* Scanlines Overlay */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'repeating-linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 2px, rgba(0,0,0,0.2) 3px, rgba(0,0,0,0.2) 4px)',
-            zIndex: 100,
-            opacity: 0.6,
-          }}
-        />
-      </div>
-    </div>
-  );
+    );
 };
 
-export default SynthwaveGreenScreenOverlay;
+export default FuturisticEsportsEndScreen;
 // END_OF_FILE
