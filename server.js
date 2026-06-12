@@ -335,7 +335,7 @@ async function callAIWithFallback(prompt, options = {}) {
       }
       throw new Error("Syntx Claude returned invalid response");
     } else if (preferModel === 'syntx-gemini') {
-      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
+      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
       if (isValid(result, 'Syntx Gemini')) {
         log(`✅ Sukses menggunakan Syntx Gemini!`, 'success');
         return result;
@@ -427,7 +427,7 @@ async function callAIWithFallback(prompt, options = {}) {
   if (preferModel !== 'syntx-gemini') {
     try {
       log("📡 [4/6] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
-      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
+      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
       if (isValid(result, "Syntx Gemini")) {
         log("✅ Sukses menggunakan Syntx Gemini!", "success");
         return result;
@@ -3676,29 +3676,17 @@ app.get("/chat", (req, res) => {
 // GET /api/chat/models → available syntx models (all providers)
 app.get("/api/chat/models", (req, res) => {
   const models = [
-    // Gemini (most reliable)
-    { id: "gemini-3.5-flash",     label: "Gemini 3.5 Flash",    group: "gemini",     speed: "🌟 Terbaik",   default: true },
-    { id: "gemini-flash-2-0",     label: "Gemini Flash 2.0",    group: "gemini",     speed: "⚡ Cepat" },
-    // Claude models (from Syntx UI)
-    { id: "Claude 4.6 Sonnet",    label: "Claude 4.6 Sonnet",   group: "claude",     speed: "⭐ Terbaru" },
-    { id: "Claude Fable 5",        label: "Claude Fable 5",      group: "claude",     speed: "🧠 Canggih" },
-    { id: "Claude 4.5 Sonnet",    label: "Claude 4.5 Sonnet",   group: "claude",     speed: "⚖️ Seimbang" },
-    { id: "Claude 4.8 Opus",      label: "Claude 4.8 Opus",     group: "claude",     speed: "💪 Kuat" },
-    { id: "Claude 4.7 Opus",      label: "Claude 4.7 Opus",     group: "claude",     speed: "💪 Kuat" },
-    { id: "Claude 4.6 Opus",      label: "Claude 4.6 Opus",     group: "claude",     speed: "💪 Kuat" },
-    { id: "Claude 4.5 Opus",      label: "Claude 4.5 Opus",     group: "claude",     speed: "💪 Kuat" },
-    { id: "Claude 4 Sonnet",      label: "Claude 4 Sonnet",     group: "claude",     speed: "⚡ Cepat" },
-    { id: "claude-haiku-4-5",     label: "Claude Haiku 4.5",    group: "claude",     speed: "⚡ Tercepat" },
-    // ChatGPT
-    { id: "gpt-4o",               label: "GPT-4o",              group: "chatgpt",    speed: "🔥 Populer" },
-    // Grok
-    { id: "grok-3",               label: "Grok 3",              group: "grok",       speed: "⚡ Cepat" },
-    // Deepseek
-    { id: "deepseek-chat",        label: "Deepseek Chat",       group: "deepseek",   speed: "💡 Pintar" },
-    // Perplexity
-    { id: "sonar-large",          label: "Sonar Large",         group: "perplexity", speed: "🔍 Search" },
-    // Qwen
-    { id: "qwen-max",             label: "Qwen Max",            group: "qwen",       speed: "🧠 Kuat" },
+    // Sonnet (fast & reliable)
+    { id: "claude-sonnet-4-6",           label: "Claude Sonnet 4.6",   group: "claude", speed: "⭐ Terbaik", default: true },
+    { id: "claude-sonnet-4-5-20250929",  label: "Claude Sonnet 4.5",   group: "claude", speed: "⚡ Cepat" },
+    { id: "claude-sonnet-4-20250514",    label: "Claude Sonnet 4",     group: "claude", speed: "⚡ Cepat" },
+    // Opus (most capable)
+    { id: "claude-opus-4-8",             label: "Claude Opus 4.8",     group: "claude", speed: "🧠 Terkuat" },
+    { id: "claude-opus-4-7",             label: "Claude Opus 4.7",     group: "claude", speed: "🧠 Kuat" },
+    { id: "claude-opus-4-6",             label: "Claude Opus 4.6",     group: "claude", speed: "🧠 Kuat" },
+    { id: "claude-opus-4-5-20251101",    label: "Claude Opus 4.5",     group: "claude", speed: "🧠 Kuat" },
+    { id: "claude-opus-4-20250514",      label: "Claude Opus 4",       group: "claude", speed: "🧠 Kuat" },
+    { id: "claude-opus-4-1-20250805",    label: "Claude Opus 4.1",     group: "claude", speed: "🧠 Kuat" },
   ];
   const pool = syntxBot.getPoolStatus ? syntxBot.getPoolStatus() : {};
   res.json({ models, poolStatus: pool });
@@ -3843,7 +3831,7 @@ app.post("/api/chat/sessions/:id/message", async (req, res) => {
     let session = sessions.find(s => s.id === sessionId);
     if (!session) return res.status(404).json({ error: "Sesi tidak ditemukan" });
 
-    const activeModel = model || session.model || "gemini-3.5-flash";
+    const activeModel = model || session.model || "claude-sonnet-4-6";
     const imageUrl = req.body.imageUrl || null; // local relative image URL (e.g. /chat-uploads/img_...)
 
     // Save user message immediately
@@ -3937,7 +3925,7 @@ app.post("/api/chat/sessions/:id/message/:messageIndex/edit", async (req, res) =
       return res.status(400).json({ error: "Hanya pesan user yang dapat diedit" });
     }
 
-    const activeModel = model || session.model || "gemini-3.5-flash";
+    const activeModel = model || session.model || "claude-sonnet-4-6";
     
     // Determine imageUrl: if body explicitly has imageUrl, use it (can be null/empty)
     // If not specified, we can keep the old one, but the user may choose to remove it.

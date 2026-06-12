@@ -861,35 +861,18 @@
       <div class="model-selector">
         <span style="font-size:11px; color:var(--text-dim);">Model:</span>
         <select class="model-select" id="modelSelect" onchange="onModelChange()">
-          <optgroup label="🌟 Gemini (Direkomendasikan)">
-            <option value="gemini-3.5-flash" selected>Gemini 3.5 Flash</option>
-            <option value="gemini-flash-2-0">Gemini Flash 2.0</option>
+          <optgroup label="⭐ Sonnet (Direkomendasikan)">
+            <option value="claude-sonnet-4-6" selected>Claude Sonnet 4.6</option>
+            <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+            <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
           </optgroup>
-          <optgroup label="🤖 Claude (Butuh akun fresh)">
-            <option value="Claude 4.6 Sonnet">Claude 4.6 Sonnet</option>
-            <option value="Claude Fable 5">Claude Fable 5</option>
-            <option value="Claude 4.5 Sonnet">Claude 4.5 Sonnet</option>
-            <option value="Claude 4.8 Opus">Claude 4.8 Opus</option>
-            <option value="Claude 4.7 Opus">Claude 4.7 Opus</option>
-            <option value="Claude 4.6 Opus">Claude 4.6 Opus</option>
-            <option value="Claude 4.5 Opus">Claude 4.5 Opus</option>
-            <option value="Claude 4 Sonnet">Claude 4 Sonnet</option>
-            <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
-          </optgroup>
-          <optgroup label="🔥 ChatGPT">
-            <option value="gpt-4o">GPT-4o</option>
-          </optgroup>
-          <optgroup label="⚡ Grok">
-            <option value="grok-3">Grok 3</option>
-          </optgroup>
-          <optgroup label="💡 Deepseek">
-            <option value="deepseek-chat">Deepseek Chat</option>
-          </optgroup>
-          <optgroup label="🔍 Perplexity">
-            <option value="sonar-large">Sonar Large</option>
-          </optgroup>
-          <optgroup label="🧠 Qwen">
-            <option value="qwen-max">Qwen Max</option>
+          <optgroup label="🧠 Opus (Paling Cerdas)">
+            <option value="claude-opus-4-8">Claude Opus 4.8</option>
+            <option value="claude-opus-4-7">Claude Opus 4.7</option>
+            <option value="claude-opus-4-6">Claude Opus 4.6</option>
+            <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
+            <option value="claude-opus-4-20250514">Claude Opus 4</option>
+            <option value="claude-opus-4-1-20250805">Claude Opus 4.1</option>
           </optgroup>
         </select>
       </div>
@@ -1174,7 +1157,7 @@ function renderSessionsList() {
     return;
   }
   container.innerHTML = allSessions.map(s => {
-    const model = s.model || 'gemini-3.5-flash';
+    const model = s.model || 'claude-sonnet-4-6';
     const group = getModelBadgeGroup(model);
     let label = 'O';
     if (group === 'gemini') label = 'G';
@@ -1251,7 +1234,7 @@ async function selectSession(sessionId) {
     activeSessionMessages = session.messages || [];
 
     // Update model selector
-    document.getElementById('modelSelect').value = session.model || 'gemini-3.5-flash';
+    document.getElementById('modelSelect').value = session.model || 'claude-sonnet-4-6';
     // Update title
     document.getElementById('chatTitle').textContent = session.title || 'Percakapan Baru';
     // Render messages
