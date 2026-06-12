@@ -3,385 +3,392 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-// Deterministic particles pre-calculated outside the component to avoid Math.random()
-const PARTICLE_COUNT = 80;
-const particles = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
-    const angle = (i / PARTICLE_COUNT) * Math.PI * 2;
-    const radius = 150 + Math.abs(Math.sin(i * 987.654)) * 350;
-    const x = 960 + Math.cos(angle) * radius;
-    const zBase = 540 + Math.sin(angle) * radius * 0.4;
-    const phase = (i / PARTICLE_COUNT) * Math.PI * 2;
-    const size = 1.5 + Math.abs(Math.cos(i * 123.45)) * 3;
-    const opacity = 0.2 + Math.abs(Math.sin(i * 456.78)) * 0.5;
-    return { x, zBase, phase, size, opacity };
+// Deterministic particles generated outside the render loop
+const PARTICLE_COUNT = 150;
+const PARTICLES = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
+  const sin1 = Math.sin(i * 9.13);
+  const sin2 = Math.sin(i * 12.45);
+  const sin3 = Math.sin(i * 73.18);
+
+  const x = sin1 * 1400; // wide distribution
+  const y = sin2 * 450;  // heights
+  const zStart = Math.abs(sin3) * 1200 + 100; // initial depth
+  const speed = 2 + Math.abs(Math.sin(i * 45.23)) * 4;
+  const color = Math.abs(Math.sin(i * 32.11)) > 0.5 ? '#00FFFF' : '#FF00FF';
+  return { x, y, zStart, speed, color };
 });
 
-const DUST_COUNT = 40;
-const dustParticles = Array.from({ length: DUST_COUNT }).map((_, i) => {
-    const x = Math.abs(Math.sin(i * 345.67)) * 1920;
-    const yStart = Math.abs(Math.cos(i * 765.43)) * 1080;
-    const speed = 0.4 + Math.abs(Math.sin(i * 12.34)) * 1.2;
-    const size = 1 + Math.abs(Math.cos(i * 89.12)) * 2;
-    const opacity = 0.15 + Math.abs(Math.sin(i * 56.78)) * 0.3;
-    return { x, yStart, speed, size, opacity };
-});
+const CyberTerrainHud: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { width, height } = useVideoConfig();
 
-const HudCrosshair = ({ style }: { style: React.CSSProperties }) => {
-    return (
-        <div style={{ ...style, position: 'absolute', width: 20, height: 20 }}>
-            <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: 2, backgroundColor: '#0055ff', transform: 'translateY(-50%)' }} />
-            <div style={{ position: 'absolute', top: 0, left: '50%', width: 2, height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }} />
-        </div>
-    );
-};
+  // Fullscreen calculation matching original aspects with no borders
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-export const FuturisticEsportsEndScreen = () => {
-    const { width, height, fps } = useVideoConfig();
-    const frame = useCurrentFrame();
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+  // Time metrics for infinite 12-second seamless looping (360 frames at 30fps)
+  const loopFrames = 360;
+  const t = (frame % loopFrames) / loopFrames;
 
-    // Grid animation: loop every 30 frames (1 second)
-    const gridProgress = (frame % 30) / 30;
-    const horizonY = 500;
-    const gridHeight = 580;
-    const lineCount = 24;
+  // Camera animation
+  const cameraRotZ = Math.sin(t * Math.PI * 2) * 0.05;
+  const cameraY = Math.sin(t * Math.PI * 4) * 10;
 
-    const perspectiveLines = [];
-    for (let i = 0; i <= lineCount; i++) {
-        const progress = i / lineCount;
-        const xStart = 960;
-        const xEnd = -400 + progress * 2720;
-        perspectiveLines.push({ xStart, yStart: horizonY, xEnd, yEnd: 1080 });
+  // Grid calculations
+  const COLS = 13; 
+  const ROWS = 22;
+  const FOCAL = 550;
+  const CX = 960;
+  const CY = 540;
+
+  const zOffset = (frame * 3.5) % 80;
+  const waveOffset = (frame * 0.08) % (Math.PI * 2);
+
+  const getProjectedPoint = (c: number, r: number, isTop: boolean) => {
+    const X = (c - 6) * 140; 
+    const Z = 120 + r * 80 - zOffset;
+
+    // Wave displacement calculations matching the WebGL grid noise
+    const waveX = Math.sin(X * 0.0025 + waveOffset) * 45;
+    const waveZ = Math.cos(Z * 0.0025 - waveOffset) * 45;
+    const wave = waveX * waveZ * 0.015;
+
+    const Y = isTop ? (-220 - wave * 40) : (220 + wave * 40);
+
+    const px = CX + (X * FOCAL) / Z;
+    const py = CY + (Y * FOCAL) / Z;
+    return { x: px, y: py };
+  };
+
+  // Generate bottom grid paths
+  const bottomTransPaths: string[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    let d = '';
+    for (let c = 0; c < COLS; c++) {
+      const pt = getProjectedPoint(c, r, false);
+      if (c === 0) d += `M ${pt.x} ${pt.y}`;
+      else d += ` L ${pt.x} ${pt.y}`;
     }
+    bottomTransPaths.push(d);
+  }
 
-    const horizontalLines = [];
-    const horizontalLineCount = 15;
-    for (let i = 0; i < horizontalLineCount; i++) {
-        const ratio = (i + gridProgress) / horizontalLineCount;
-        const y = horizonY + Math.pow(ratio, 2) * gridHeight;
-        horizontalLines.push(y);
+  const bottomLongPaths: string[] = [];
+  for (let c = 0; c < COLS; c++) {
+    let d = '';
+    for (let r = 0; r < ROWS; r++) {
+      const pt = getProjectedPoint(c, r, false);
+      if (r === 0) d += `M ${pt.x} ${pt.y}`;
+      else d += ` L ${pt.x} ${pt.y}`;
     }
+    bottomLongPaths.push(d);
+  }
 
-    // Rotating Rings Rotations
-    const rotateOuterDeg = interpolate(frame % 360, [0, 360], [0, 360]);
-    const rotateDashedDeg = interpolate(frame % 360, [0, 360], [0, 360]);
-    const rotateInnerDeg = interpolate(frame % 360, [0, 360], [720, 0]);
+  // Generate top grid paths
+  const topTransPaths: string[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    let d = '';
+    for (let c = 0; c < COLS; c++) {
+      const pt = getProjectedPoint(c, r, true);
+      if (c === 0) d += `M ${pt.x} ${pt.y}`;
+      else d += ` L ${pt.x} ${pt.y}`;
+    }
+    topTransPaths.push(d);
+  }
 
-    // HUD subtle scale pulse
-    const hudScale = interpolate(
-        frame % 120,
-        [0, 60, 120],
-        [1, 1.15, 1],
-        { easing: Easing.inOut(Easing.sin) }
-    );
-    const hudOpacity = interpolate(
-        frame % 120,
-        [0, 60, 120],
-        [0.3, 0.6, 0.3],
-        { easing: Easing.inOut(Easing.sin) }
-    );
+  const topLongPaths: string[] = [];
+  for (let c = 0; c < COLS; c++) {
+    let d = '';
+    for (let r = 0; r < ROWS; r++) {
+      const pt = getProjectedPoint(c, r, true);
+      if (r === 0) d += `M ${pt.x} ${pt.y}`;
+      else d += ` L ${pt.x} ${pt.y}`;
+    }
+    topLongPaths.push(d);
+  }
 
-    // Scanline & Sweep Positions
-    const scanlineLeftY = interpolate(frame % 120, [0, 120], [-100, 100]);
-    const scanlineRightY = interpolate((frame + 60) % 120, [0, 120], [-100, 100]);
+  // Neon dash HUD animation loops
+  const flowLeftOffset = interpolate(frame % loopFrames, [0, loopFrames], [2000, 0]);
+  const flowRightOffset = interpolate(frame % loopFrames, [0, loopFrames], [0, -2000]);
+  const flowCircleOffset = interpolate(frame % loopFrames, [0, loopFrames], [1000, 0]);
+  const flowCircleOffsetRev = interpolate(frame % loopFrames, [0, loopFrames], [0, 1000]);
 
-    const sweepLeftX = interpolate(
-        frame % 180,
-        [0, 36, 180],
-        [-100, 200, 200],
-        { easing: Easing.bezier(0.19, 1, 0.22, 1) }
-    );
-    const sweepRightX = interpolate(
-        (frame + 90) % 180,
-        [0, 36, 180],
-        [-100, 200, 200],
-        { easing: Easing.bezier(0.19, 1, 0.22, 1) }
-    );
+  // Styles definitions
+  const appContainerStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    backgroundColor: '#050010',
+  };
 
-    const containerStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        background: 'radial-gradient(circle at center, #020b1f 0%, #010308 100%)',
-    };
+  const cameraContainerStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    transform: `rotate(${cameraRotZ}rad) translateY(${cameraY}px)`,
+    transformOrigin: 'center center',
+  };
 
-    const uiLayerStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        zIndex: 2,
-        pointerEvents: 'none',
-    };
+  const canvasReplacementStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    zIndex: 1,
+  };
 
-    const placeholderBaseStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: 580,
-        height: 326,
-        top: 377,
-        background: 'rgba(0, 15, 30, 0.4)',
-        border: '2px solid rgba(0, 255, 255, 0.3)',
-        boxShadow: '0 0 30px rgba(0, 255, 255, 0.1), inset 0 0 40px rgba(0, 85, 255, 0.2)',
-        backdropFilter: 'blur(8px)',
-        overflow: 'hidden',
-    };
+  const uiLayerStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    zIndex: 2,
+    pointerEvents: 'none',
+  };
 
-    const cornerBaseStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: 40,
-        height: 40,
-        borderColor: '#00ffff',
-        borderStyle: 'solid',
-        borderWidth: 0,
-        boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)',
-        zIndex: 3,
-    };
+  const glitchLayerStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    background: 'linear-gradient(rgba(0,255,255,0.03) 50%, rgba(255,0,255,0.03) 50%)',
+    backgroundSize: '100% 4px',
+    zIndex: 3,
+    mixBlendMode: 'screen',
+    pointerEvents: 'none',
+  };
 
-    const cornerTL: React.CSSProperties = { ...cornerBaseStyle, top: -2, left: -2, borderTopWidth: 4, borderLeftWidth: 4 };
-    const cornerTR: React.CSSProperties = { ...cornerBaseStyle, top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4 };
-    const cornerBL: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4 };
-    const cornerBR: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4 };
+  const hudBoxLeftStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 640,
+    height: 360,
+    top: 300,
+    left: 200,
+  };
 
-    return (
-        <div style={containerStyle}>
-            {/* Holographic grid and particles background */}
-            <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }}>
-                <defs>
-                    <linearGradient id="gridFade" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#00ffff" stopOpacity="0" />
-                        <stop offset="20%" stopColor="#0055ff" stopOpacity="0.1" />
-                        <stop offset="100%" stopColor="#00ffff" stopOpacity="0.5" />
-                    </linearGradient>
-                </defs>
+  const hudBoxRightStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 640,
+    height: 360,
+    top: 300,
+    right: 200,
+  };
 
-                {/* Perspective lines */}
-                {perspectiveLines.map((line, idx) => (
-                    <line
-                        key={`p-${idx}`}
-                        x1={line.xStart}
-                        y1={line.yStart}
-                        x2={line.xEnd}
-                        y2={line.yEnd}
-                        stroke="url(#gridFade)"
-                        strokeWidth="1.5"
-                    />
-                ))}
+  const hudCircleStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 250,
+    height: 250,
+    bottom: 120,
+    left: '50%',
+    transform: 'translateX(-50%)',
+  };
 
-                {/* Moving horizontal lines */}
-                {horizontalLines.map((y, idx) => {
-                    const opacity = interpolate(y, [horizonY, 1080], [0, 0.6]);
-                    return (
-                        <line
-                            key={`h-${idx}`}
-                            x1="0"
-                            y1={y}
-                            x2="1920"
-                            y2={y}
-                            stroke="#00ffff"
-                            strokeWidth="1.5"
-                            strokeOpacity={opacity}
-                        />
-                    );
-                })}
+  const greenScreenStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#00FF00',
+  };
 
-                {/* Glowing Energy Waves */}
-                {particles.map((p, idx) => {
-                    const waveCycle = (frame / 360) * Math.PI * 2 * 6;
-                    const yOffset = Math.sin(p.phase + waveCycle) * 25;
-                    const currentY = p.zBase + yOffset;
-                    return (
-                        <circle
-                            key={`p-dot-${idx}`}
-                            cx={p.x}
-                            cy={currentY}
-                            r={p.size}
-                            fill="#00aaff"
-                            fillOpacity={p.opacity}
-                            style={{ filter: 'drop-shadow(0px 0px 4px #00ffff)' }}
-                        />
-                    );
-                })}
+  const greenScreenRoundStyle: React.CSSProperties = {
+    ...greenScreenStyle,
+    borderRadius: '50%',
+  };
 
-                {/* Floating Emissive Dust */}
-                {dustParticles.map((p, idx) => {
-                    let y = p.yStart - (frame * p.speed);
-                    if (y < 0) {
-                        y = 1080 + (y % 1080);
-                    }
-                    const edgeFade = Math.sin((y / 1080) * Math.PI);
-                    const currentOpacity = p.opacity * edgeFade;
+  const hudBorderStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: -10,
+    left: -10,
+    width: 'calc(100% + 20px)',
+    height: 'calc(100% + 20px)',
+    overflow: 'visible',
+    zIndex: 3,
+    filter: 'drop-shadow(0 0 8px #FF00FF) drop-shadow(0 0 15px #00FFFF)',
+  };
 
-                    return (
-                        <circle
-                            key={`dust-${idx}`}
-                            cx={p.x}
-                            cy={y}
-                            r={p.size}
-                            fill="#00ffff"
-                            fillOpacity={currentOpacity}
-                            style={{ filter: 'drop-shadow(0px 0px 3px #00ffff)' }}
-                        />
-                    );
-                })}
+  return (
+    <div style={appContainerStyle}>
+      <div style={cameraContainerStyle}>
+        {/* Render 3D Wireframe Cyber Terrain via direct SVG mapping */}
+        <svg style={canvasReplacementStyle} viewBox={`0 0 ${ORIGINAL_WIDTH} ${ORIGINAL_HEIGHT}`}>
+          <defs>
+            <linearGradient id="fade-bottom" x1="0" y1="1080" x2="0" y2="540" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#00FFFF" stopOpacity="0.5" />
+              <stop offset="70%" stopColor="#00FFFF" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#00FFFF" stopOpacity="0.0" />
+            </linearGradient>
+            <linearGradient id="fade-top" x1="0" y1="0" x2="0" y2="540" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#FF00FF" stopOpacity="0.5" />
+              <stop offset="70%" stopColor="#FF00FF" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#FF00FF" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          {/* Bottom Grid Wireframe */}
+          {bottomTransPaths.map((d, idx) => (
+            <path key={`bt-${idx}`} d={d} fill="none" stroke="url(#fade-bottom)" strokeWidth={1.5} />
+          ))}
+          {bottomLongPaths.map((d, idx) => (
+            <path key={`bl-${idx}`} d={d} fill="none" stroke="url(#fade-bottom)" strokeWidth={1.5} />
+          ))}
+
+          {/* Top Grid Wireframe */}
+          {topTransPaths.map((d, idx) => (
+            <path key={`tt-${idx}`} d={d} fill="none" stroke="url(#fade-top)" strokeWidth={1.5} />
+          ))}
+          {topLongPaths.map((d, idx) => (
+            <path key={`tl-${idx}`} d={d} fill="none" stroke="url(#fade-top)" strokeWidth={1.5} />
+          ))}
+
+          {/* Particle Layer mapped deterministically to 3D space */}
+          {PARTICLES.map((p, i) => {
+            let z = p.zStart - (frame * p.speed);
+            z = ((z % 1200) + 1200) % 1200;
+
+            if (z < 30) return null;
+
+            const px = CX + (p.x * FOCAL) / z;
+            const py = CY + (p.y * FOCAL) / z;
+            const size = Math.max(1, (1 - z / 1200) * 5 + 1);
+            const opacity = z > 900 ? (1200 - z) / 300 : z < 200 ? z / 200 : 1;
+
+            return (
+              <circle
+                key={`p-${i}`}
+                cx={px}
+                cy={py}
+                r={size}
+                fill={p.color}
+                opacity={opacity * 0.7}
+                style={{ mixBlendMode: 'screen' }}
+              />
+            );
+          })}
+        </svg>
+
+        <div style={glitchLayerStyle} />
+
+        {/* UI Overlay HUD Layer */}
+        <div style={uiLayerStyle}>
+          {/* Left HUD Box */}
+          <div style={hudBoxLeftStyle}>
+            <div style={greenScreenStyle} />
+            <svg style={hudBorderStyle} viewBox="0 0 660 380">
+              <rect
+                className="neon-path cyan"
+                x="10"
+                y="10"
+                width="640"
+                height="360"
+                fill="none"
+                stroke="#00FFFF"
+                strokeWidth="4"
+                strokeLinecap="square"
+                strokeDasharray="200 1800"
+                strokeDashoffset={flowLeftOffset}
+              />
+              <rect
+                className="neon-path magenta"
+                x="6"
+                y="6"
+                width="648"
+                height="368"
+                fill="none"
+                stroke="#FF00FF"
+                strokeWidth="4"
+                strokeLinecap="square"
+                strokeDasharray="400 1600"
+                strokeDashoffset={flowRightOffset}
+              />
+              <circle cx="10" cy="10" r="4" fill="#00FFFF" />
+              <circle cx="650" cy="10" r="4" fill="#00FFFF" />
+              <circle cx="10" cy="370" r="4" fill="#00FFFF" />
+              <circle cx="650" cy="370" r="4" fill="#00FFFF" />
             </svg>
+          </div>
 
-            <div style={uiLayerStyle}>
-                <div style={{ position: 'absolute', top: 150, left: 0, width: '100%', height: 1, backgroundColor: '#00ffff', opacity: 0.2 }} />
-                <div style={{ position: 'absolute', bottom: 150, left: 0, width: '100%', height: 1, backgroundColor: '#00ffff', opacity: 0.2 }} />
-                
-                <HudCrosshair style={{ top: 140, left: 140, transform: `scale(${hudScale})`, opacity: hudOpacity }} />
-                <HudCrosshair style={{ top: 140, right: 140, transform: `scale(${hudScale})`, opacity: hudOpacity }} />
-                <HudCrosshair style={{ bottom: 140, left: 140, transform: `scale(${hudScale})`, opacity: hudOpacity }} />
-                <HudCrosshair style={{ bottom: 140, right: 140, transform: `scale(${hudScale})`, opacity: hudOpacity }} />
+          {/* Right HUD Box */}
+          <div style={hudBoxRightStyle}>
+            <div style={greenScreenStyle} />
+            <svg style={hudBorderStyle} viewBox="0 0 660 380">
+              <rect
+                className="neon-path cyan"
+                x="10"
+                y="10"
+                width="640"
+                height="360"
+                fill="none"
+                stroke="#00FFFF"
+                strokeWidth="4"
+                strokeLinecap="square"
+                strokeDasharray="200 1800"
+                strokeDashoffset={flowLeftOffset}
+              />
+              <rect
+                className="neon-path magenta"
+                x="6"
+                y="6"
+                width="648"
+                height="368"
+                fill="none"
+                stroke="#FF00FF"
+                strokeWidth="4"
+                strokeLinecap="square"
+                strokeDasharray="400 1600"
+                strokeDashoffset={flowRightOffset}
+              />
+              <circle cx="10" cy="10" r="4" fill="#FF00FF" />
+              <circle cx="650" cy="10" r="4" fill="#FF00FF" />
+              <circle cx="10" cy="370" r="4" fill="#FF00FF" />
+              <circle cx="650" cy="370" r="4" fill="#FF00FF" />
+            </svg>
+          </div>
 
-                {/* LEFT PLACEHOLDER */}
-                <div style={{ ...placeholderBaseStyle, left: 140 }}>
-                    <div style={cornerTL} />
-                    <div style={cornerTR} />
-                    <div style={cornerBL} />
-                    <div style={cornerBR} />
-                    
-                    {/* Scanline */}
-                    <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
-                        transform: `translateY(${scanlineLeftY}%)`,
-                    }} />
-
-                    {/* Sweep */}
-                    <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '50%',
-                        height: '100%',
-                        background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.25) 50%, rgba(0, 255, 255, 0) 100%)',
-                        transform: `skewX(-25deg) translateX(${sweepLeftX}%)`,
-                    }} />
-                </div>
-
-                {/* RIGHT PLACEHOLDER */}
-                <div style={{ ...placeholderBaseStyle, right: 140 }}>
-                    <div style={cornerTL} />
-                    <div style={cornerTR} />
-                    <div style={cornerBL} />
-                    <div style={cornerBR} />
-
-                    {/* Scanline */}
-                    <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
-                        transform: `translateY(${scanlineRightY}%)`,
-                    }} />
-
-                    {/* Sweep */}
-                    <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '50%',
-                        height: '100%',
-                        background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.25) 50%, rgba(0, 255, 255, 0) 100%)',
-                        transform: `skewX(-25deg) translateX(${sweepRightX}%)`,
-                    }} />
-                </div>
-
-                {/* CENTER SUBSCRIBE AREA */}
-                <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: 340,
-                    height: 340,
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                }}>
-                    {/* Ring Outer */}
-                    <div style={{
-                        position: 'absolute',
-                        borderRadius: '50%',
-                        width: 340,
-                        height: 340,
-                        borderTop: '4px solid #00ffff',
-                        borderBottom: '4px solid #0055ff',
-                        boxShadow: '0 0 40px rgba(0, 255, 255, 0.3)',
-                        transform: `rotate(${rotateOuterDeg}deg)`,
-                    }} />
-
-                    {/* Ring Dashed */}
-                    <div style={{
-                        position: 'absolute',
-                        borderRadius: '50%',
-                        width: 310,
-                        height: 310,
-                        border: '2px dashed rgba(0, 255, 255, 0.5)',
-                        transform: `rotate(${rotateDashedDeg}deg)`,
-                    }} />
-
-                    {/* Ring Inner */}
-                    <div style={{
-                        position: 'absolute',
-                        borderRadius: '50%',
-                        width: 280,
-                        height: 280,
-                        borderLeft: '3px solid #0055ff',
-                        borderRight: '3px solid #00ffff',
-                        transform: `rotate(${rotateInnerDeg}deg)`,
-                    }} />
-
-                    {/* Holographic wireframe spheres behind core */}
-                    <div style={{
-                        position: 'absolute',
-                        width: 200,
-                        height: 200,
-                        borderRadius: '50%',
-                        border: '1px solid rgba(0, 255, 255, 0.25)',
-                        transform: `rotateY(${rotateOuterDeg}deg) rotateX(45deg)`,
-                        transformStyle: 'preserve-3d',
-                    }} />
-                    <div style={{
-                        position: 'absolute',
-                        width: 200,
-                        height: 200,
-                        borderRadius: '50%',
-                        border: '1px solid rgba(0, 85, 255, 0.2)',
-                        transform: `rotateX(${rotateOuterDeg}deg) rotateY(45deg)`,
-                        transformStyle: 'preserve-3d',
-                    }} />
-
-                    {/* Subscribe Core */}
-                    <div style={{
-                        width: 220,
-                        height: 220,
-                        borderRadius: '50%',
-                        background: 'rgba(0, 20, 40, 0.6)',
-                        border: '4px solid #00ffff',
-                        boxShadow: '0 0 50px rgba(0, 255, 255, 0.5), inset 0 0 40px rgba(0, 85, 255, 0.5)',
-                        backdropFilter: 'blur(12px)',
-                        position: 'relative',
-                        zIndex: 10,
-                    }} />
-                </div>
-            </div>
+          {/* Bottom Center Circular HUD */}
+          <div style={hudCircleStyle}>
+            <div style={greenScreenRoundStyle} />
+            <svg style={hudBorderStyle} viewBox="0 0 270 270">
+              <circle
+                className="neon-path cyan"
+                cx="135"
+                cy="135"
+                r="125"
+                fill="none"
+                stroke="#00FFFF"
+                strokeWidth="4"
+                strokeLinecap="square"
+                strokeDasharray="200 800"
+                strokeDashoffset={flowCircleOffset}
+              />
+              <circle
+                className="neon-path magenta"
+                cx="135"
+                cy="135"
+                r="130"
+                fill="none"
+                stroke="#FF00FF"
+                strokeWidth="4"
+                strokeLinecap="square"
+                strokeDasharray="200 800"
+                strokeDashoffset={flowCircleOffsetRev}
+              />
+            </svg>
+          </div>
         </div>
-    );
+      </div>
+    </div>
+  );
 };
 
-export default FuturisticEsportsEndScreen;
+export default CyberTerrainHud;
 // END_OF_FILE
