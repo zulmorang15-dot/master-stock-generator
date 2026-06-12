@@ -1227,6 +1227,15 @@
             <a href="/api/export-csv?platform=shutterstock" class="export-menu-item">Shutterstock CSV</a>
           </div>
         </div>
+        <div style="display:flex; align-items:center; gap:6px; background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:3px 8px;">
+          <span style="font-size:11px; color:var(--text-mid); font-weight:600;">Tampilkan:</span>
+          <select id="itemsPerPageSelect" onchange="changeItemsPerPage(Number(this.value))" class="select-input" style="padding:2px 8px; font-size:11px; height:auto; margin-bottom:0; font-weight:600; border-color:transparent; background:transparent; outline:none; box-shadow:none;">
+            <option value="10" selected>10 Baris</option>
+            <option value="20">20 Baris</option>
+            <option value="50">50 Baris</option>
+            <option value="100">100 Baris</option>
+          </select>
+        </div>
         <button class="btn-refresh" onclick="loadResults()">🔄 Refresh</button>
       </div>
     </div>
@@ -1535,7 +1544,7 @@
   let batchSelected = new Set();
   let activeSeoGenerations = {};
   let currentPage = 1;
-  const itemsPerPage = 50;
+  let itemsPerPage = 10;
   let cachedItems = [];
   let activeFilter = 'all';
 
@@ -2230,6 +2239,12 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       }
     });
     
+    currentPage = 1; // Reset ke halaman 1
+    applyFilterAndRender();
+  }
+
+  window.changeItemsPerPage = function(val) {
+    itemsPerPage = val;
     currentPage = 1; // Reset ke halaman 1
     applyFilterAndRender();
   }
