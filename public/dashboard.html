@@ -776,6 +776,310 @@
       transition: color 0.2s;
     }
     .close-modal:hover { color: var(--red); }
+
+    /* ── ANIMSTOCK INSIGHTS TABS & LAYOUT ── */
+    .header-nav { display: flex; gap: 10px; margin-left: 32px; }
+    .nav-tab {
+      padding: 9px 18px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-dim);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: inherit;
+    }
+    .nav-tab:hover { color: var(--text); background: rgba(56,189,248,0.04); }
+    .nav-tab.active {
+      background: var(--cyan-dim);
+      border-color: rgba(56,189,248,0.35);
+      color: var(--cyan);
+    }
+    
+    .insights-panel { display: none; }
+    .insights-panel.active { display: block; }
+    
+    .insights-container {
+      display: flex;
+      gap: 28px;
+      align-items: flex-start;
+      margin-top: 8px;
+    }
+    @media (max-width: 900px) {
+      .insights-container { flex-direction: column; }
+      .insights-sidebar { width: 100% !important; }
+    }
+    
+    .insights-sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .insights-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    
+    /* Skill Matrix Checkboxes */
+    .skill-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .skill-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px;
+      font-weight: 600;
+      user-select: none;
+    }
+    .skill-item:hover {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+    }
+    .skill-item.active {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+      color: var(--cyan);
+    }
+    .skill-checkbox {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--cyan);
+      cursor: pointer;
+    }
+    
+    /* Research History List */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+    .history-item {
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .history-item:hover {
+      background: rgba(56,189,248,0.08);
+      border-color: rgba(56,189,248,0.2);
+      color: var(--cyan);
+    }
+    .history-tag {
+      font-size: 9px;
+      padding: 2px 6px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      color: var(--text-dim);
+    }
+    
+    /* Market Assessment Card */
+    .market-card {
+      background: linear-gradient(135deg, rgba(13,20,36,0.9), rgba(19,29,48,0.9));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 32px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 36px;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .market-score-box {
+      text-align: center;
+      border-right: 1px solid rgba(255,255,255,0.08);
+      padding-right: 36px;
+    }
+    @media (max-width: 600px) {
+      .market-card { grid-template-columns: 1fr; gap: 20px; }
+      .market-score-box { border-right: none; padding-right: 0; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    }
+    .market-score-value {
+      font-size: 48px;
+      font-weight: 800;
+      color: var(--cyan);
+      text-shadow: 0 0 16px rgba(56,189,248,0.4);
+      line-height: 1;
+    }
+    .market-score-scale { font-size: 14px; color: var(--text-dim); font-weight: 500; }
+    .market-score-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-mid); margin-top: 8px; font-weight: 700; }
+    
+    .market-details { display: flex; flex-direction: column; gap: 14px; }
+    .market-category-row { display: flex; align-items: center; gap: 12px; }
+    .market-category-title { font-size: 18px; font-weight: 800; letter-spacing: 0.5px; }
+    .market-badge {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .market-badge.blue-ocean { background: var(--green-dim); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .market-badge.red-ocean { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    
+    .market-stats-row { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 4px; }
+    .market-stat { display: flex; flex-direction: column; gap: 4px; }
+    .market-stat-lbl { font-size: 12px; color: var(--text-dim); }
+    .market-stat-val { font-size: 15px; font-weight: 700; color: var(--text); }
+    
+    /* Visual Reference Grid */
+    .ref-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    .ref-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.25s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .ref-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--cyan);
+      box-shadow: 0 8px 24px rgba(56,189,248,0.15);
+    }
+    .ref-card.selected {
+      border-color: var(--purple);
+      box-shadow: 0 0 16px rgba(168,85,247,0.3);
+      background: rgba(168,85,247,0.03);
+    }
+    
+    .ref-video-wrap {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+    }
+    .ref-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    
+    /* Legal Watermark Overlay */
+    .watermark-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.05);
+      z-index: 10;
+      overflow: hidden;
+    }
+    .watermark-text {
+      font-size: 11px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.25);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      transform: rotate(-25deg);
+      white-space: nowrap;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.6);
+      border: 1px dashed rgba(255, 255, 255, 0.15);
+      padding: 4px 10px;
+    }
+    
+    .ref-info { padding: 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; justify-content: space-between; }
+    .ref-title { font-size: 13px; font-weight: 700; line-height: 1.4; color: var(--text); }
+    
+    .ref-select-indicator {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.6);
+      border: 2px solid rgba(255,255,255,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: transparent;
+      z-index: 15;
+      transition: all 0.2s;
+    }
+    .ref-card.selected .ref-select-indicator {
+      background: var(--purple);
+      border-color: var(--purple);
+      color: #fff;
+    }
+    
+    /* Keyword Cloud styles */
+    .cloud-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .tag-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .tag-badge:hover {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+    }
+    .tag-badge.selected {
+      background: var(--purple);
+      border-color: var(--purple);
+      color: #fff;
+    }
+    .tag-weight {
+      font-size: 9.5px;
+      opacity: 0.6;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .tag-badge.selected .tag-weight { opacity: 0.8; }
   </style>
 </head>
 <body>
@@ -785,6 +1089,10 @@
   <div>
     <div class="header-title">Remotion Stock Generator</div>
     <div class="header-sub">Upload HTML animasi → AI convert → Render 4K di GitHub Actions</div>
+  </div>
+  <div class="header-nav">
+    <button class="nav-tab active" id="navBtnGenerator" onclick="switchView('generator')">🎬 Generator</button>
+    <button class="nav-tab" id="navBtnInsights" onclick="switchView('insights')">📈 Trends & Stock Explorer</button>
   </div>
   <div class="theme-toggle" style="display:flex; align-items:center; gap:16px;">
     <div style="display:flex; align-items:center; gap:8px;">
@@ -808,6 +1116,7 @@
 </header>
 
 <main class="main">
+  <div id="generatorPanel" class="insights-panel active">
 
   <!-- ═══════════ INPUT CARD ═══════════ -->
   <div class="input-card">
@@ -1040,6 +1349,119 @@
       </div>
     </div>
   </div>
+</div><!-- End of generatorPanel -->
+
+  <!-- ═══════════ GOOGLE TRENDS & ADOBE STOCK EXPLORER PANEL ═══════════ -->
+  <div id="insightsPanel" class="insights-panel">
+    <div class="insights-container" style="display:flex; flex-direction:column; gap:28px;">
+      
+      <!-- CARD 1: GOOGLE TRENDS NICHE DISCOVERY -->
+      <div class="input-card" style="padding: 28px; width: 100%;">
+        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
+          <h3 style="font-size:18px; font-weight:800; color:var(--cyan); margin:0;">📈 Google Trends Niche Discovery (6 Negara)</h3>
+          <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
+            Tarik data tren terbaru dari Amerika Serikat, Jerman, Inggris, Jepang, Kanada, dan Prancis, kemudian gunakan AI untuk meracik ide niche video After Effects.
+          </p>
+        </div>
+
+        <!-- STEP 1: FETCH DATA -->
+        <div style="margin-bottom: 24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
+            <div style="font-size:14px; font-weight:700; color:#fff;">Langkah 1: Ambil Data Tren Mentah</div>
+            <button class="btn-generate" id="btnFetchRawTrends" onclick="fetchRawTrends()" style="margin-top:0; padding:10px 24px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--cyan), #0ea5e9);">
+              📥 Tarik Tren Mentah
+            </button>
+          </div>
+
+          <!-- Loading Raw Trends -->
+          <div id="rawTrendsLoading" style="display:none; text-align:center; padding:20px 0;">
+            <div class="spin" style="font-size:24px; margin-bottom:8px; color:var(--cyan);">⏳</div>
+            <div style="font-size:13px; color:var(--text-mid); font-weight:600;">Menghubungi Google Trends RSS Feed...</div>
+          </div>
+
+          <!-- Raw Trends Grid -->
+          <div id="rawTrendsContainer" style="display:none; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; background: rgba(0,0,0,0.15); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- STEP 2: AI ANALYSIS -->
+        <div id="aiAnalysisSection" style="display:none; border-top:1px dashed var(--border); padding-top:20px; margin-bottom:24px;">
+          <div style="font-size:14px; font-weight:700; color:#fff; margin-bottom:12px;">Langkah 2: Analisis Tren dengan AI</div>
+          
+          <div style="display: flex; gap: 20px; align-items: stretch;">
+            <!-- Prompt Editor -->
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <label style="font-size: 11px; color: var(--text-dim); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Edit Prompt Pengiriman ke AI:</label>
+              <textarea id="trendsPromptEditor" class="input-text-field" style="height: 150px; font-family: monospace; font-size: 11px; resize: vertical; line-height: 1.4; margin-bottom: 0; background: rgba(0,0,0,0.2); border-color: rgba(56,189,248,0.25); color: #e2e8f0;"></textarea>
+            </div>
+            
+            <!-- Actions Panel -->
+            <div style="width: 260px; display: flex; flex-direction: column; justify-content: center; gap: 12px; background: rgba(255,255,255,0.01); border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
+              <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">
+                Prompt di samping akan diisi otomatis dengan data tren mentah menggantikan tag <code style="color:var(--yellow); font-family:monospace;">{trends_data}</code>.
+              </div>
+              <button class="btn-generate" id="btnAnalyzeTrends" onclick="analyzeTrendsWithAI()" style="margin-top:0; padding:12px; font-size:13px; font-weight:700; width:100%; background:linear-gradient(135deg, var(--cyan), #7c3aed);">
+                🤖 Analisis Tren (AI)
+              </button>
+              <button class="btn-refresh" onclick="resetTrendsPrompt()" style="width: 100%; padding: 6px; font-size: 11px; border-color: rgba(255,255,255,0.15); color: var(--text-mid);">
+                🔄 Reset Prompt
+              </button>
+            </div>
+          </div>
+
+          <!-- Loading Analysis -->
+          <div id="trendsAnalysisLoading" style="display:none; text-align:center; padding:40px 0;">
+            <div class="spin" style="font-size:32px; margin-bottom:12px; color:var(--cyan);">⏳</div>
+            <div style="font-size:14px; color:var(--text-mid); font-weight:600;">Mengirim data ke AI & menyaring niche terpopuler...</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">(Membutuhkan waktu 10-25 detik menggunakan Syntx AI)</div>
+          </div>
+        </div>
+
+        <!-- Table Trends -->
+        <div id="trendsTableContainer" style="display:none; overflow-x:auto; border-top: 1px solid var(--border); padding-top: 20px;">
+          <table style="width:100%; border-collapse:collapse; background:var(--bg3); border:1px solid var(--border); border-radius:8px; font-size:13px; overflow:hidden;">
+            <thead>
+              <tr style="background:rgba(255,255,255,0.03); border-bottom:1px solid var(--border); text-align:left;">
+                <th style="padding:14px 12px; width:40px; color:var(--cyan); font-weight:700;">No</th>
+                <th style="padding:14px 12px; width:200px; color:var(--cyan); font-weight:700;">Judul Niche / Ide</th>
+                <th style="padding:14px 12px; color:var(--text-mid); font-weight:700;">Penjelasan Visual</th>
+                <th style="padding:14px 12px; width:130px; color:var(--cyan); font-weight:700;">Negara Populer</th>
+                <th style="padding:14px 12px; width:220px; color:var(--text-mid); font-weight:700;">Turunan Keyword</th>
+                <th style="padding:14px 12px; width:180px; color:var(--cyan); font-weight:700;">Dasar Tren</th>
+                <th style="padding:14px 12px; width:130px; text-align:center; color:var(--cyan); font-weight:700;">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="trendsTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- CARD 2: MICROSTOCK SEARCH SHORTCUT -->
+      <div class="input-card" style="padding: 28px; width: 100%;">
+        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
+          <h3 style="font-size:18px; font-weight:800; color:var(--purple); margin:0;">🔎 Shortcut Pencarian Microstock</h3>
+          <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
+            Cari ide video atau animasi secara instan langsung di website resmi Adobe Stock atau Shutterstock.
+          </p>
+        </div>
+
+        <!-- Search Bar -->
+        <div style="display:flex; gap:12px; align-items: center;">
+          <input type="text" class="input-text-field" id="stockSearchInput" placeholder="Ketik kata kunci pencarian (contoh: cyberpunk neon loop)..." style="margin-bottom:0; flex:1;" onkeydown="if(event.key==='Enter') searchDirectly('adobe')" />
+          <button class="btn-generate" onclick="searchDirectly('adobe')" style="margin-top:0; width:180px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--purple), #6366f1);">
+            Cari di Adobe Stock
+          </button>
+          <button class="btn-generate" onclick="searchDirectly('shutterstock')" style="margin-top:0; width:180px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--cyan), #3b82f6);">
+            Cari di Shutterstock
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
 
 </main>
 
@@ -1057,6 +1479,301 @@
   let activeSeoGenerations = {};
   let currentPage = 1;
   const itemsPerPage = 50;
+
+  // ─── GOOGLE TRENDS & ADOBE STOCK EXPLORER STATE & FUNCTIONS ───
+  let currentView = 'generator';
+
+  function switchView(view) {
+    currentView = view;
+    document.getElementById('navBtnGenerator').classList.toggle('active', view === 'generator');
+    document.getElementById('navBtnInsights').classList.toggle('active', view === 'insights');
+    
+    document.getElementById('generatorPanel').classList.toggle('active', view === 'generator');
+    document.getElementById('insightsPanel').classList.toggle('active', view === 'insights');
+    sessionStorage.setItem('dashboard_currentView', view);
+  }
+
+  function renderRawTrends(data) {
+    const container = document.getElementById('rawTrendsContainer');
+    const aiSection = document.getElementById('aiAnalysisSection');
+    const flagMap = {
+      'United States': '🇺🇸',
+      'Germany': '🇩🇪',
+      'United Kingdom': '🇬🇧',
+      'Japan': '🇯🇵',
+      'Canada': '🇨🇦',
+      'France': '🇫🇷'
+    };
+
+    container.innerHTML = data.map(c => {
+      const flag = flagMap[c.country] || '🌐';
+      return `
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 12px; border-radius: 6px; display:flex; flex-direction:column; gap:8px;">
+          <div style="font-weight: 700; color: var(--cyan); display:flex; align-items:center; gap:6px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:6px;">
+            <span style="font-size:18px;">${flag}</span>
+            <span style="font-size:12px; letter-spacing:0.5px;">${c.country}</span>
+          </div>
+          <ul style="margin: 0; padding-left: 16px; font-size:11.5px; color: var(--text-mid); display:flex; flex-direction:column; gap:4px; line-height:1.3;">
+            ${c.queries.map(q => `<li style="font-weight: 500;">${escHtml(q)}</li>`).join('')}
+          </ul>
+        </div>
+      `;
+    }).join('');
+
+    container.style.display = 'grid';
+
+    // Pre-fill prompt editor
+    let trendsPromptText = "";
+    data.forEach(c => {
+      trendsPromptText += `- ${c.country}: ${c.queries.join(", ")}\n`;
+    });
+
+    const editor = document.getElementById('trendsPromptEditor');
+    editor.value = DEFAULT_TRENDS_PROMPT_TEMPLATE.replace('{trends_data}', trendsPromptText.trim());
+
+    aiSection.style.display = 'block';
+  }
+
+  function renderTrendsAnalysis(data) {
+    const container = document.getElementById('trendsTableContainer');
+    const tbody = document.getElementById('trendsTableBody');
+    tbody.innerHTML = '';
+
+    data.forEach((item, idx) => {
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border)';
+      tr.style.verticalAlign = 'top';
+
+      // Escape strings for JS handlers
+      const escapedNiche = item.niche.replace(/'/g, "\\'");
+
+      tr.innerHTML = `
+        <td style="padding: 14px 12px; color: var(--text-dim); font-weight: 600;">${idx + 1}</td>
+        <td style="padding: 14px 12px; font-weight: 700; color: #fff;">${escHtml(item.niche)}</td>
+        <td style="padding: 14px 12px; color: var(--text-mid); line-height: 1.5;">${escHtml(item.explanation)}</td>
+        <td style="padding: 14px 12px; color: var(--cyan); font-weight: 600;">${escHtml(item.country)}</td>
+        <td style="padding: 14px 12px;">
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; max-width: 220px;">
+            ${item.keywords.split(',').map(tag => `<span style="font-size: 11px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; color: var(--text-dim);">${escHtml(tag.trim())}</span>`).join('')}
+          </div>
+        </td>
+        <td style="padding: 14px 12px; line-height: 1.4;">
+          <span style="font-size: 11px; color: var(--text-dim);">Judul ini diambil berdasarkan tren:</span><br/>
+          <strong style="color: var(--yellow); font-size: 12px;">${escHtml(item.source_query || '-')}</strong>
+        </td>
+        <td style="padding: 14px 12px; text-align: center;">
+          <div style="display: flex; flex-direction: column; gap: 8px; align-items: center;">
+            <button class="btn-refresh" onclick="searchFromTrend('${escapedNiche}')" style="width: 100%; padding: 6px 10px; font-size: 11px; border-color: var(--purple); color: var(--purple);">
+              🔍 Cari Aset
+            </button>
+            <button class="btn-refresh" disabled style="width: 100%; padding: 6px 10px; font-size: 11px; border-color: var(--border); color: var(--text-dim); background: transparent; cursor: not-allowed; opacity: 0.5;" title="Gunakan tombol Kirim ke Chat AI di Adobe Stock Explorer untuk membuat HTML">
+              ❌ Kirim Ide
+            </button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    container.style.display = 'block';
+  }
+
+
+
+  const DEFAULT_TRENDS_PROMPT_TEMPLATE = `Kamu adalah pakar Creative Director SEO Microstock.
+Berikut adalah daftar kata kunci pencarian yang sedang tren hari ini di Google Trends dari beberapa negara:
+{trends_data}
+
+Tugas kamu adalah menyaring dan menyeleksi tren di atas, lalu hasilkan 10 ide/niche video/animasi kreatif yang memiliki nilai jual tinggi dan dapat dibuat menggunakan Adobe After Effects (misalnya: seamless background loops, kinetic typography, sci-fi overlays, transitions, lower thirds, abstract gradients, particles, data visualization, dll.).
+
+Untuk setiap ide, tentukan:
+1. Judul Niche (Judul komersial yang SEO-friendly dalam bahasa Inggris, maks 12 kata. Contoh: "Futuristic Cyberpunk HUD Data Visualization Loop")
+2. Penjelasan Visual (Deskripsi visual detail dalam Bahasa Indonesia tentang animasi tersebut, minimal 20 kata. Terjemahkan istilah teknis menjadi istilah komersial yang menarik.)
+3. Negara Populer (Nama negara asal tren tersebut, contoh: "United States, Germany")
+4. Turunan Keyword (10 kata kunci bahasa Inggris yang sangat relevan dipisahkan koma untuk tag microstock, disusun dari yang paling penting. DILARANG menggunakan istilah teknis pemrograman.)
+5. Source Query (Nama query tren spesifik dari data Google Trends yang paling mendasari/menginspirasi ide ini, contoh: "WWDC 2026")
+
+Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. JSON harus berbentuk Array of Object dengan struktur persis seperti ini:
+[
+  {
+    "niche": "Title of the video niche",
+    "explanation": "Detailed visual explanation in Indonesian",
+    "country": "Country names",
+    "keywords": "tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, tag9, tag10",
+    "source_query": "Trending query name that inspired this niche"
+  }
+]`;
+
+  let lastFetchedTrendsData = null;
+
+  async function fetchRawTrends() {
+    const btn = document.getElementById('btnFetchRawTrends');
+    const loading = document.getElementById('rawTrendsLoading');
+    const container = document.getElementById('rawTrendsContainer');
+    const aiSection = document.getElementById('aiAnalysisSection');
+
+    btn.disabled = true;
+    loading.style.display = 'block';
+    container.style.display = 'none';
+    container.innerHTML = '';
+    aiSection.style.display = 'none';
+
+    try {
+      showToast('📡 Mengambil data tren mentah...', 'info');
+      const resp = await fetch('/api/trends/raw');
+      const data = await resp.json();
+
+      if (data.error) throw new Error(data.error);
+
+      lastFetchedTrendsData = data;
+      sessionStorage.setItem('dashboard_lastFetchedTrendsData', JSON.stringify(data));
+      renderRawTrends(data);
+      showToast('✅ Berhasil menarik tren mentah!', 'success');
+    } catch (err) {
+      showToast('❌ Gagal menarik tren mentah: ' + err.message, 'error');
+    } finally {
+      loading.style.display = 'none';
+      btn.disabled = false;
+    }
+  }
+
+  function resetTrendsPrompt() {
+    if (!lastFetchedTrendsData) {
+      showToast('Tarik tren mentah terlebih dahulu untuk reset prompt.', 'warning');
+      return;
+    }
+    let trendsPromptText = "";
+    lastFetchedTrendsData.forEach(c => {
+      trendsPromptText += `- ${c.country}: ${c.queries.join(", ")}\n`;
+    });
+    const editor = document.getElementById('trendsPromptEditor');
+    editor.value = DEFAULT_TRENDS_PROMPT_TEMPLATE.replace('{trends_data}', trendsPromptText.trim());
+    showToast('Prompt berhasil di-reset.', 'success');
+  }
+
+  async function analyzeTrendsWithAI() {
+    const btn = document.getElementById('btnAnalyzeTrends');
+    const loading = document.getElementById('trendsAnalysisLoading');
+    const container = document.getElementById('trendsTableContainer');
+    const tbody = document.getElementById('trendsTableBody');
+    const promptValue = document.getElementById('trendsPromptEditor').value;
+
+    if (!promptValue.trim()) {
+      showToast('Prompt tidak boleh kosong!', 'warning');
+      return;
+    }
+
+    btn.disabled = true;
+    loading.style.display = 'block';
+    container.style.display = 'none';
+    tbody.innerHTML = '';
+
+    try {
+      showToast('🤖 Menganalisis tren dengan AI...', 'info');
+      const resp = await fetch('/api/trends/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: promptValue })
+      });
+      const data = await resp.json();
+
+      if (data.error) throw new Error(data.error);
+
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error('Format respons AI tidak valid');
+      }
+
+      sessionStorage.setItem('dashboard_trendsAnalysisData', JSON.stringify(data));
+      renderTrendsAnalysis(data);
+      showToast('✅ Analisis tren selesai!', 'success');
+    } catch (err) {
+      showToast('❌ Gagal memproses tren: ' + err.message, 'error');
+    } finally {
+      loading.style.display = 'none';
+      btn.disabled = false;
+    }
+  }
+
+  function searchFromTrend(niche) {
+    const input = document.getElementById('stockSearchInput');
+    input.value = niche;
+    
+    // Smooth scroll to search card
+    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showToast('Kata kunci dimasukkan! Silakan pilih Cari di Adobe Stock atau Shutterstock.', 'info');
+  }
+
+  function sendToGenerator(title, desc, tags) {
+    // Switch input tab to paste
+    switchInputTab('paste');
+    
+    // Fill the paste fields
+    const fileNameInput = document.getElementById('pasteFileName');
+    const codeArea = document.getElementById('pasteHtmlCode');
+    
+    const sanitizedName = title.toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    
+    fileNameInput.value = sanitizedName;
+    
+    // Create starter boilerplate code with embedded visual instructions
+    codeArea.value = `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: #fff;
+      font-family: sans-serif;
+    }
+    /* Visual concept details:
+       Description: ${desc}
+       Niche name: ${title}
+       Suggested keywords: ${tags}
+    */
+  </style>
+</head>
+<body>
+  <div id="container">
+    <!-- Write HTML elements for After Effects style animation here -->
+  </div>
+</body>
+</html>`;
+
+    // Update generator button state
+    updateGenerateBtn();
+    
+    // Switch view to generator
+    switchView('generator');
+    
+    showToast('🚀 Ide visual berhasil dimasukkan ke tab Paste HTML!', 'success');
+  }
+
+  function searchDirectly(platform) {
+    const input = document.getElementById('stockSearchInput');
+    const query = input.value.trim();
+    if (!query) {
+      showToast('Silakan masukkan kata kunci pencarian!', 'warning');
+      return;
+    }
+
+    // Simpan query pencarian ke sessionStorage
+    sessionStorage.setItem('dashboard_stockSearchQuery', query);
+
+    if (platform === 'adobe') {
+      window.open(`https://stock.adobe.com/search/video?k=${encodeURIComponent(query)}&search_type=usertyped`, '_blank', 'noreferrer');
+    } else if (platform === 'shutterstock') {
+      const slug = query.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      window.open(`https://www.shutterstock.com/video/search/${slug}`, '_blank', 'noreferrer');
+    }
+  }
 
   // ─── DARK/LIGHT MODE ────────────────────────
   function toggleTheme(isLight) {
@@ -2526,10 +3243,47 @@
   });
 
   // ═══════════════════════════════════════════
+  // STATE RESTORATION
+  // ═══════════════════════════════════════════
+  function restoreState() {
+    const savedView = sessionStorage.getItem('dashboard_currentView');
+    if (savedView) {
+      switchView(savedView);
+    }
+
+    const savedTrends = sessionStorage.getItem('dashboard_lastFetchedTrendsData');
+    if (savedTrends) {
+      try {
+        const parsed = JSON.parse(savedTrends);
+        lastFetchedTrendsData = parsed;
+        renderRawTrends(parsed);
+      } catch (e) {
+        console.error('Gagal memuat saved trends:', e);
+      }
+    }
+
+    const savedAnalysis = sessionStorage.getItem('dashboard_trendsAnalysisData');
+    if (savedAnalysis) {
+      try {
+        const parsed = JSON.parse(savedAnalysis);
+        renderTrendsAnalysis(parsed);
+      } catch (e) {
+        console.error('Gagal memuat saved analysis:', e);
+      }
+    }
+
+    const savedStockQuery = sessionStorage.getItem('dashboard_stockSearchQuery');
+    if (savedStockQuery) {
+      document.getElementById('stockSearchInput').value = savedStockQuery;
+    }
+  }
+
+  // ═══════════════════════════════════════════
   // INIT
   // ═══════════════════════════════════════════
   loadResults();
   loadPrompts();
+  restoreState();
   // Auto-refresh every 30s
   setInterval(loadResults, 30000);
 </script>

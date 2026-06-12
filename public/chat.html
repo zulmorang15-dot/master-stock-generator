@@ -1050,6 +1050,45 @@ async function init() {
   if (hash && hash.startsWith('session_')) {
     await selectSession(hash);
   }
+
+  // Check for pending chat ideas from stock explorer
+  const pendingPrompt = localStorage.getItem('pendingChatPrompt');
+  const pendingImageUrl = localStorage.getItem('pendingChatImageUrl');
+  if (pendingPrompt) {
+    localStorage.removeItem('pendingChatPrompt');
+    localStorage.removeItem('pendingChatImageUrl');
+
+    // Create a new session automatically
+    showToast('✏️ Membuat sesi percakapan baru...', 'info');
+    await createNewSession();
+
+    // Populate chat prompt
+    const chatInput = document.getElementById('chatInput');
+    chatInput.value = pendingPrompt;
+    autoResizeTextarea(chatInput);
+
+    // If there is an image URL, load it as attachment
+    if (pendingImageUrl) {
+      showToast('📸 Memuat thumbnail referensi...', 'info');
+      try {
+        const response = await fetch(pendingImageUrl);
+        const blob = await response.blob();
+        selectedImageFile = new File([blob], 'thumbnail.jpg', { type: blob.type || 'image/jpeg' });
+        
+        // Show image preview in UI
+        document.getElementById('imagePreviewThumb').src = pendingImageUrl;
+        document.getElementById('imagePreviewName').textContent = 'Stock Reference Thumbnail';
+        document.getElementById('imagePreviewContainer').style.display = 'flex';
+        updateInputWrapperRadius();
+        
+        showToast('📸 Thumbnail referensi berhasil dimuat!', 'success');
+      } catch (err) {
+        console.error('Gagal memuat gambar referensi:', err);
+        showToast('⚠️ Gagal memuat gambar referensi, silakan upload manual.', 'warning');
+      }
+    }
+    chatInput.focus();
+  }
 }
 
 function toggleTheme() {

@@ -4150,6 +4150,166 @@ setTimeout(checkAndAutoRegisterSyntx, 5000);
 // Jalankan secara periodik setiap 10 menit
 setInterval(checkAndAutoRegisterSyntx, 10 * 60 * 1000);
 
+// ==========================================
+// GOOGLE TRENDS & ADOBE STOCK DISCOVERY NEW API
+// ==========================================
+
+const MIXKIT_LOOPS = [
+  {
+    previewUrl: "https://assets.mixkit.co/videos/preview/mixkit-liquid-gold-and-black-swirls-40283-large.mp4",
+    thumbUrl: "https://assets.mixkit.co/videos/40283/40283-thumb-720-0.jpg"
+  },
+  {
+    previewUrl: "https://assets.mixkit.co/videos/preview/mixkit-liquid-blue-and-purple-ink-swirls-40277-large.mp4",
+    thumbUrl: "https://assets.mixkit.co/videos/40277/40277-thumb-720-0.jpg"
+  },
+  {
+    previewUrl: "https://assets.mixkit.co/videos/preview/mixkit-tunnel-of-futuristic-neon-lights-42284-large.mp4",
+    thumbUrl: "https://assets.mixkit.co/videos/42284/42284-thumb-720-0.jpg"
+  },
+  {
+    previewUrl: "https://assets.mixkit.co/videos/preview/mixkit-purple-and-blue-neon-light-strips-loop-42319-large.mp4",
+    thumbUrl: "https://assets.mixkit.co/videos/42319/42319-thumb-720-0.jpg"
+  },
+  {
+    previewUrl: "https://assets.mixkit.co/videos/preview/mixkit-glowing-gold-particles-in-slow-motion-42588-large.mp4",
+    thumbUrl: "https://assets.mixkit.co/videos/42588/42588-thumb-720-0.jpg"
+  },
+  {
+    previewUrl: "https://assets.mixkit.co/videos/preview/mixkit-abstract-modern-background-with-glowing-lines-42595-large.mp4",
+    thumbUrl: "https://assets.mixkit.co/videos/42595/42595-thumb-720-0.jpg"
+  }
+];
+
+// Helper: Ambil data RSS Trends mentah dari Google Trends
+async function fetchRawTrendsData() {
+  const countries = {
+    'US': 'United States',
+    'DE': 'Germany',
+    'GB': 'United Kingdom',
+    'JP': 'Japan',
+    'CA': 'Canada',
+    'FR': 'France'
+  };
+
+  const trendData = [];
+
+  for (const [code, name] of Object.entries(countries)) {
+    try {
+      console.log(`Fetching Google Trends RSS for ${name} (${code})...`);
+      const url = `https://trends.google.com/trending/rss?geo=${code}`;
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9'
+        },
+        timeout: 10000
+      });
+
+      const $ = cheerio.load(response.data, { xmlMode: true });
+      const countryQueries = [];
+      $('item').each((i, el) => {
+        if (i < 5) {
+          const title = $(el).find('title').text();
+          if (title) countryQueries.push(title);
+        }
+      });
+
+      if (countryQueries.length > 0) {
+        trendData.push({
+          country: name,
+          code: code,
+          queries: countryQueries
+        });
+      }
+    } catch (err) {
+      console.error(`Gagal mengambil tren untuk ${name}:`, err.message);
+    }
+  }
+
+  return trendData;
+}
+
+// GET /api/trends/raw -> Ambil data Google Trends RSS mentah (6 negara)
+app.get("/api/trends/raw", async (req, res) => {
+  console.log("📡 Mengambil data Google Trends RSS...");
+  try {
+    const rawData = await fetchRawTrendsData();
+    if (rawData.length === 0) {
+      return res.status(500).json({ error: "Gagal mengambil data dari Google Trends untuk semua negara." });
+    }
+    res.json(rawData);
+  } catch (error) {
+    console.error("❌ Gagal mengambil tren mentah:", error.message);
+    res.status(500).json({ error: "Gagal mengambil data tren mentah", details: error.message });
+  }
+});
+
+// POST /api/trends/analyze -> Analisis kata kunci tren dari klien dengan prompt kustom
+app.post("/api/trends/analyze", async (req, res) => {
+  const { prompt } = req.body || {};
+  if (!prompt || !prompt.trim()) {
+    return res.status(400).json({ error: "Prompt tidak boleh kosong" });
+  }
+
+  console.log("📡 Memulai analisis tren dengan prompt AI kustom...");
+  try {
+    console.log("🤖 Menyodorkan custom prompt ke AI...");
+    const aiResponse = await callAIWithFallback(prompt, { preferModel: 'syntx-claude' });
+    
+    let jsonText = aiResponse.trim();
+    if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+    } else if (jsonText.includes("```")) {
+      jsonText = jsonText.split("```")[1].split("```")[0].trim();
+    }
+
+    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+    const niches = JSON.parse(jsonText);
+    
+    console.log("✅ Sukses menganalisis tren!");
+    res.json(niches);
+  } catch (error) {
+    console.error("❌ Gagal menganalisis tren dengan AI:", error.message);
+    res.status(500).json({ error: "Gagal memproses analisis tren dengan AI", details: error.message });
+  }
+});
+
+
+
+// GET /api/proxy-image -> Proxy gambar untuk menghindari CORS
+app.get("/api/proxy-image", async (req, res) => {
+  const { url } = req.query || {};
+  if (!url) {
+    return res.status(400).send("Parameter url diperlukan");
+  }
+  try {
+    const parsedUrl = new URL(url);
+    const referer = parsedUrl.origin + '/';
+
+    const response = await axios({
+      method: 'get',
+      url: url,
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': referer
+      },
+      timeout: 10000
+    });
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (response.headers['content-type']) {
+      res.setHeader('Content-Type', response.headers['content-type']);
+    }
+    response.data.pipe(res);
+  } catch (err) {
+    console.error("Gagal melakukan proxy gambar:", err.message);
+    res.status(500).send("Gagal memproses gambar");
+  }
+});
+
 const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`Server Jembatan Kode Bebas aktif di port ${PORT}`);
