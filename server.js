@@ -334,13 +334,48 @@ async function callAIWithFallback(prompt, options = {}) {
         return result;
       }
       throw new Error("Syntx Claude returned invalid response");
+    } else if (preferModel === 'syntx-chatgpt') {
+      const result = await syntxBot.callSyntx(prompt, 'gpt-5.5', syntxOptions);
+      if (isValid(result, 'Syntx ChatGPT')) {
+        log(`✅ Sukses menggunakan Syntx ChatGPT!`, 'success');
+        return result;
+      }
+      throw new Error("Syntx ChatGPT returned invalid response");
     } else if (preferModel === 'syntx-gemini') {
-      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
+      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
       if (isValid(result, 'Syntx Gemini')) {
         log(`✅ Sukses menggunakan Syntx Gemini!`, 'success');
         return result;
       }
       throw new Error("Syntx Gemini returned invalid response");
+    } else if (preferModel === 'syntx-grok') {
+      const result = await syntxBot.callSyntx(prompt, 'grok-4.3', syntxOptions);
+      if (isValid(result, 'Syntx Grok')) {
+        log(`✅ Sukses menggunakan Syntx Grok!`, 'success');
+        return result;
+      }
+      throw new Error("Syntx Grok returned invalid response");
+    } else if (preferModel === 'syntx-deepseek') {
+      const result = await syntxBot.callSyntx(prompt, 'deepseek-r1', syntxOptions);
+      if (isValid(result, 'Syntx DeepSeek')) {
+        log(`✅ Sukses menggunakan Syntx DeepSeek!`, 'success');
+        return result;
+      }
+      throw new Error("Syntx DeepSeek returned invalid response");
+    } else if (preferModel === 'syntx-qwen') {
+      const result = await syntxBot.callSyntx(prompt, 'qwen3.7-max', syntxOptions);
+      if (isValid(result, 'Syntx Qwen')) {
+        log(`✅ Sukses menggunakan Syntx Qwen!`, 'success');
+        return result;
+      }
+      throw new Error("Syntx Qwen returned invalid response");
+    } else if (preferModel === 'syntx-perplexity') {
+      const result = await syntxBot.callSyntx(prompt, 'sonar-pro', syntxOptions);
+      if (isValid(result, 'Syntx Perplexity')) {
+        log(`✅ Sukses menggunakan Syntx Perplexity!`, 'success');
+        return result;
+      }
+      throw new Error("Syntx Perplexity returned invalid response");
     } else if (preferModel === 'gemini') {
       if (genAI) {
         const result = await callGemini(prompt);
@@ -427,7 +462,7 @@ async function callAIWithFallback(prompt, options = {}) {
   if (preferModel !== 'syntx-gemini') {
     try {
       log("📡 [4/6] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
-      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
+      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
       if (isValid(result, "Syntx Gemini")) {
         log("✅ Sukses menggunakan Syntx Gemini!", "success");
         return result;

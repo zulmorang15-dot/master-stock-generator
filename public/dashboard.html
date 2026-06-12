@@ -1923,8 +1923,13 @@
       <select id="ai_model_${item.id}" class="select-input" style="padding: 4px 8px; font-size: 11px; height: auto; font-weight: 600; width: 100%; margin-bottom: 8px;" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}>
         <option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>🤖 Auto AI</option>
         <option value="groq" ${item.aiModel === 'groq' ? 'selected' : ''}>⚡ Groq</option>
-        <option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>🎯 Syntx Claude</option>
-        <option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>🌐 Syntx Gemini</option>
+        <option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>🎯 Syntx Claude 4.6</option>
+        <option value="syntx-chatgpt" ${item.aiModel === 'syntx-chatgpt' ? 'selected' : ''}>💬 Syntx ChatGPT 5.5</option>
+        <option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>✨ Syntx Gemini 3.5</option>
+        <option value="syntx-grok" ${item.aiModel === 'syntx-grok' ? 'selected' : ''}>💡 Syntx Grok 4.3</option>
+        <option value="syntx-deepseek" ${item.aiModel === 'syntx-deepseek' ? 'selected' : ''}>🐉 Syntx DeepSeek R1</option>
+        <option value="syntx-qwen" ${item.aiModel === 'syntx-qwen' ? 'selected' : ''}>🌀 Syntx Qwen 3.7</option>
+        <option value="syntx-perplexity" ${item.aiModel === 'syntx-perplexity' ? 'selected' : ''}>🔍 Syntx Perplexity</option>
         <option value="gemini" ${item.aiModel === 'gemini' ? 'selected' : ''}>🧠 Gemini API</option>
         <option value="openrouter" ${item.aiModel === 'openrouter' ? 'selected' : ''}>🔀 OpenRouter</option>
       </select>
