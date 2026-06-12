@@ -2639,35 +2639,35 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const canBatch4k = !!(item.promptCode);
 
     const checkboxCell = batchModeActive
-      ? `<td rowspan="3" style="text-align:center;vertical-align:middle; border-bottom:2px solid var(--border);"><input type="checkbox" class="row-checkbox" data-id="${item.id}" ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" /></td>`
+      ? `<td rowspan="3" style="text-align:center;vertical-align:middle; border-bottom:4px solid var(--border-hover);"><input type="checkbox" class="row-checkbox" data-id="${item.id}" ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" /></td>`
       : '';
 
     let rowBg = 'rgba(56,189,248,0.02)'; // default background
     let statusBadge = '';
     
     if (item.statusConvertTsx === 'queued') {
-      rowBg = 'rgba(245, 158, 11, 0.04)'; // subtle amber
+      rowBg = 'rgba(245, 158, 11, 0.08)'; // subtle amber
       statusBadge = `<span class="status-badge" style="background:rgba(245,158,11,0.12); color:#f59e0b; border:1px solid rgba(245,158,11,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">⏳ Di Antrean</span>`;
     } else if (item.statusConvertTsx === 'processing-tsx') {
-      rowBg = 'rgba(168, 85, 247, 0.05)'; // subtle purple
+      rowBg = 'rgba(168, 85, 247, 0.1)'; // subtle purple
       statusBadge = `<span class="status-badge" style="background:rgba(168,85,247,0.12); color:#c084fc; border:1px solid rgba(168,85,247,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">⚙️ Mengonversi TSX...</span>`;
     } else if (item.statusConvertTsx === 'processing-preview') {
-      rowBg = 'rgba(6, 182, 212, 0.05)'; // subtle cyan
+      rowBg = 'rgba(6, 182, 212, 0.1)'; // subtle cyan
       statusBadge = `<span class="status-badge" style="background:rgba(6,182,212,0.12); color:#22d3ee; border:1px solid rgba(6,182,212,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">🎬 Merender Preview...</span>`;
     } else if (item.previewUrl) {
-      rowBg = 'rgba(16, 185, 129, 0.04)'; // subtle emerald green
+      rowBg = 'rgba(16, 185, 129, 0.08)'; // subtle emerald green
       statusBadge = `<span class="status-badge" style="background:rgba(16,185,129,0.12); color:#34d399; border:1px solid rgba(16,185,129,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">✅ Selesai Preview</span>`;
     } else if (item.statusConvertTsx === 'failed') {
-      rowBg = 'rgba(239, 68, 68, 0.04)'; // subtle red
+      rowBg = 'rgba(239, 68, 68, 0.08)'; // subtle red
       statusBadge = `<span class="status-badge" style="background:rgba(239,68,68,0.12); color:#f87171; border:1px solid rgba(239,68,68,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">❌ Gagal</span>`;
     }
 
     return `
       <!-- Baris 1: No, Nama File, Aksi -->
-      <tr id="row_1_${item.id}" style="background: ${rowBg};">
+      <tr id="row_1_${item.id}" style="background: ${rowBg} !important;">
         ${checkboxCell}
-        <td class="td-no" rowspan="3" style="text-align:center; vertical-align:middle; font-weight:700; border-bottom:2px solid var(--border); border-right:1px solid var(--border);">${no}</td>
-        <td colspan="3" style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--cyan); font-weight:700; padding:10px 14px; border-bottom:1px solid rgba(56,189,248,0.15); vertical-align:middle;">
+        <td class="td-no" rowspan="3" style="text-align:center; vertical-align:middle; font-weight:700; border-bottom:4px solid var(--border-hover); border-right:1px solid var(--border);">${no}</td>
+        <td colspan="3" style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--cyan); font-weight:700; padding:10px 14px; border-bottom:2px solid var(--border); vertical-align:middle;">
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
             <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
               <span>📄 ${escHtml(item.fileName || item.id)}</span>
@@ -2785,14 +2785,14 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
             </div>
           </div>
         </td>
-        <td rowspan="3" style="vertical-align:top; border-left:1px solid var(--border); border-bottom:2px solid var(--border); padding:12px;">
+        <td rowspan="3" style="vertical-align:top; border-left:1px solid var(--border); border-bottom:4px solid var(--border-hover); padding:12px;">
           ${actsCell}
         </td>
       </tr>
       
       <!-- Baris 2: Rekomendasi Judul -->
-      <tr id="row_2_${item.id}" style="background: ${rowBg};">
-        <td colspan="3" style="padding:8px 14px; border-bottom:1px solid rgba(56,189,248,0.15); vertical-align:middle;">
+      <tr id="row_2_${item.id}" style="background: ${rowBg} !important;">
+        <td colspan="3" style="padding:8px 14px; border-bottom:2px solid var(--border); vertical-align:middle;">
           <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:4px; letter-spacing:0.5px;">Rekomendasi Judul</div>
           <div class="edit-wrap">
             <textarea id="title_${item.id}" class="edit-field" placeholder="Belum ada judul video..." rows="2" style="width:100%; font-family:inherit; font-size:13px; line-height:1.4; padding:4px 6px;">${escHtml(item.judul||'')}</textarea>
@@ -2803,21 +2803,21 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       </tr>
       
       <!-- Baris 3: Preview, Log Proses, Keywords -->
-      <tr id="row_3_${item.id}" style="background: ${rowBg}; border-bottom:2px solid var(--border);">
+      <tr id="row_3_${item.id}" style="background: ${rowBg} !important; border-bottom:4px solid var(--border-hover);">
         <!-- Preview Cell -->
-        <td class="preview-cell" style="width:180px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:2px solid var(--border);">
+        <td class="preview-cell" style="width:180px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:4px solid var(--border-hover);">
           <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px; text-align:center;">Preview</div>
           ${previewCell}
         </td>
         
         <!-- Log Cell -->
-        <td style="width:320px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:2px solid var(--border);">
+        <td style="width:320px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:4px solid var(--border-hover);">
           <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px;">Log Proses</div>
           ${logCell}
         </td>
         
         <!-- Keywords Cell -->
-        <td style="padding:10px; vertical-align:top; border-bottom:2px solid var(--border);">
+        <td style="padding:10px; vertical-align:top; border-bottom:4px solid var(--border-hover);">
           <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px;">Rekomendasi Keywords</div>
           <div class="edit-wrap">
             <textarea id="kw_${item.id}" class="edit-field" rows="6" placeholder="Belum ada keywords..." style="padding:4px 6px; font-size:12px; line-height:1.4; height:140px; min-height:140px; max-height:140px;">${escHtml(item.keywords||'')}</textarea>
