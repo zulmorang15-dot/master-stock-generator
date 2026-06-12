@@ -117,6 +117,17 @@ jobs:
             -XMP-dc:Subject="$KEYWORDS_NORMALIZED" \
             out/$FILENAME
 
+      - name: Upload to Shutterstock
+        env:
+          SHUTTERSTOCK_USER: ${{ secrets.SHUTTERSTOCK_USER }}
+          SHUTTERSTOCK_PASS: ${{ secrets.SHUTTERSTOCK_PASS }}
+          FILENAME: ${{ github.event.inputs.composition_id }}-4k.mov
+        run: |
+          echo "Mengunggah $FILENAME ke Shutterstock via Explicit FTPS..."
+          curl -T out/$FILENAME ftp://ftp.shutterstock.com/ \
+               --user "${SHUTTERSTOCK_USER}:${SHUTTERSTOCK_PASS}" \
+               --ssl-reqd
+
       - name: Upload to x0.at Cloud
         id: upload_cloud
         run: |

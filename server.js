@@ -1136,7 +1136,8 @@ app.get("/api/export-csv", (req, res) => {
         const filename = `${item.id}-4k.mov`;
         const description = (item.judul || "").replace(/"/g, '""');
         const keywords = (item.keywords || "").replace(/"/g, '""');
-        const categories = (item.shutterstockCategory || "").replace(/"/g, '""');
+        const combinedCategories = [item.shutterstockCategory, item.shutterstockCategory2].filter(Boolean).join(",");
+        const categories = combinedCategories.replace(/"/g, '""');
         csv += `"${filename}","${description}","${keywords}","${categories}","no","no","no"\n`;
       });
       res.setHeader("Content-Type", "text/csv");
@@ -1319,7 +1320,7 @@ app.post("/api/render-4k", async (req, res) => {
     fs.writeFileSync(tempPropsFile, JSON.stringify(props));
 
     // 3. Jalankan render 4K ProRes
-    const outputFile = path.join("out", `${item.id}_4k.mov`);
+    const outputFile = path.join("out", `${item.id}-4k.mov`);
     const cmd = `npx remotion render Composition "${outputFile}" --codec=prores --props="${tempPropsFile}" --muted`;
     console.log(`Running CLI: ${cmd}`);
 
@@ -1342,7 +1343,7 @@ app.post("/api/render-4k", async (req, res) => {
     if (hasFFmpeg) {
       try {
         console.log(`🏷 Menyematkan metadata via FFmpeg untuk: ${item.id}`);
-        const tempOutputFile = path.join("out", `temp_${item.id}_4k.mov`);
+        const tempOutputFile = path.join("out", `temp_${item.id}-4k.mov`);
         const title = item.judul || "Stock Video";
         const comment = item.keywords || "motion, abstract, loop";
         const ffmpegCmd = `ffmpeg -y -i "${outputFile}" -metadata title="${title.replace(/"/g, '\\"')}" -metadata keywords="${comment.replace(/"/g, '\\"')}" -an -codec copy "${tempOutputFile}"`;
@@ -1660,7 +1661,7 @@ async function waitForRender(id, renderType, jobId) {
   throw new Error("Timeout rendering video di GitHub Actions.");
 }
 
-// Helper: Normalisasi kategori Adobe Stock dan Shutterstock
+// Helper: Normalisasi kategori Adobe Stock dan Shutterstock (Mendukung hingga 2 kategori Shutterstock)
 function normalizeCategories(seoData) {
   // Adobe Category Normalization
   let rawAdobeCat = seoData.adobeCategory || seoData.adobe_category || seoData.adobe || '';
@@ -1688,11 +1689,7 @@ function normalizeCategories(seoData) {
 
   // Shutterstock Category Normalization
   let rawShutterCat = seoData.shutterstockCategory || seoData.shutterstock_category || seoData.shutterstock || seoData.kategori || '';
-  let shutterCat = String(rawShutterCat).trim();
-  
-  if (shutterCat.includes(",")) {
-    shutterCat = shutterCat.split(",")[0].trim();
-  }
+  let shutterCatsRaw = String(rawShutterCat).split(",").map(c => c.trim()).filter(Boolean);
 
   const shutterMap = {
     'animal': 'Animals/Wildlife',
@@ -1727,61 +1724,63 @@ function normalizeCategories(seoData) {
     'transportation': 'Transportation'
   };
 
-  const cleanShutter = shutterCat.toLowerCase().trim();
-  let matchedShutter = '';
-  
-  for (const [kw, val] of Object.entries(shutterMap)) {
-    if (cleanShutter.includes(kw)) {
-      matchedShutter = val;
-      break;
-    }
-  }
+  const validLowerMap = {
+    'animals/wildlife': 'Animals/Wildlife',
+    'arts': 'Arts',
+    'backgrounds/textures': 'Backgrounds/Textures',
+    'buildings/landmarks': 'Buildings/Landmarks',
+    'business/finance': 'Business/Finance',
+    'education': 'Education',
+    'food and drink': 'Food and drink',
+    'healthcare/medical': 'Healthcare/Medical',
+    'holidays': 'Holidays',
+    'industrial': 'Industrial',
+    'nature': 'Nature',
+    'objects': 'Objects',
+    'people': 'People',
+    'religion': 'Religion',
+    'science': 'Science',
+    'signs/symbols': 'Signs/Symbols',
+    'sports/recreation': 'Sports/Recreation',
+    'technology': 'Technology',
+    'transportation': 'Transportation'
+  };
 
-  if (!matchedShutter) {
-    const validLowerMap = {
-      'animals/wildlife': 'Animals/Wildlife',
-      'arts': 'Arts',
-      'backgrounds/textures': 'Backgrounds/Textures',
-      'buildings/landmarks': 'Buildings/Landmarks',
-      'business/finance': 'Business/Finance',
-      'education': 'Education',
-      'food and drink': 'Food and drink',
-      'healthcare/medical': 'Healthcare/Medical',
-      'holidays': 'Holidays',
-      'industrial': 'Industrial',
-      'nature': 'Nature',
-      'objects': 'Objects',
-      'people': 'People',
-      'religion': 'Religion',
-      'science': 'Science',
-      'signs/symbols': 'Signs/Symbols',
-      'sports/recreation': 'Sports/Recreation',
-      'technology': 'Technology',
-      'transportation': 'Transportation'
-    };
-    if (validLowerMap[cleanShutter]) {
-      matchedShutter = validLowerMap[cleanShutter];
-    }
-  }
+  const validShutterCats = [
+    "Animals/Wildlife", "Arts", "Backgrounds/Textures", "Buildings/Landmarks",
+    "Business/Finance", "Education", "Food and drink", "Healthcare/Medical",
+    "Holidays", "Industrial", "Nature", "Objects", "People", "Religion",
+    "Science", "Signs/Symbols", "Sports/Recreation", "Technology", "Transportation"
+  ];
 
-  if (matchedShutter) {
-    shutterCat = matchedShutter;
-  } else {
-    const validShutterCats = [
-      "Animals/Wildlife", "Arts", "Backgrounds/Textures", "Buildings/Landmarks",
-      "Business/Finance", "Education", "Food and drink", "Healthcare/Medical",
-      "Holidays", "Industrial", "Nature", "Objects", "People", "Religion",
-      "Science", "Signs/Symbols", "Sports/Recreation", "Technology", "Transportation"
-    ];
-    for (const cat of validShutterCats) {
-      if (cat.toLowerCase().includes(cleanShutter) || cleanShutter.includes(cat.toLowerCase())) {
-        shutterCat = cat;
+  function normalizeSingleShutter(catStr) {
+    if (!catStr) return '';
+    const cleanShutter = catStr.toLowerCase().trim();
+    let matchedShutter = '';
+    for (const [kw, val] of Object.entries(shutterMap)) {
+      if (cleanShutter.includes(kw)) {
+        matchedShutter = val;
         break;
       }
     }
+    if (!matchedShutter && validLowerMap[cleanShutter]) {
+      matchedShutter = validLowerMap[cleanShutter];
+    }
+    if (!matchedShutter) {
+      for (const cat of validShutterCats) {
+        if (cat.toLowerCase().includes(cleanShutter) || cleanShutter.includes(cat.toLowerCase())) {
+          matchedShutter = cat;
+          break;
+        }
+      }
+    }
+    return matchedShutter || catStr;
   }
 
-  return { adobeCat, shutterCat };
+  let shutterCat = shutterCatsRaw[0] ? normalizeSingleShutter(shutterCatsRaw[0]) : '';
+  let shutterCat2 = shutterCatsRaw[1] ? normalizeSingleShutter(shutterCatsRaw[1]) : '';
+
+  return { adobeCat, shutterCat, shutterCat2 };
 }
 
 
@@ -2042,9 +2041,10 @@ async function executeSingleTask(itemId) {
       item.deskripsi = seoData.deskripsi;
       item.kategori = seoData.kategori;
       
-      const { adobeCat, shutterCat } = normalizeCategories(seoData);
+      const { adobeCat, shutterCat, shutterCat2 } = normalizeCategories(seoData);
       item.adobeCategory = adobeCat;
       item.shutterstockCategory = shutterCat;
+      item.shutterstockCategory2 = shutterCat2;
 
       item.seoAiUsed = item.aiModel || 'auto';
       saveOrUpdateItem(item);
@@ -2813,7 +2813,7 @@ async function run4kRenderBackground(itemId) {
       itemFresh.outputPath4k = fileUrl;
       itemFresh.statusRender4k = 'success';
       saveOrUpdateItem(itemFresh);
-      addTaskLog(itemId, `Video 4K ProRes selesai diproses! URL: ${fileUrl}`, "success");
+      addTaskLog(itemId, `Video 4K ProRes selesai diproses! URL: /api/4k-file/${itemId}`, "success");
     } else {
       throw new Error("Rendering cloud 4K gagal.");
     }
@@ -3022,8 +3022,8 @@ app.get("/api/preview-file/:id", (req, res) => {
   }
 });
 
-// GET: Stream/Download 4K ProRes MOV file
-app.get("/api/4k-file/:id", (req, res) => {
+// GET: Stream/Download 4K ProRes MOV file (supports local file & cloud proxy download with correct filename)
+app.get("/api/4k-file/:id", async (req, res) => {
   const { id } = req.params;
   const finalFilename = `${id}-4k.mov`;
   const legacyFilename = `${id}_4k.mov`;
@@ -3032,12 +3032,41 @@ app.get("/api/4k-file/:id", (req, res) => {
   const legacyPath = path.join(__dirname, "out", legacyFilename);
 
   if (fs.existsSync(finalPath)) {
+    res.setHeader('Content-Disposition', `attachment; filename="${finalFilename}"`);
     return res.sendFile(finalPath);
   } else if (fs.existsSync(legacyPath)) {
+    res.setHeader('Content-Disposition', `attachment; filename="${finalFilename}"`);
     return res.sendFile(legacyPath);
-  } else {
-    return res.status(404).json({ error: "File 4K ProRes tidak ditemukan secara lokal" });
   }
+
+  // Jika tidak ada secara lokal, coba stream dari cloud (x0.at)
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    if (fs.existsSync(dbPath)) {
+      const data = fs.readFileSync(dbPath, "utf-8");
+      const items = JSON.parse(data);
+      const item = items.find(i => i.id === id);
+      if (item && item.outputPath4k && (item.outputPath4k.startsWith("http://") || item.outputPath4k.startsWith("https://"))) {
+        console.log(`➡️ Proxy download 4K video for ${id} from cloud: ${item.outputPath4k}`);
+        
+        res.setHeader('Content-Disposition', `attachment; filename="${finalFilename}"`);
+        res.setHeader('Content-Type', 'video/quicktime');
+
+        const streamRes = await axios({
+          method: 'get',
+          url: item.outputPath4k,
+          responseType: 'stream'
+        });
+
+        streamRes.data.pipe(res);
+        return;
+      }
+    }
+  } catch (err) {
+    console.error(`❌ Gagal proxy download 4K dari cloud untuk ${id}:`, err.message);
+  }
+
+  return res.status(404).json({ error: "File 4K ProRes tidak ditemukan secara lokal maupun di cloud" });
 });
 
 // GET: Cek status render GitHub dan download artifact jika selesai
@@ -3652,9 +3681,10 @@ app.post("/api/regenerate-seo/:id", async (req, res) => {
     item.deskripsi = seoData.deskripsi;
     item.kategori = seoData.kategori;
     
-    const { adobeCat, shutterCat } = normalizeCategories(seoData);
+    const { adobeCat, shutterCat, shutterCat2 } = normalizeCategories(seoData);
     item.adobeCategory = adobeCat;
     item.shutterstockCategory = shutterCat;
+    item.shutterstockCategory2 = shutterCat2;
 
     item.seoAiUsed = aiModel || 'auto';
     

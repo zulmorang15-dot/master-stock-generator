@@ -1029,6 +1029,7 @@
       <button class="btn-batch-seo" id="btnBatchSeo" onclick="triggerBatchSEO()">✨ Gen Judul Terpilih</button>
       <button class="btn-batch-tsx" id="btnBatchTsx" onclick="triggerBatchTsx()">⚙️ Gen TSX & Preview Terpilih</button>
       <button class="btn-batch-4k" id="btnBatch4k" onclick="triggerBatch4K()">🚀 Gen 4K Terpilih</button>
+      <button class="btn-batch-download" id="btnBatchDownload" onclick="triggerBatchDownload()" style="background: linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; padding:6px 12px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer;">📥 Batch Download (MOV)</button>
       <button class="btn-batch-del" id="btnBatchDelete" onclick="triggerBatchDelete()">🗑 Batch Hapus</button>
     </div>
     <div id="resultsContainer">
@@ -1431,6 +1432,7 @@
     const btnSeo = document.getElementById('btnBatchSeo');
     const btnTsx = document.getElementById('btnBatchTsx');
     const btn4k = document.getElementById('btnBatch4k');
+    const btnDownload = document.getElementById('btnBatchDownload');
     const btnDel = document.getElementById('btnBatchDelete');
     const count = batchSelected.size;
     bar.classList.toggle('visible', count > 0 && batchModeActive);
@@ -1440,7 +1442,53 @@
     if (btnSeo) btnSeo.disabled = disabled;
     if (btnTsx) btnTsx.disabled = disabled;
     if (btn4k) btn4k.disabled = disabled;
+    if (btnDownload) btnDownload.disabled = disabled;
     if (btnDel) btnDel.disabled = disabled;
+  }
+
+  async function triggerBatchDownload() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    
+    const btn = document.getElementById('btnBatchDownload');
+    btn.disabled = true;
+    btn.textContent = '⏳ Memproses...';
+    
+    try {
+      const resp = await fetch('/api/saved-items');
+      const items = await resp.json();
+      
+      const readyItems = items.filter(i => ids.includes(i.id) && i.statusRender4k === 'success');
+      
+      if (readyItems.length === 0) {
+        showToast('⚠️ Tidak ada item terpilih yang selesai render 4K (siap didownload).', 'warning');
+        return;
+      }
+      
+      showToast(`📥 Memulai download massal ${readyItems.length} video...`, 'info');
+      
+      for (let index = 0; index < readyItems.length; index++) {
+        const item = readyItems[index];
+        const link = document.createElement('a');
+        link.href = `/api/4k-file/${item.id}`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Jeda 800ms antar file agar browser tidak memblokir download massal
+        await new Promise(r => setTimeout(r, 800));
+      }
+      
+      showToast('✅ Semua download massal berhasil dipicu!', 'success');
+      clearBatchSelection();
+    } catch(err) {
+      showToast('❌ Batch download gagal: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '📥 Batch Download (MOV)';
+      updateBatchBar();
+    }
   }
 
   async function triggerBatchSEO() {
@@ -1826,9 +1874,9 @@
                 <option value="21" ${item.adobeCategory === '21' ? 'selected' : ''}>21. Travel</option>
               </select>
 
-              <!-- Dropdown Shutterstock Category -->
-              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory', this.value)" title="Kategori Shutterstock">
-                <option value="">Kategori Shutter...</option>
+              <!-- Dropdown Shutterstock Category 1 -->
+              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory', this.value)" title="Kategori Shutterstock 1">
+                <option value="">Kategori Shutter 1...</option>
                 <option value="Animals/Wildlife" ${item.shutterstockCategory === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
                 <option value="Arts" ${item.shutterstockCategory === 'Arts' ? 'selected' : ''}>Arts</option>
                 <option value="Backgrounds/Textures" ${item.shutterstockCategory === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
@@ -1848,6 +1896,30 @@
                 <option value="Sports/Recreation" ${item.shutterstockCategory === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
                 <option value="Technology" ${item.shutterstockCategory === 'Technology' ? 'selected' : ''}>Technology</option>
                 <option value="Transportation" ${item.shutterstockCategory === 'Transportation' ? 'selected' : ''}>Transportation</option>
+              </select>
+
+              <!-- Dropdown Shutterstock Category 2 -->
+              <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory2', this.value)" title="Kategori Shutterstock 2">
+                <option value="">Kategori Shutter 2...</option>
+                <option value="Animals/Wildlife" ${item.shutterstockCategory2 === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
+                <option value="Arts" ${item.shutterstockCategory2 === 'Arts' ? 'selected' : ''}>Arts</option>
+                <option value="Backgrounds/Textures" ${item.shutterstockCategory2 === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
+                <option value="Buildings/Landmarks" ${item.shutterstockCategory2 === 'Buildings/Landmarks' ? 'selected' : ''}>Buildings/Landmarks</option>
+                <option value="Business/Finance" ${item.shutterstockCategory2 === 'Business/Finance' ? 'selected' : ''}>Business/Finance</option>
+                <option value="Education" ${item.shutterstockCategory2 === 'Education' ? 'selected' : ''}>Education</option>
+                <option value="Food and drink" ${item.shutterstockCategory2 === 'Food and drink' ? 'selected' : ''}>Food and drink</option>
+                <option value="Healthcare/Medical" ${item.shutterstockCategory2 === 'Healthcare/Medical' ? 'selected' : ''}>Healthcare/Medical</option>
+                <option value="Holidays" ${item.shutterstockCategory2 === 'Holidays' ? 'selected' : ''}>Holidays</option>
+                <option value="Industrial" ${item.shutterstockCategory2 === 'Industrial' ? 'selected' : ''}>Industrial</option>
+                <option value="Nature" ${item.shutterstockCategory2 === 'Nature' ? 'selected' : ''}>Nature</option>
+                <option value="Objects" ${item.shutterstockCategory2 === 'Objects' ? 'selected' : ''}>Objects</option>
+                <option value="People" ${item.shutterstockCategory2 === 'People' ? 'selected' : ''}>People</option>
+                <option value="Religion" ${item.shutterstockCategory2 === 'Religion' ? 'selected' : ''}>Religion</option>
+                <option value="Science" ${item.shutterstockCategory2 === 'Science' ? 'selected' : ''}>Science</option>
+                <option value="Signs/Symbols" ${item.shutterstockCategory2 === 'Signs/Symbols' ? 'selected' : ''}>Signs/Symbols</option>
+                <option value="Sports/Recreation" ${item.shutterstockCategory2 === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
+                <option value="Technology" ${item.shutterstockCategory2 === 'Technology' ? 'selected' : ''}>Technology</option>
+                <option value="Transportation" ${item.shutterstockCategory2 === 'Transportation' ? 'selected' : ''}>Transportation</option>
               </select>
             </div>
           </div>
@@ -1957,9 +2029,14 @@
     const btn4kDisabled = isAnyRunning || !hasPreview;
     const btn4k = `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${btn4kDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btn4kText}</button>`;
 
+    // Download 4K Direct MOV Button
+    const download4kBtn = has4k
+      ? `<a href="/api/4k-file/${item.id}" class="btn-action" style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; text-decoration:none; text-align:center; display:block; border-radius:6px; box-sizing:border-box;">📥 DOWNLOAD 4K (MOV)</a>`
+      : '';
+
     // Download 4K Zip Button
     const downloadZipBtn = has4k
-      ? `<a href="/api/download-4k-zip/${item.id}" class="btn-action" style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; text-decoration:none; text-align:center; display:block; border-radius:6px; box-sizing:border-box;">📥 DOWNLOAD 4K (ZIP)</a>`
+      ? `<a href="/api/download-4k-zip/${item.id}" class="btn-action" style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:linear-gradient(135deg, #6366f1, #4f46e5); border:none; color:#fff; text-decoration:none; text-align:center; display:block; border-radius:6px; box-sizing:border-box;">📥 DOWNLOAD 4K (ZIP)</a>`
       : '';
 
     // Utility actions
@@ -1980,6 +2057,7 @@
         ${btnJudul}
         ${btnTsxPreview}
         ${btn4k}
+        ${download4kBtn}
         ${downloadZipBtn}
         ${btnCancel}
         ${btnDel}
