@@ -2046,10 +2046,35 @@ async function executeSingleTask(itemId) {
       item.shutterstockCategory = shutterCat;
       item.shutterstockCategory2 = shutterCat2;
 
+      // AI-driven video configuration recommendations
+      if (seoData.loop !== undefined) {
+        item.loop = seoData.loop === true || seoData.loop === 'true';
+      }
+      if (seoData.transparent !== undefined) {
+        item.transparent = seoData.transparent === true || seoData.transparent === 'true';
+      }
+      if (seoData.duration !== undefined) {
+        const parsedDur = Number(seoData.duration);
+        if ([5, 8, 10, 12, 15, 20, 30].includes(parsedDur)) {
+          item.animationDuration = parsedDur;
+        }
+      }
+      if (seoData.fps !== undefined) {
+        const parsedFps = Number(seoData.fps);
+        if ([30, 60].includes(parsedFps)) {
+          item.fps = parsedFps;
+        }
+      }
+      
+      // Recalculate durationInFrames
+      const targetFps = item.fps || 30;
+      const targetDur = item.animationDuration || 10;
+      item.durationInFrames = targetDur * targetFps;
+
       item.seoAiUsed = item.aiModel || 'auto';
       saveOrUpdateItem(item);
 
-      addTaskLog(itemId, `Metadata SEO berhasil didapat. Judul: "${seoData.judul}"`, "success");
+      addTaskLog(itemId, `Metadata SEO & konfigurasi video berhasil disesuaikan oleh AI. Judul: "${seoData.judul}"`, "success");
     }
 
     // 3. Konversi HTML ke TSX
@@ -3690,11 +3715,36 @@ app.post("/api/regenerate-seo/:id", async (req, res) => {
     item.shutterstockCategory = shutterCat;
     item.shutterstockCategory2 = shutterCat2;
 
+    // AI-driven video configuration recommendations
+    if (seoData.loop !== undefined) {
+      item.loop = seoData.loop === true || seoData.loop === 'true';
+    }
+    if (seoData.transparent !== undefined) {
+      item.transparent = seoData.transparent === true || seoData.transparent === 'true';
+    }
+    if (seoData.duration !== undefined) {
+      const parsedDur = Number(seoData.duration);
+      if ([5, 8, 10, 12, 15, 20, 30].includes(parsedDur)) {
+        item.animationDuration = parsedDur;
+      }
+    }
+    if (seoData.fps !== undefined) {
+      const parsedFps = Number(seoData.fps);
+      if ([30, 60].includes(parsedFps)) {
+        item.fps = parsedFps;
+      }
+    }
+    
+    // Recalculate durationInFrames
+    const targetFps = item.fps || 30;
+    const targetDur = item.animationDuration || 10;
+    item.durationInFrames = targetDur * targetFps;
+
     item.seoAiUsed = aiModel || 'auto';
     
     saveOrUpdateItem(item);
     
-    addTaskLog(id, `Judul & keywords berhasil di-regenerate!`, "success");
+    addTaskLog(id, `Judul & keywords berhasil di-regenerate! (Konfigurasi video disesuaikan oleh AI)`, "success");
     
     res.json({ success: true, item });
   } catch (err) {
