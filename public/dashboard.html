@@ -1209,7 +1209,15 @@
   <!-- ═══════════ RESULTS ═══════════ -->
   <div>
     <div class="results-header">
-      <div class="results-title">📂 Hasil & Antrian Render</div>
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <div class="results-title">📂 Hasil & Antrian Render</div>
+        <div class="toggle-group" style="display: inline-flex;">
+          <button class="toggle-btn active" id="filterAll" onclick="setFilter('all')">Semua</button>
+          <button class="toggle-btn" id="filterSelesai" onclick="setFilter('selesai')">✅ Selesai</button>
+          <button class="toggle-btn" id="filterBelum" onclick="setFilter('belum')">⏳ Belum</button>
+          <button class="toggle-btn" id="filterGagal" onclick="setFilter('gagal')">❌ Gagal</button>
+        </div>
+      </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button class="btn-batch-mode" id="btnBatchMode" onclick="toggleBatchMode()">☑ Batch Render</button>
         <div style="position:relative; display:inline-block;">
@@ -1528,6 +1536,8 @@
   let activeSeoGenerations = {};
   let currentPage = 1;
   const itemsPerPage = 50;
+  let cachedItems = [];
+  let activeFilter = 'all';
 
   // ─── GOOGLE TRENDS & ADOBE STOCK EXPLORER STATE & FUNCTIONS ───
   let currentView = 'generator';
@@ -2186,11 +2196,11 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   async function loadResults() {
     try {
       const resp = await fetch('/api/saved-items');
-      const items = await resp.json();
-      renderTable(items);
+      cachedItems = await resp.json();
+      applyFilterAndRender();
       
       // Auto-poll atau start SSE stream untuk item yang masih diproses
-      items.forEach(item => {
+      cachedItems.forEach(item => {
         const status = item.statusConvertTsx || 'queued';
         const isRunning = status === 'processing-preview' || status === 'processing-tsx' || status === 'queued' || item.statusRender4k === 'processing';
         if (isRunning) {
@@ -2200,6 +2210,54 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     } catch(err) {
       console.error('Gagal load results:', err);
     }
+  }
+
+  window.setFilter = function(filter) {
+    activeFilter = filter;
+    
+    // Update active class on filter buttons
+    const filterIds = {
+      'all': 'filterAll',
+      'selesai': 'filterSelesai',
+      'belum': 'filterBelum',
+      'gagal': 'filterGagal'
+    };
+    
+    Object.keys(filterIds).forEach(f => {
+      const btn = document.getElementById(filterIds[f]);
+      if (btn) {
+        btn.classList.toggle('active', f === filter);
+      }
+    });
+    
+    currentPage = 1; // Reset ke halaman 1
+    applyFilterAndRender();
+  }
+
+  function applyFilterAndRender() {
+    let itemsToRender = [...cachedItems];
+    if (activeFilter === 'selesai') {
+      itemsToRender = cachedItems.filter(item => {
+        const status = item.statusConvertTsx || 'queued';
+        const isFailed = status === 'failed' || status === 'cancelled' || item.statusRender4k === 'failed';
+        const isSelesai = !isFailed && (!!item.previewUrl || status === 'success' || item.statusRender4k === 'success');
+        return isSelesai;
+      });
+    } else if (activeFilter === 'gagal') {
+      itemsToRender = cachedItems.filter(item => {
+        const status = item.statusConvertTsx || 'queued';
+        const isFailed = status === 'failed' || status === 'cancelled' || item.statusRender4k === 'failed';
+        return isFailed;
+      });
+    } else if (activeFilter === 'belum') {
+      itemsToRender = cachedItems.filter(item => {
+        const status = item.statusConvertTsx || 'queued';
+        const isFailed = status === 'failed' || status === 'cancelled' || item.statusRender4k === 'failed';
+        const isSelesai = !isFailed && (!!item.previewUrl || status === 'success' || item.statusRender4k === 'success');
+        return !isFailed && !isSelesai;
+      });
+    }
+    renderTable(itemsToRender);
   }
 
   // ─── BATCH MODE ──────────────────────────────
@@ -3574,7 +3632,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 <!-- Modal Preview Besar -->
 <div id="videoModal" class="modal">
   <span class="close-modal" onclick="closeVideoModal()">&times;</span>
-  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; box-shadow:0 0 32px rgba(56,189,248,0.5); border:1px solid rgba(56,189,248,0.3);"></video>
+  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; border:3px solid var(--cyan); box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); background:#000;"></video>
 </div>
 
 </body>
