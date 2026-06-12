@@ -1375,7 +1375,7 @@ const batchJobs = {};
 // Background task queue state
 const taskQueue = []; // Array of item IDs
 const activeTasks = new Set(); // Set of currently processing item IDs
-const MAX_CONCURRENT_TASKS = 5;
+const MAX_CONCURRENT_TASKS = 1;
 const abortControllers = {}; // { itemId: AbortController }
 const taskLogs = {}; // { itemId: Array of log objects }
 const taskSseClients = {}; // { itemId: Array of SSE response objects }
@@ -2437,6 +2437,8 @@ app.post("/api/retry-task/:id", (req, res) => {
   item.previewUrl = '';
   item.promptCode = '';
   if (aiModel) item.aiModel = aiModel;
+  if (req.body.loop !== undefined) item.loop = !!req.body.loop;
+  if (req.body.transparent !== undefined) item.transparent = !!req.body.transparent;
   const targetFps = Number(fps) || item.fps || 30;
   item.fps = targetFps;
   if (animationDuration) {
@@ -3277,6 +3279,8 @@ app.post("/api/start-task/:id", (req, res) => {
   // Update status ke queued, simpan aiModel jika ada
   item.statusConvertTsx = 'queued';
   if (aiModel) item.aiModel = aiModel;
+  if (req.body.loop !== undefined) item.loop = !!req.body.loop;
+  if (req.body.transparent !== undefined) item.transparent = !!req.body.transparent;
   const targetFps = Number(fps) || item.fps || 30;
   item.fps = targetFps;
   if (animationDuration) {

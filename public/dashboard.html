@@ -2359,18 +2359,20 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         if (!item) continue;
         
         const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
-        const animationDuration = Number(document.getElementById('animationDurationSelect').value);
-        const animationFps = Number(document.getElementById('animationFpsSelect').value);
+        const loopVal = document.getElementById(`loop_${id}`)?.value === 'true';
+        const transparentVal = document.getElementById(`transparent_${id}`)?.value === 'true';
+        const animationDuration = Number(document.getElementById(`duration_${id}`)?.value || 10);
+        const animationFps = Number(document.getElementById(`fps_${id}`)?.value || 30);
         const status = item.statusConvertTsx || 'waiting';
         
         try {
           let url, body;
           if (status === 'waiting') {
             url = `/api/start-task/${id}`;
-            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps });
+            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal });
           } else {
             url = `/api/retry-task/${id}`;
-            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps });
+            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal });
           }
           
           const startResp = await fetch(url, {
@@ -2649,6 +2651,30 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
             <span>📄 ${escHtml(item.fileName || item.id)}</span>
             <div style="display:flex; align-items:center; gap:6px;">
+              <!-- Pengaturan video lokal baris ini -->
+              <div style="display:flex; align-items:center; gap:4px; padding: 2px 6px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 6px;">
+                <select id="loop_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="saveField('${item.id}', 'loop', this.value === 'true')" title="Loop Video">
+                  <option value="true" ${item.loop !== false ? 'selected' : ''}>🔄 Loop</option>
+                  <option value="false" ${item.loop === false ? 'selected' : ''}>➡ No-Loop</option>
+                </select>
+                <select id="transparent_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="saveField('${item.id}', 'transparent', this.value === 'true')" title="Background Transparency">
+                  <option value="false" ${item.transparent !== true ? 'selected' : ''}>🎨 Solid</option>
+                  <option value="true" ${item.transparent === true ? 'selected' : ''}>🏁 Trans</option>
+                </select>
+                <select id="duration_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="updateRowDuration('${item.id}', Number(this.value))" title="Durasi Video">
+                  <option value="5" ${item.animationDuration === 5 ? 'selected' : ''}>5s</option>
+                  <option value="8" ${item.animationDuration === 8 ? 'selected' : ''}>8s</option>
+                  <option value="10" ${item.animationDuration === 10 || !item.animationDuration ? 'selected' : ''}>10s</option>
+                  <option value="12" ${item.animationDuration === 12 ? 'selected' : ''}>12s</option>
+                  <option value="15" ${item.animationDuration === 15 ? 'selected' : ''}>15s</option>
+                  <option value="20" ${item.animationDuration === 20 ? 'selected' : ''}>20s</option>
+                  <option value="30" ${item.animationDuration === 30 ? 'selected' : ''}>30s</option>
+                </select>
+                <select id="fps_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="updateRowFps('${item.id}', Number(this.value))" title="FPS Video">
+                  <option value="30" ${item.fps === 30 || !item.fps ? 'selected' : ''}>30 FPS</option>
+                  <option value="60" ${item.fps === 60 ? 'selected' : ''}>60 FPS</option>
+                </select>
+              </div>
               <!-- Dropdown upload status (catatan saya) -->
               <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0;" onchange="saveField('${item.id}', 'uploadStatus', this.value)" title="Status Upload / Catatan Saya">
                 <option value="belum_upload" ${item.uploadStatus !== 'upload' ? 'selected' : ''}>❌ Belum Upload</option>
@@ -2955,8 +2981,10 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 
   async function generateTsx(id, currentStatus) {
     const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
-    const animationDuration = Number(document.getElementById('animationDurationSelect').value);
-    const animationFps = Number(document.getElementById('animationFpsSelect').value);
+    const loopVal = document.getElementById(`loop_${id}`)?.value === 'true';
+    const transparentVal = document.getElementById(`transparent_${id}`)?.value === 'true';
+    const animationDuration = Number(document.getElementById(`duration_${id}`)?.value || 10);
+    const animationFps = Number(document.getElementById(`fps_${id}`)?.value || 30);
 
     try {
       if (currentStatus === 'waiting') {
@@ -2964,7 +2992,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         const resp = await fetch(`/api/start-task/${id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps })
+          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal })
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
@@ -2975,7 +3003,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         const resp = await fetch(`/api/retry-task/${id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps })
+          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal })
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
@@ -3331,6 +3359,20 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       closeVideoModal();
     }
   });
+
+  window.updateRowDuration = function(id, durationSec) {
+    const fpsSelect = document.getElementById(`fps_${id}`);
+    const fps = fpsSelect ? Number(fpsSelect.value) : 30;
+    saveField(id, 'animationDuration', durationSec);
+    saveField(id, 'durationInFrames', durationSec * fps);
+  }
+
+  window.updateRowFps = function(id, fps) {
+    const durSelect = document.getElementById(`duration_${id}`);
+    const durationSec = durSelect ? Number(durSelect.value) : 10;
+    saveField(id, 'fps', fps);
+    saveField(id, 'durationInFrames', durationSec * fps);
+  }
 
   // ═══════════════════════════════════════════
   // HTML COMPILER HELPERS
