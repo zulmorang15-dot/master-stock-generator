@@ -1093,6 +1093,7 @@
   <div class="header-nav">
     <button class="nav-tab active" id="navBtnGenerator" onclick="switchView('generator')">🎬 Generator</button>
     <button class="nav-tab" id="navBtnInsights" onclick="switchView('insights')">📈 Trends & Stock Explorer</button>
+    <button class="nav-tab" id="navBtnCompiler" onclick="switchView('compiler')">💻 HTML Compiler</button>
   </div>
   <div class="theme-toggle" style="display:flex; align-items:center; gap:16px;">
     <div style="display:flex; align-items:center; gap:8px;">
@@ -1463,6 +1464,50 @@
     </div>
   </div>
 
+  <!-- ═══════════ HTML COMPILER PANEL ═══════════ -->
+  <div id="compilerPanel" class="insights-panel">
+    <div style="display:flex; flex-direction:column; gap:24px;">
+      
+      <!-- Editor Card -->
+      <div class="input-card" style="padding:28px;">
+        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h3 style="font-size:18px; font-weight:800; color:var(--cyan); margin:0;">💻 HTML Compiler & Live Preview</h3>
+            <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
+              Tulis, edit, dan pratinjau kode HTML Anda secara langsung di sini sebelum mengirimkannya ke generator.
+            </p>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <button class="btn-refresh" onclick="loadCompilerTemplate()" style="border-color:var(--cyan); color:var(--cyan); font-weight:600; padding:6px 12px;">📄 Load Template</button>
+            <button class="btn-refresh" onclick="clearCompilerEditor()" style="border-color:var(--red); color:var(--red); font-weight:600; padding:6px 12px;">🗑 Reset</button>
+          </div>
+        </div>
+
+        <textarea class="code-editor-textarea" id="compilerHtmlCode" style="height:320px; font-size:13px; color:#22c55e; border-color:rgba(56,189,248,0.25);" placeholder="<!-- Tulis atau tempelkan (paste) kode HTML lengkap Anda di sini... -->" oninput="saveCompilerState()"></textarea>
+        
+        <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px; flex-wrap:wrap;">
+          <button class="btn-generate" onclick="runHtmlCompiler()" style="margin-top:0; width:180px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--green), #059669); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+            ▶ &nbsp;PLAY / RUN
+          </button>
+          <button class="btn-generate" onclick="sendCompiledHtmlToGenerator()" style="margin-top:0; width:220px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--purple), #7c3aed); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+            🚀 &nbsp;KIRIM KE GENERATOR
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview Card -->
+      <div class="input-card" style="padding:28px;">
+        <h3 style="font-size:16px; font-weight:700; color:var(--text-mid); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+          🖥️ Pratinjau Hasil (Live Preview)
+        </h3>
+        <div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; background:#000; box-shadow:0 8px 24px rgba(0,0,0,0.5); width:100%; aspect-ratio:16/9; min-height:400px; display:flex; position:relative;">
+          <iframe id="compilerPreviewIframe" style="width:100%; height:100%; border:none; background:#000;" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
 </main>
 
 <script>
@@ -1487,9 +1532,13 @@
     currentView = view;
     document.getElementById('navBtnGenerator').classList.toggle('active', view === 'generator');
     document.getElementById('navBtnInsights').classList.toggle('active', view === 'insights');
+    const navBtnCompiler = document.getElementById('navBtnCompiler');
+    if (navBtnCompiler) navBtnCompiler.classList.toggle('active', view === 'compiler');
     
     document.getElementById('generatorPanel').classList.toggle('active', view === 'generator');
     document.getElementById('insightsPanel').classList.toggle('active', view === 'insights');
+    const compilerPanel = document.getElementById('compilerPanel');
+    if (compilerPanel) compilerPanel.classList.toggle('active', view === 'compiler');
     sessionStorage.setItem('dashboard_currentView', view);
   }
 
@@ -3243,6 +3292,117 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   });
 
   // ═══════════════════════════════════════════
+  // HTML COMPILER HELPERS
+  // ═══════════════════════════════════════════
+  const BOILERPLATE_TEMPLATE = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      background: #0d1424;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+    }
+    .box {
+      width: 150px;
+      height: 150px;
+      background: linear-gradient(135deg, #38bdf8, #a855f7);
+      border-radius: 20px;
+      box-shadow: 0 0 30px rgba(56,189,248,0.5);
+      animation: rotateScale 4s infinite ease-in-out;
+    }
+    @keyframes rotateScale {
+      0%, 100% {
+        transform: rotate(0deg) scale(1);
+      }
+      50% {
+        transform: rotate(180deg) scale(1.2);
+        box-shadow: 0 0 50px rgba(168,85,247,0.8);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="box"></div>
+</body>
+</html>`;
+
+  window.loadCompilerTemplate = function(notify = true) {
+    const editor = document.getElementById('compilerHtmlCode');
+    if (editor) {
+      editor.value = BOILERPLATE_TEMPLATE;
+      saveCompilerState();
+      runHtmlCompiler();
+      if (notify) showToast('📄 Template berhasil dimuat!', 'success');
+    }
+  }
+
+  window.clearCompilerEditor = function() {
+    if (confirm('Apakah Anda yakin ingin mengosongkan editor?')) {
+      const editor = document.getElementById('compilerHtmlCode');
+      if (editor) {
+        editor.value = '';
+        saveCompilerState();
+        const iframe = document.getElementById('compilerPreviewIframe');
+        if (iframe) iframe.srcdoc = '';
+        showToast('🗑 Editor dikosongkan', 'info');
+      }
+    }
+  }
+
+  window.saveCompilerState = function() {
+    const editor = document.getElementById('compilerHtmlCode');
+    if (editor) {
+      sessionStorage.setItem('compiler_html_code', editor.value);
+    }
+  }
+
+  window.runHtmlCompiler = function() {
+    const code = document.getElementById('compilerHtmlCode')?.value || '';
+    const iframe = document.getElementById('compilerPreviewIframe');
+    if (iframe) {
+      iframe.srcdoc = code;
+    }
+  }
+
+  window.sendCompiledHtmlToGenerator = function() {
+    const code = document.getElementById('compilerHtmlCode')?.value.trim() || '';
+    if (!code) {
+      showToast('⚠️ Kode HTML kosong! Tulis atau tempelkan kode terlebih dahulu.', 'warning');
+      return;
+    }
+    
+    // Switch to generator input tab 'paste'
+    switchInputTab('paste');
+    
+    // Fill the fields
+    const codeArea = document.getElementById('pasteHtmlCode');
+    const fileNameInput = document.getElementById('pasteFileName');
+    if (codeArea) codeArea.value = code;
+    if (fileNameInput) {
+      // Check if there is already a custom name, or generate one
+      if (!fileNameInput.value.trim()) {
+        fileNameInput.value = 'compiled_' + Math.floor(Date.now() / 1000);
+      }
+    }
+    
+    // Update generate button state in dashboard
+    updateGenerateBtn();
+    
+    // Switch view to generator
+    switchView('generator');
+    
+    showToast('🚀 Kode HTML berhasil dikirim ke tab Paste HTML!', 'success');
+  }
+
+  // ═══════════════════════════════════════════
   // STATE RESTORATION
   // ═══════════════════════════════════════════
   function restoreState() {
@@ -3275,6 +3435,18 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const savedStockQuery = sessionStorage.getItem('dashboard_stockSearchQuery');
     if (savedStockQuery) {
       document.getElementById('stockSearchInput').value = savedStockQuery;
+    }
+
+    const savedCompilerCode = sessionStorage.getItem('compiler_html_code');
+    if (savedCompilerCode) {
+      const editor = document.getElementById('compilerHtmlCode');
+      if (editor) {
+        editor.value = savedCompilerCode;
+        runHtmlCompiler();
+      }
+    } else {
+      // Load boilerplate by default if empty
+      loadCompilerTemplate(false);
     }
   }
 
