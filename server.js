@@ -4108,6 +4108,48 @@ app.post("/api/chat/sessions/:id/message/:messageIndex/edit", async (req, res) =
   }
 });
 
+// Loop Latar Belakang: Secara otomatis menambah akun Syntx baru
+// jika jumlah akun di pool belum mencapai batas maksimal (SYNTX_EMAIL_INDEX).
+async function checkAndAutoRegisterSyntx() {
+  try {
+    const baseEmail = process.env.SYNTX_BASE_EMAIL || "";
+    if (!baseEmail || !baseEmail.includes('@')) return;
+
+    const maxIndex = parseInt(process.env.SYNTX_EMAIL_INDEX || '0', 10);
+    if (maxIndex <= 0) return;
+
+    // Hindari bentrokan jika ada OTP resolver manual yang sedang aktif
+    if (pendingOtpResolvers['manual']) {
+      return;
+    }
+
+    const poolStatus = syntxBot.getPoolStatus ? syntxBot.getPoolStatus() : { accounts: [] };
+    const pool = poolStatus.accounts || [];
+
+    if (pool.length >= maxIndex) {
+      return;
+    }
+
+    console.log(`📡 [Auto Pre-warm] Jumlah akun pool (${pool.length}/${maxIndex}) di bawah batas maksimum. Memulai pendaftaran otomatis...`);
+
+    syntxBot.loginAndGetToken({
+      taskId: 'manual' // Menggunakan ID 'manual' agar OTP box muncul di dashboard jika butuh input OTP manual
+    }).then(token => {
+      console.log(`✅ [Auto Pre-warm] Pendaftaran akun otomatis berhasil! Akun ditambahkan ke pool.`);
+    }).catch(err => {
+      console.error(`❌ [Auto Pre-warm] Pendaftaran akun otomatis gagal:`, err.message);
+    });
+
+  } catch (error) {
+    console.error("❌ Error pada Auto Pre-warm:", error.message);
+  }
+}
+
+// Jalankan pertama kali 5 detik setelah server aktif
+setTimeout(checkAndAutoRegisterSyntx, 5000);
+// Jalankan secara periodik setiap 10 menit
+setInterval(checkAndAutoRegisterSyntx, 10 * 60 * 1000);
+
 const PORT = 5000;
 app.listen(PORT, () => {
   console.log(`Server Jembatan Kode Bebas aktif di port ${PORT}`);

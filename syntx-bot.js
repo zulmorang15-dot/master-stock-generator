@@ -910,12 +910,27 @@ async function loginAndGetToken(options = {}) {
 
   // === OPSI 2: Gmail dot-variant (jika OpenInbox gagal & ada base email) ===
   if (!email && baseEmail && baseEmail.includes('@')) {
-    const currentIndex = parseInt(process.env.SYNTX_EMAIL_INDEX || '0', 10);
-    email = getDotVariant(baseEmail, currentIndex);
-    logToTask(options, `📧 [syntx-bot] Menggunakan Gmail dot-variant (${currentIndex}): ${email}`, 'info');
-    if (options.onEmailGenerated) {
-      options.onEmailGenerated(currentIndex + 1);
+    const maxIndex = parseInt(process.env.SYNTX_EMAIL_INDEX || '0', 10);
+    const pool = loadAccountsPool();
+    let foundIndex = -1;
+    for (let i = 0; i < maxIndex; i++) {
+      const candidateEmail = getDotVariant(baseEmail, i);
+      const isAlreadyInPool = pool.some(acc => acc.email === candidateEmail);
+      if (!isAlreadyInPool) {
+        foundIndex = i;
+        break;
+      }
     }
+
+    if (foundIndex === -1) {
+      logToTask(options, `⚠️ [syntx-bot] Semua indeks variant 0 sampai ${maxIndex - 1} sudah terdaftar di pool. Tidak dapat menambah akun baru.`, 'warning');
+      throw new Error(`Semua indeks dot-variant (0 sampai ${maxIndex - 1}) sudah digunakan di pool.`);
+    }
+
+    email = getDotVariant(baseEmail, foundIndex);
+    logToTask(options, `📧 [syntx-bot] Menggunakan Gmail dot-variant indeks ${foundIndex}: ${email}`, 'info');
+    // Kami tidak meng-increment SYNTX_EMAIL_INDEX secara otomatis ke env,
+    // karena SYNTX_EMAIL_INDEX bertindak sebagai batas maksimal index/jumlah akun.
   }
   // === OPSI 3: Emailnator Web ===
   else if (!email) {

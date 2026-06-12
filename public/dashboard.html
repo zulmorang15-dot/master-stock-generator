@@ -2268,6 +2268,7 @@
   // ═══════════════════════════════════════════
   // API KEYS MANAGEMENT
   // ═══════════════════════════════════════════
+  let syntxPollInterval = null;
   function toggleApiKeysPanel() {
     const el = document.getElementById('apiKeysPanel');
     const isHidden = el.style.display === 'none';
@@ -2280,6 +2281,15 @@
       document.getElementById('status_gemini').innerHTML = '';
       document.getElementById('status_openrouter').innerHTML = '';
       document.getElementById('status_gmailnator').innerHTML = '';
+      
+      // Start polling every 10 seconds while open
+      if (syntxPollInterval) clearInterval(syntxPollInterval);
+      syntxPollInterval = setInterval(loadSyntxStatus, 10000);
+    } else {
+      if (syntxPollInterval) {
+        clearInterval(syntxPollInterval);
+        syntxPollInterval = null;
+      }
     }
   }
 
