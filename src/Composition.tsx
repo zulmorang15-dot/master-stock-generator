@@ -1,96 +1,134 @@
 import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
 
-// PRE-CALCULATED STATIC VALUES TO AVOID MATH.RANDOM IN RENDER
+const ORIGINAL_WIDTH = 1920;
+const ORIGINAL_HEIGHT = 1080;
+
+// Pre-calculate 150 3D-tunnel flying particles for high performance and deterministic rendering
 const PARTICLE_COUNT = 150;
 const PARTICLES = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
-  // Deterministic pseudo-random generation using trigonometry
-  const rawX = Math.sin(i * 12.9898 + 43758.5453) * 2 - 1;
-  const rawY = Math.cos(i * 78.233 + 43758.5453) * 2 - 1;
-  const rawZ = Math.sin(i * 45.123 + 923.123) * 0.5 + 0.5;
-  const rawSpeed = Math.sin(i * 93.111) * 0.5 + 0.5;
-  const rawSize = Math.cos(i * 27.421) * 0.5 + 0.5;
-
-  return {
-    x: rawX * 1200,
-    y: rawY * 600,
-    zStart: rawZ * 1000 + 50,
-    speed: 3 + rawSpeed * 4,
-    size: 1 + rawSize * 3,
-    color: i % 2 === 0 ? '#00ffff' : '#ff00ff',
-  };
+  const sin1 = Math.sin(i * 9.123);
+  const cos1 = Math.cos(i * 15.321);
+  const sin2 = Math.sin(i * 45.789);
+  
+  // Angle-based dispersion from center
+  const x = sin1 * 1000;
+  const y = cos1 * 600;
+  
+  // Depth start distribution (between 0 and 1000)
+  const startDepth = ((sin2 + 1) / 2) * 1000;
+  const speed = 3 + Math.abs(sin1) * 5;
+  const color = i % 3 === 0 ? '#ff00ff' : '#00ffff';
+  const size = 2 + Math.abs(cos1) * 5;
+  
+  return { x, y, startDepth, speed, color, size };
 });
 
-const RINGS_CONFIG = [
-  { rotationsX: 2, rotationsY: 1, rotationsZ: 3, scale: 1.0, zDepth: -50, color: '#00ffff' },
-  { rotationsX: -1, rotationsY: 2, rotationsZ: -2, scale: 1.4, zDepth: -80, color: '#ff00ff' },
-  { rotationsX: 3, rotationsY: -2, rotationsZ: 1, scale: 1.8, zDepth: -110, color: '#00ffff' },
-  { rotationsX: -2, rotationsY: 1, rotationsZ: -1, scale: 2.2, zDepth: -140, color: '#ff00ff' },
-  { rotationsX: 1, rotationsY: 3, rotationsZ: 2, scale: 2.6, zDepth: -170, color: '#00ffff' },
+// Background rings config matching the Three.js viewport
+const BACKGROUND_RINGS = [
+  { radius: 180, color: '#00ffff', rotSpeed: 0.3, dir: 1, rotX: 55, rotY: 15 },
+  { radius: 260, color: '#ff00ff', rotSpeed: 0.5, dir: -1, rotX: 40, rotY: -25 },
+  { radius: 340, color: '#00ffff', rotSpeed: 0.2, dir: 1, rotX: 65, rotY: 35 },
+  { radius: 420, color: '#ff00ff', rotSpeed: 0.4, dir: -1, rotX: 30, rotY: -15 },
+  { radius: 500, color: '#00ffff', rotSpeed: 0.15, dir: 1, rotX: 50, rotY: 20 },
 ];
 
-const STREAK_1_Y_OFFSETS = [0, -45, 30];
-const STREAK_2_Y_OFFSETS = [0, 60];
-const STREAK_3_Y_OFFSETS = [0, -70, 40, -20];
+// Pre-calculated horizontal offsets for light streak variation
+const STREAK_1_Y_OFFSETS = [250, 210, 290];
+const STREAK_2_Y_OFFSETS = [850, 890, 810];
+const STREAK_3_Y_OFFSETS = [450, 410, 490, 430];
 
-// FLICKER COEFFICIENTS FOR ULTRA-REALISTIC HOLOGRAPHIC SHADOW GLOW
-const FLICKER_VALUES = [1.0, 0.75, 1.2, 0.45, 0.9, 1.35, 0.6, 1.15, 0.8, 1.05, 0.7, 1.25, 0.5, 0.95, 1.3, 0.85];
-
-export const CyberpunkEsportsEndscreen = () => {
+export const CyberpunkEndscreen = () => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
-
-  const ORIGINAL_WIDTH = 1920;
-  const ORIGINAL_HEIGHT = 1080;
+  
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+  
+  // --- FLOOR ANIMATION ---
+  // Moving grid floor lines forward
+  const floorGridOffset = (frame * 12) % 40;
+  const floorGridOffsetMagenta = (frame * 12) % 80;
 
-  // Core Loop config (12 seconds = 360 frames at 30fps)
-  const totalDuration = 360;
-  const localFrame = frame % totalDuration;
+  // --- FLOATING CAMERA PARALLAX EFFECT ---
+  // Subtly translates background to mimic the camera floating mechanics in Three.js
+  const cameraTranslateX = Math.sin((frame / 360) * Math.PI * 2) * 15;
+  const cameraTranslateY = Math.cos((frame / 360) * Math.PI * 2) * 10;
 
-  // --- GRID INTERPOLATION (Seamless Loop) ---
-  const grid1Y = (interpolate(localFrame, [0, totalDuration], [0, 240]) % 60);
-  const grid2Y = (interpolate(localFrame, [0, totalDuration], [0, 120]) % 30);
+  // --- PLACEHOLDER GLOW FLICKER (AGGRESSIVE NEON PULSES) ---
+  const jitterSeed = Math.sin(frame * 0.9) * Math.cos(frame * 0.45) * 0.5 + 0.5;
+  const glowRadiusLeft = interpolate(jitterSeed, [0, 1], [30, 65]);
+  const glowRadiusRight = interpolate(Math.cos(frame * 0.8) * Math.sin(frame * 0.5) * 0.5 + 0.5, [0, 1], [30, 65]);
 
-  // --- LIGHT STREAK SIMULATIONS (Perfect deterministic loops) ---
-  // Streak 1 (Cyan) - Loops every 120 frames (3 cycles total)
-  const s1Cycle = localFrame % 120;
-  const s1YOffset = STREAK_1_Y_OFFSETS[Math.floor(localFrame / 120) % STREAK_1_Y_OFFSETS.length];
-  const s1X = interpolate(s1Cycle, [0, 80], [-800, 2920], { extrapolateRight: 'clamp' });
-  const s1Opacity = interpolate(s1Cycle, [0, 10, 70, 80], [0, 0.9, 0.9, 0], { extrapolateRight: 'clamp' });
-
-  // Streak 2 (Magenta) - Loops every 180 frames (2 cycles total, delayed by 40 frames)
-  const s2Cycle = (localFrame + 40) % 180;
-  const s2YOffset = STREAK_2_Y_OFFSETS[Math.floor((localFrame + 40) / 180) % STREAK_2_Y_OFFSETS.length];
-  const s2X = interpolate(s2Cycle, [0, 110], [-1000, 2920], { extrapolateRight: 'clamp' });
-  const s2Opacity = interpolate(s2Cycle, [0, 15, 95, 110], [0, 0.95, 0.95, 0], { extrapolateRight: 'clamp' });
-
-  // Streak 3 (Cyan) - Loops every 90 frames (4 cycles total, delayed by 80 frames)
-  const s3Cycle = (localFrame + 80) % 90;
-  const s3YOffset = STREAK_3_Y_OFFSETS[Math.floor((localFrame + 80) / 90) % STREAK_3_Y_OFFSETS.length];
-  const s3X = interpolate(s3Cycle, [0, 60], [-700, 2920], { extrapolateRight: 'clamp' });
-  const s3Opacity = interpolate(s3Cycle, [0, 8, 52, 60], [0, 0.85, 0.85, 0], { extrapolateRight: 'clamp' });
-
-  // --- PLACEHOLDERS FLICKER (Aggressive glowing cyber aesthetic) ---
-  const flickerIndex = Math.floor(localFrame / 2) % FLICKER_VALUES.length;
-  const pulseFactor = FLICKER_VALUES[flickerIndex];
-  const placeholderBoxShadow = `0 0 ${50 * pulseFactor}px rgba(0, 255, 255, 0.45), inset 0 0 ${40 * pulseFactor}px rgba(0, 255, 255, 0.25)`;
+  const placeholderGlowLeft = `0 0 ${glowRadiusLeft}px rgba(0, 255, 255, 0.5), inset 0 0 ${glowRadiusLeft / 1.5}px rgba(0, 255, 255, 0.25)`;
+  const placeholderGlowRight = `0 0 ${glowRadiusRight}px rgba(0, 255, 255, 0.5), inset 0 0 ${glowRadiusRight / 1.5}px rgba(0, 255, 255, 0.25)`;
 
   // --- SCANLINE ANIMATION ---
-  const scanlineY = interpolate(localFrame % 120, [0, 120], [-100, 438]);
+  // Loops 3 times over 360 frames (every 120 frames)
+  const scanlineFrame = frame % 120;
+  const scanlineY = interpolate(scanlineFrame, [0, 120], [-100, 438], {
+    easing: Easing.linear,
+  });
 
   // --- SUBSCRIBE PORTAL ROTATIONS AND PULSES ---
-  const outerRotation = interpolate(localFrame % 240, [0, 240], [0, 360]);
-  const innerRotation = interpolate(localFrame % 360, [0, 360], [360, 0]);
+  const outerRingRotate = interpolate(frame, [0, 360], [0, 360]);
+  const innerRingRotate = interpolate(frame, [0, 360], [360, 0]);
+  
+  const corePulseFactor = Math.sin((frame / 30) * Math.PI * 2); // 1-second pulse cycle
+  const coreScale = interpolate(corePulseFactor, [-1, 1], [0.92, 1.08]);
+  const coreGlowIntensity = interpolate(corePulseFactor, [-1, 1], [60, 110]);
 
-  // Center core glow pulsing smoothly
-  const corePulseFrame = localFrame % 60;
-  const coreScale = interpolate(corePulseFrame, [0, 30, 60], [0.9, 1.1, 0.9], { easing: Easing.inOut(Easing.quad) });
-  const coreBrightness = interpolate(corePulseFrame, [0, 30, 60], [1, 1.4, 1], { easing: Easing.inOut(Easing.quad) });
+  // Infinite expanding target circle inside the core (1-second loop)
+  const targetFrame = frame % 30;
+  const targetScale = interpolate(targetFrame, [0, 30], [0, 2.8]);
+  const targetOpacity = interpolate(targetFrame, [0, 15, 30], [1, 0.8, 0], {
+    extrapolateRight: 'clamp',
+  });
 
-  // Scaling target expands and fades
-  const targetFrame = localFrame % 30;
-  const targetScale = interpolate(targetFrame, [0, 30], [0.2, 3.2]);
-  const targetOpacity = interpolate(targetFrame, [0, 30], [1, 0], { easing: Easing.out(Easing.quad) });
+  // --- SEAMLESS HORIZONTAL LIGHT STREAKS ---
+  // Streak 1 (Cyan): loops every 120 frames
+  const streak1Frame = frame % 120;
+  const streak1X = interpolate(streak1Frame, [0, 90], [-800, 2100], {
+    easing: Easing.bezier(0.25, 1, 0.5, 1),
+    extrapolateRight: 'clamp',
+  });
+  const streak1Opacity = interpolate(streak1Frame, [0, 15, 75, 90], [0, 1, 1, 0], {
+    extrapolateRight: 'clamp',
+  });
+  const streak1Cycle = Math.floor(frame / 120);
+  const streak1Y = STREAK_1_Y_OFFSETS[streak1Cycle % 3];
+
+  // Streak 2 (Magenta): loops every 180 frames with offset
+  const streak2Frame = (frame + 60) % 180;
+  const streak2X = interpolate(streak2Frame, [0, 130], [-1000, 2100], {
+    easing: Easing.bezier(0.25, 1, 0.5, 1),
+    extrapolateRight: 'clamp',
+  });
+  const streak2Opacity = interpolate(streak2Frame, [0, 20, 110, 130], [0, 1, 1, 0], {
+    extrapolateRight: 'clamp',
+  });
+  const streak2Cycle = Math.floor((frame + 60) / 180);
+  const streak2Y = STREAK_2_Y_OFFSETS[streak2Cycle % 3];
+
+  // Streak 3 (Cyan): loops every 90 frames with offset
+  const streak3Frame = (frame + 30) % 90;
+  const streak3X = interpolate(streak3Frame, [0, 65], [-700, 2100], {
+    easing: Easing.bezier(0.25, 1, 0.5, 1),
+    extrapolateRight: 'clamp',
+  });
+  const streak3Opacity = interpolate(streak3Frame, [0, 10, 55, 65], [0, 1, 1, 0], {
+    extrapolateRight: 'clamp',
+  });
+  const streak3Cycle = Math.floor((frame + 30) / 90);
+  const streak3Y = STREAK_3_Y_OFFSETS[streak3Cycle % 4];
+
+  // Common Corner Element UI Style
+  const cornerBaseStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    border: '4px solid #fff',
+    boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+    zIndex: 2,
+  };
 
   return (
     <div
@@ -98,11 +136,12 @@ export const CyberpunkEsportsEndscreen = () => {
         backgroundColor: '#010105',
         width: '100%',
         height: '100%',
-        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         overflow: 'hidden',
       }}
     >
-      {/* SCALING VIEWPORT WRAPPER */}
       <div
         style={{
           width: ORIGINAL_WIDTH,
@@ -116,164 +155,156 @@ export const CyberpunkEsportsEndscreen = () => {
           overflow: 'hidden',
         }}
       >
-        {/* ========================================================= */}
-        {/* DETAILED 3D-EMULATED BACKDROP LAYER                       */}
-        {/* ========================================================= */}
-
-        {/* Space Dust / Digital Flow (Deterministic Particle Layer) */}
-        <svg
+        {/* ==========================================
+            BACKGROUND 3D VOLUMETRIC SCENE
+        ========================================== */}
+        <div
           style={{
             position: 'absolute',
             width: '100%',
             height: '100%',
-            top: 0,
-            left: 0,
+            transform: `translate(${cameraTranslateX}px, ${cameraTranslateY}px)`,
             zIndex: 1,
-            pointerEvents: 'none',
+            perspective: '1000px',
+            transformStyle: 'preserve-3d',
           }}
         >
-          {PARTICLES.map((p, idx) => {
-            const zSpeed = p.speed * 4;
-            const displacement = zSpeed * localFrame;
-            let currentZ = p.zStart - displacement;
-            
-            // Safe looping boundaries
-            while (currentZ < 10) {
-              currentZ += 1000;
-            }
+          {/* Volumetric Lights Simulation */}
+          <div
+            style={{
+              position: 'absolute',
+              left: '15%',
+              top: '20%',
+              width: 800,
+              height: 800,
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(0, 255, 255, 0.12) 0%, transparent 70%)',
+              filter: 'blur(80px)',
+              mixBlendMode: 'screen',
+              pointerEvents: 'none',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              right: '10%',
+              bottom: '15%',
+              width: 900,
+              height: 900,
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(255, 0, 255, 0.08) 0%, transparent 70%)',
+              filter: 'blur(90px)',
+              mixBlendMode: 'screen',
+              pointerEvents: 'none',
+            }}
+          />
 
-            const fov = 300;
-            const projectedScale = fov / (fov + currentZ);
-            const xProjected = ORIGINAL_WIDTH / 2 + p.x * projectedScale;
-            const yProjected = ORIGINAL_HEIGHT / 2 + p.y * projectedScale;
-            const particleOpacity = interpolate(currentZ, [10, 1000], [0.95, 0], {
+          {/* 3D Holographic Starfield Particles */}
+          {PARTICLES.map((p, idx) => {
+            const zMax = 1000;
+            const rawDepth = p.startDepth - (frame * p.speed);
+            const depth = ((rawDepth % zMax) + zMax) % zMax;
+            
+            // Perspective Projection
+            const projScale = 220 / (depth + 1);
+            const screenX = 960 + p.x * projScale;
+            const screenY = 540 + p.y * projScale;
+            const opacity = interpolate(depth, [0, 80, 850, 1000], [0, 0.85, 0.85, 0], {
               extrapolateLeft: 'clamp',
               extrapolateRight: 'clamp',
             });
-            const finalSize = p.size * projectedScale * 2.5;
+            const size = p.size * (projScale * 0.4 + 0.6);
 
-            return (
-              <circle
-                key={idx}
-                cx={xProjected}
-                cy={yProjected}
-                r={finalSize}
-                fill={p.color}
-                opacity={particleOpacity}
-                style={{
-                  filter: 'drop-shadow(0 0 4px currentColor)',
-                }}
-              />
-            );
-          })}
-        </svg>
-
-        {/* Massive Dynamic Rotating Background Rings */}
-        <div
-          style={{
-            position: 'absolute',
-            width: '100%',
-            height: '100%',
-            zIndex: 2,
-            perspective: '1200px',
-            transformStyle: 'preserve-3d',
-            pointerEvents: 'none',
-          }}
-        >
-          {RINGS_CONFIG.map((ring, idx) => {
-            const rotX = interpolate(localFrame, [0, totalDuration], [ring.rx, ring.rx + ring.rotationsX * 360]);
-            const rotY = interpolate(localFrame, [0, totalDuration], [ring.ry, ring.ry + ring.rotationsY * 360]);
-            const rotZ = interpolate(localFrame, [0, totalDuration], [ring.rz, ring.rz + ring.rotationsZ * 360]);
+            // Clip elements way out of viewport bounds
+            if (screenX < -200 || screenX > 2120 || screenY < -200 || screenY > 1280) {
+              return null;
+            }
 
             return (
               <div
-                key={idx}
+                key={`p-${idx}`}
                 style={{
                   position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  width: '600px',
-                  height: '600px',
-                  marginLeft: '-300px',
-                  marginTop: '-300px',
-                  border: `4px solid ${ring.color}`,
+                  left: screenX,
+                  top: screenY,
+                  width: size,
+                  height: size,
                   borderRadius: '50%',
-                  opacity: 0.15,
-                  transformStyle: 'preserve-3d',
-                  transform: `translateZ(${ring.zDepth}px) scale(${ring.scale}) rotateX(${rotX}deg) rotateY(${rotY}deg) rotateZ(${rotZ}deg)`,
-                  boxShadow: `0 0 40px ${ring.color}, inset 0 0 40px ${ring.color}`,
+                  backgroundColor: p.color,
+                  boxShadow: `0 0 ${size * 2.5}px ${p.color}`,
+                  opacity,
+                  pointerEvents: 'none',
                 }}
               />
             );
           })}
-        </div>
 
-        {/* Futuristic Cyber Grid floor system (Dual Color Mapping) */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: -150,
-            left: '-50%',
-            width: '200%',
-            height: '550px',
-            transform: 'perspective(450px) rotateX(75deg)',
-            transformOrigin: 'center bottom',
-            overflow: 'hidden',
-            maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 85%)',
-            WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 85%)',
-            opacity: 0.5,
-            zIndex: 3,
-            pointerEvents: 'none',
-          }}
-        >
-          {/* Cyan Grid Level */}
+          {/* Rotating Holographic Background Rings */}
+          {BACKGROUND_RINGS.map((ring, idx) => {
+            const angle = (frame * ring.rotSpeed * ring.dir) % 360;
+            return (
+              <div
+                key={`bg-ring-${idx}`}
+                style={{
+                  position: 'absolute',
+                  width: ring.radius * 2,
+                  height: ring.radius * 2,
+                  border: `3px solid ${ring.color}`,
+                  borderRadius: '50%',
+                  opacity: 0.18,
+                  boxShadow: `0 0 35px ${ring.color}, inset 0 0 35px ${ring.color}`,
+                  left: '50%',
+                  top: '52%',
+                  transform: `translate(-50%, -50%) translateZ(${-150 - idx * 60}px) rotateX(${ring.rotX}deg) rotateY(${ring.rotY}deg) rotateZ(${angle}deg)`,
+                  transformStyle: 'preserve-3d',
+                  pointerEvents: 'none',
+                }}
+              />
+            );
+          })}
+
+          {/* Holographic 3D Grid Floors (Cyan & Magenta Layers) */}
           <div
             style={{
               position: 'absolute',
-              width: '100%',
+              width: '240%',
               height: '100%',
-              backgroundImage: `
-                linear-gradient(rgba(0, 255, 255, 0.3) 2px, transparent 2px),
-                linear-gradient(90deg, rgba(0, 255, 255, 0.3) 2px, transparent 2px)
-              `,
-              backgroundSize: '60px 60px',
-              transform: `translateY(${grid1Y}px)`,
+              bottom: '-25%',
+              left: '-70%',
+              transform: 'perspective(450px) rotateX(82deg)',
+              transformOrigin: 'bottom center',
+              backgroundSize: '40px 40px',
+              backgroundImage: 'linear-gradient(to right, rgba(0, 255, 255, 0.15) 1.5px, transparent 1.5px), linear-gradient(to bottom, rgba(0, 255, 255, 0.15) 1.5px, transparent 1.5px)',
+              backgroundPositionY: `${floorGridOffset}px`,
+              maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 25%, rgba(0,0,0,0) 95%)',
+              WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1) 25%, rgba(0,0,0,0) 95%)',
+              pointerEvents: 'none',
             }}
           />
-          {/* Magenta Accent Grid Level */}
           <div
             style={{
               position: 'absolute',
-              width: '100%',
+              width: '240%',
               height: '100%',
-              backgroundImage: `
-                linear-gradient(rgba(255, 0, 255, 0.15) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 0, 255, 0.15) 1px, transparent 1px)
-              `,
-              backgroundSize: '30px 30px',
-              transform: `translateY(${grid2Y}px)`,
+              bottom: '-25.5%',
+              left: '-70%',
+              transform: 'perspective(450px) rotateX(82deg)',
+              transformOrigin: 'bottom center',
+              backgroundSize: '80px 80px',
+              backgroundImage: 'linear-gradient(to right, rgba(255, 0, 255, 0.08) 2px, transparent 2px), linear-gradient(to bottom, rgba(255, 0, 255, 0.08) 2px, transparent 2px)',
+              backgroundPositionY: `${floorGridOffsetMagenta}px`,
+              maskImage: 'linear-gradient(to top, rgba(0,0,0,0.8) 20%, rgba(0,0,0,0) 100%)',
+              WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,0.8) 20%, rgba(0,0,0,0) 100%)',
+              pointerEvents: 'none',
             }}
           />
         </div>
 
-        {/* Ambient Overlay Lights */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            background: 'radial-gradient(circle at 15% 30%, rgba(0,255,255,0.08) 0%, transparent 60%), radial-gradient(circle at 85% 70%, rgba(255,0,255,0.08) 0%, transparent 60%)',
-            zIndex: 4,
-            pointerEvents: 'none',
-          }}
-        />
-
-        {/* ========================================================= */}
-        {/* UI LAYER                                                  */}
-        {/* ========================================================= */}
-        <div
+        {/* ==========================================
+            HUD / FRONT UI LAYER
+        ========================================== */}
+        <div 
+          className="ui-layer"
           style={{
             position: 'absolute',
             top: 0,
@@ -284,28 +315,29 @@ export const CyberpunkEsportsEndscreen = () => {
             pointerEvents: 'none',
           }}
         >
-          {/* Left Video Placeholder */}
+          {/* LEFT VIDEO PLACEHOLDER */}
           <div
+            className="placeholder left"
             style={{
               position: 'absolute',
-              width: '600px',
-              height: '338px',
-              top: '371px',
-              left: '100px',
-              background: 'rgba(1, 4, 15, 0.75)',
+              width: 600,
+              height: 338,
+              left: 100,
+              top: 371,
+              backgroundColor: 'rgba(1, 4, 15, 0.72)',
               border: '3px solid #00ffff',
-              boxShadow: placeholderBoxShadow,
+              boxShadow: placeholderGlowLeft,
               backdropFilter: 'blur(8px)',
               overflow: 'hidden',
             }}
           >
-            {/* Corner Tech Highlights */}
-            <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', zIndex: 2, top: '-4px', left: '-4px', borderRight: 'none', borderBottom: 'none' }} />
-            <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', zIndex: 2, top: '-4px', right: '-4px', borderLeft: 'none', borderBottom: 'none' }} />
-            <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', zIndex: 2, bottom: '-4px', left: '-4px', borderRight: 'none', borderTop: 'none' }} />
-            <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', zIndex: 2, bottom: '-4px', right: '-4px', borderLeft: 'none', borderTop: 'none' }} />
-
-            {/* Interior Grid Overlay */}
+            {/* Corner Bracket Details */}
+            <div style={{ ...cornerBaseStyle, top: -4, left: -4, borderRight: 'none', borderBottom: 'none' }} />
+            <div style={{ ...cornerBaseStyle, top: -4, right: -4, borderLeft: 'none', borderBottom: 'none' }} />
+            <div style={{ ...cornerBaseStyle, bottom: -4, left: -4, borderRight: 'none', borderTop: 'none' }} />
+            <div style={{ ...cornerBaseStyle, bottom: -4, right: -4, borderLeft: 'none', borderTop: 'none' }} />
+            
+            {/* Inside Grid Pattern */}
             <div
               style={{
                 position: 'absolute',
@@ -319,42 +351,44 @@ export const CyberpunkEsportsEndscreen = () => {
               }}
             />
 
-            {/* Moving Scanline */}
+            {/* Sweep Scanline */}
             <div
+              className="scanline"
               style={{
                 position: 'absolute',
                 width: '100%',
-                height: '100px',
+                height: 100,
                 background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.35), transparent)',
                 top: 0,
-                zIndex: 1,
                 transform: `translateY(${scanlineY}px)`,
+                zIndex: 1,
               }}
             />
           </div>
 
-          {/* Right Video Placeholder */}
+          {/* RIGHT VIDEO PLACEHOLDER */}
           <div
+            className="placeholder right"
             style={{
               position: 'absolute',
-              width: '600px',
-              height: '338px',
-              top: '371px',
-              right: '100px',
-              background: 'rgba(1, 4, 15, 0.75)',
+              width: 600,
+              height: 338,
+              right: 100,
+              top: 371,
+              backgroundColor: 'rgba(1, 4, 15, 0.72)',
               border: '3px solid #00ffff',
-              boxShadow: placeholderBoxShadow,
+              boxShadow: placeholderGlowRight,
               backdropFilter: 'blur(8px)',
               overflow: 'hidden',
             }}
           >
-            {/* Corner Tech Highlights */}
-            <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', zIndex: 2, top: '-4px', left: '-4px', borderRight: 'none', borderBottom: 'none' }} />
-            <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', zIndex: 2, top: '-4px', right: '-4px', borderLeft: 'none', borderBottom: 'none' }} />
-            <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', zIndex: 2, bottom: '-4px', left: '-4px', borderRight: 'none', borderTop: 'none' }} />
-            <div style={{ position: 'absolute', width: '40px', height: '40px', border: '4px solid #fff', boxShadow: '0 0 15px #00ffff', zIndex: 2, bottom: '-4px', right: '-4px', borderLeft: 'none', borderTop: 'none' }} />
-
-            {/* Interior Grid Overlay */}
+            {/* Corner Bracket Details */}
+            <div style={{ ...cornerBaseStyle, top: -4, left: -4, borderRight: 'none', borderBottom: 'none' }} />
+            <div style={{ ...cornerBaseStyle, top: -4, right: -4, borderLeft: 'none', borderBottom: 'none' }} />
+            <div style={{ ...cornerBaseStyle, bottom: -4, left: -4, borderRight: 'none', borderTop: 'none' }} />
+            <div style={{ ...cornerBaseStyle, bottom: -4, right: -4, borderLeft: 'none', borderTop: 'none' }} />
+            
+            {/* Inside Grid Pattern */}
             <div
               style={{
                 position: 'absolute',
@@ -368,36 +402,39 @@ export const CyberpunkEsportsEndscreen = () => {
               }}
             />
 
-            {/* Moving Scanline */}
+            {/* Sweep Scanline */}
             <div
+              className="scanline"
               style={{
                 position: 'absolute',
                 width: '100%',
-                height: '100px',
+                height: 100,
                 background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.35), transparent)',
                 top: 0,
-                zIndex: 1,
                 transform: `translateY(${scanlineY}px)`,
+                zIndex: 1,
               }}
             />
           </div>
 
-          {/* Subscribe Portal Area */}
+          {/* CENTRAL SUBSCRIBE PORTAL */}
           <div
+            className="subscribe-portal"
             style={{
               position: 'absolute',
-              width: '360px',
-              height: '360px',
-              left: '780px',
-              top: '360px',
+              width: 360,
+              height: 360,
+              left: 780,
+              top: 360,
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
               borderRadius: '50%',
             }}
           >
-            {/* Outer Reactor Ring (Cyan) */}
+            {/* Outer Cyan Ring */}
             <div
+              className="ring-outer"
               style={{
                 position: 'absolute',
                 width: '100%',
@@ -407,12 +444,13 @@ export const CyberpunkEsportsEndscreen = () => {
                 borderTop: '4px solid #00ffff',
                 borderBottom: '4px solid #00ffff',
                 boxShadow: '0 0 35px #00ffff, inset 0 0 25px #00ffff',
-                transform: `rotate(${outerRotation}deg)`,
+                transform: `rotate(${outerRingRotate}deg)`,
               }}
             />
 
-            {/* Inner Ring (Magenta) */}
+            {/* Inner Dashed Magenta Ring */}
             <div
+              className="ring-inner"
               style={{
                 position: 'absolute',
                 width: '80%',
@@ -420,101 +458,105 @@ export const CyberpunkEsportsEndscreen = () => {
                 borderRadius: '50%',
                 border: '4px dashed #ff00ff',
                 boxShadow: '0 0 45px #ff00ff, inset 0 0 25px #ff00ff',
-                transform: `rotate(${innerRotation}deg)`,
+                transform: `rotate(${innerRingRotate}deg)`,
               }}
             />
 
-            {/* Central Glowing Core */}
+            {/* Central Holographic Core Glow */}
             <div
+              className="core-glow"
               style={{
                 position: 'absolute',
                 width: '45%',
                 height: '45%',
                 borderRadius: '50%',
-                background: 'radial-gradient(circle at center, #ffffff 0%, #00ffff 40%, transparent 70%)',
-                boxShadow: '0 0 85px #00ffff, 0 0 125px #00ffff',
+                background: 'radial-gradient(circle at center, #ffffff 0%, #00ffff 45%, transparent 75%)',
+                boxShadow: `0 0 ${coreGlowIntensity}px #00ffff, 0 0 ${coreGlowIntensity + 40}px #00ffff`,
                 transform: `scale(${coreScale})`,
-                filter: `brightness(${coreBrightness})`,
               }}
             />
 
-            {/* Concentric Expanding Core Target Ring */}
+            {/* Exploding Holographic Core Rings */}
             <div
+              className="core-target"
               style={{
                 position: 'absolute',
                 width: '25%',
                 height: '25%',
                 borderRadius: '50%',
-                border: '6px solid #ffffff',
-                boxShadow: '0 0 25px #ffffff',
+                border: '6px solid #fff',
+                boxShadow: '0 0 25px #fff',
                 transform: `scale(${targetScale})`,
                 opacity: targetOpacity,
               }}
             />
           </div>
 
-          {/* ========================================================= */}
-          {/* HIGH ENERGY LIGHT STREAKS SWEEPING EFFECT                  */}
-          {/* ========================================================= */}
+          {/* HIGH-SPEED VECTOR LIGHT STREAKS */}
           <div
+            className="light-streak"
+            id="streak-1"
             style={{
               position: 'absolute',
-              height: '3px',
-              width: '600px',
+              height: 2,
+              width: 600,
               background: 'linear-gradient(90deg, transparent, #00ffff, #ffffff)',
-              boxShadow: '0 0 25px #00ffff, 0 0 45px #00ffff',
+              boxShadow: '0 0 20px #00ffff, 0 0 40px #00ffff',
               borderRadius: '50%',
-              top: `${250 + s1YOffset}px`,
+              top: streak1Y,
               left: 0,
+              transform: `translateX(${streak1X}px)`,
+              opacity: streak1Opacity,
               zIndex: 5,
-              opacity: s1Opacity,
               mixBlendMode: 'screen',
-              transform: `translateX(${s1X}px)`,
             }}
           />
-
           <div
+            className="light-streak magenta"
+            id="streak-2"
             style={{
               position: 'absolute',
-              height: '3px',
-              width: '800px',
+              height: 2.5,
+              width: 800,
               background: 'linear-gradient(90deg, transparent, #ff00ff, #ffffff)',
               boxShadow: '0 0 25px #ff00ff, 0 0 45px #ff00ff',
               borderRadius: '50%',
-              top: `${850 + s2YOffset}px`,
+              top: streak2Y,
               left: 0,
+              transform: `translateX(${streak2X}px)`,
+              opacity: streak2Opacity,
               zIndex: 5,
-              opacity: s2Opacity,
               mixBlendMode: 'screen',
-              transform: `translateX(${s2X}px)`,
             }}
           />
-
           <div
+            className="light-streak"
+            id="streak-3"
             style={{
               position: 'absolute',
-              height: '3px',
-              width: '500px',
+              height: 1.8,
+              width: 500,
               background: 'linear-gradient(90deg, transparent, #00ffff, #ffffff)',
-              boxShadow: '0 0 25px #00ffff, 0 0 45px #00ffff',
+              boxShadow: '0 0 15px #00ffff, 0 0 35px #00ffff',
               borderRadius: '50%',
-              top: `${450 + s3YOffset}px`,
+              top: streak3Y,
               left: 0,
+              transform: `translateX(${streak3X}px)`,
+              opacity: streak3Opacity,
               zIndex: 5,
-              opacity: s3Opacity,
               mixBlendMode: 'screen',
-              transform: `translateX(${s3X}px)`,
             }}
           />
         </div>
 
-        {/* Ambient Dark Overlay Vignette for intense focus */}
+        {/* OVERLAY CINEMATIC VIGNETTE */}
         <div
+          className="vignette"
           style={{
             position: 'absolute',
             width: '100%',
             height: '100%',
-            boxShadow: 'inset 0 0 250px rgba(0, 0, 0, 0.95)',
+            boxShadow: 'inset 0 0 260px rgba(0, 0, 0, 0.95)',
             zIndex: 20,
             pointerEvents: 'none',
           }}
@@ -524,5 +566,5 @@ export const CyberpunkEsportsEndscreen = () => {
   );
 };
 
-export default CyberpunkEsportsEndscreen;
+export default CyberpunkEndscreen;
 // END_OF_FILE
