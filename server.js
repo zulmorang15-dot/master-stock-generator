@@ -3675,18 +3675,55 @@ app.get("/chat", (req, res) => {
 
 // GET /api/chat/models → available syntx models (all providers)
 app.get("/api/chat/models", (req, res) => {
-  const models = [
-    // Sonnet (fast & reliable)
+    const models = [
+    // Claude - Sonnet
     { id: "claude-sonnet-4-6",           label: "Claude Sonnet 4.6",   group: "claude", speed: "⭐ Terbaik", default: true },
     { id: "claude-sonnet-4-5-20250929",  label: "Claude Sonnet 4.5",   group: "claude", speed: "⚡ Cepat" },
     { id: "claude-sonnet-4-20250514",    label: "Claude Sonnet 4",     group: "claude", speed: "⚡ Cepat" },
-    // Opus (most capable)
+    // Claude - Opus
     { id: "claude-opus-4-8",             label: "Claude Opus 4.8",     group: "claude", speed: "🧠 Terkuat" },
     { id: "claude-opus-4-7",             label: "Claude Opus 4.7",     group: "claude", speed: "🧠 Kuat" },
     { id: "claude-opus-4-6",             label: "Claude Opus 4.6",     group: "claude", speed: "🧠 Kuat" },
     { id: "claude-opus-4-5-20251101",    label: "Claude Opus 4.5",     group: "claude", speed: "🧠 Kuat" },
     { id: "claude-opus-4-20250514",      label: "Claude Opus 4",       group: "claude", speed: "🧠 Kuat" },
     { id: "claude-opus-4-1-20250805",    label: "Claude Opus 4.1",     group: "claude", speed: "🧠 Kuat" },
+    // ChatGPT
+    { id: "gpt-5.5",                     label: "GPT-5.5",             group: "chatgpt", speed: "🔥 Terbaru" },
+    { id: "gpt-5.4-pro",                 label: "GPT-5.4 Pro",         group: "chatgpt", speed: "🧠 Pro" },
+    { id: "gpt-5.4",                     label: "GPT-5.4",             group: "chatgpt", speed: "⚡ Cepat" },
+    { id: "gpt-5.3-chat-latest",         label: "GPT-5.3 Chat",        group: "chatgpt", speed: "⚡ Cepat" },
+    { id: "gpt-5.2",                     label: "GPT-5.2",             group: "chatgpt", speed: "⚡ Cepat" },
+    { id: "gpt-5.1",                     label: "GPT-5.1",             group: "chatgpt", speed: "⚡ Cepat" },
+    { id: "gpt-5-2025-08-07",            label: "GPT-5",               group: "chatgpt", speed: "⚡ Cepat" },
+    { id: "gpt-5-mini-2025-08-07",       label: "GPT-5 Mini",          group: "chatgpt", speed: "⚡ Ringan" },
+    { id: "gpt-5-nano-2025-08-07",       label: "GPT-5 Nano",          group: "chatgpt", speed: "⚡ Tercepat" },
+    { id: "gpt-4.1-2025-04-14",          label: "GPT-4.1",             group: "chatgpt", speed: "💼 Stabil" },
+    { id: "gpt-4.1-mini-2025-04-14",     label: "GPT-4.1 Mini",        group: "chatgpt", speed: "⚡ Ringan" },
+    { id: "gpt-4.1-nano-2025-04-14",     label: "GPT-4.1 Nano",        group: "chatgpt", speed: "⚡ Tercepat" },
+    // Gemini
+    { id: "gemini-3.5-flash",            label: "Gemini 3.5 Flash",    group: "gemini", speed: "⭐ Terbaru" },
+    { id: "gemini-3.1-pro-preview",      label: "Gemini 3.1 Pro",      group: "gemini", speed: "🧠 Pro" },
+    { id: "gemini-2.5-pro",              label: "Gemini 2.5 Pro",      group: "gemini", speed: "🧠 Kuat" },
+    { id: "gemini-2.5-flash",            label: "Gemini 2.5 Flash",    group: "gemini", speed: "⚡ Cepat" },
+    // Grok
+    { id: "grok-4.3",                    label: "Grok 4.3",            group: "grok", speed: "🔥 Terbaru" },
+    { id: "grok-4",                      label: "Grok 4",              group: "grok", speed: "⚡ Cepat" },
+    { id: "grok-3",                      label: "Grok 3",              group: "grok", speed: "⚡ Cepat" },
+    { id: "grok-3-reasoner",             label: "Grok 3 Reasoner",     group: "grok", speed: "🧠 Reasoning" },
+    { id: "grok-3-deepsearch",           label: "Grok 3 DeepSearch",   group: "grok", speed: "🔍 Riset" },
+    // DeepSeek
+    { id: "deepseek-r1",                 label: "DeepSeek R1",         group: "deepseek", speed: "🧠 Reasoning" },
+    { id: "deepseek-v3",                 label: "DeepSeek V3",         group: "deepseek", speed: "⚡ Cepat" },
+    // Qwen
+    { id: "qwen3.7-max",                 label: "Qwen 3.7 Max",        group: "qwen", speed: "🔥 Terbaru" },
+    { id: "qwen3.7-plus",                label: "Qwen 3.7 Plus",       group: "qwen", speed: "⚡ Cepat" },
+    { id: "qwen3-max-2026-01-23",        label: "Qwen 3 Max",          group: "qwen", speed: "🧠 Kuat" },
+    { id: "qwen3-235b-a22b",             label: "Qwen 3 235B",         group: "qwen", speed: "🧠 Besar" },
+    { id: "qwen3-vl-30b-a3b-thinking",   label: "Qwen 3 VL Thinking",  group: "qwen", speed: "🧠 Vision" },
+    // Perplexity
+    { id: "sonar-pro",                   label: "Sonar Pro",           group: "perplexity", speed: "🔍 Riset" },
+    { id: "sonar",                       label: "Sonar",               group: "perplexity", speed: "🔍 Riset" },
+    { id: "sonar-deep-research",         label: "Sonar Deep Research", group: "perplexity", speed: "🔬 Deep" },
   ];
   const pool = syntxBot.getPoolStatus ? syntxBot.getPoolStatus() : {};
   res.json({ models, poolStatus: pool });

@@ -1,49 +1,47 @@
 /**
- * Test all available Syntx models one by one
- * Uses existing pool accounts to test each model
+ * Test all Syntx non-Claude models using exact model_type from API
  */
 require('dotenv').config();
 const syntxBot = require('./syntx-bot');
 
-// All known Syntx model names (from API error response)
 const ALL_MODELS = [
-  // Claude models
-  'claude-3-5-haiku-20241022',
-  'claude-3-5-sonnet-20241022',
-  'claude-3-opus-20240229',
-  'claude-3-7-sonnet-20250219',
-  'claude-3-7-sonnet-20250219-thinking',
-  'claude-opus-4-1-20250805',
-  'claude-opus-4-20250514',
-  'claude-opus-4-5-20251101',
-  'claude-opus-4-6',
-  'claude-opus-4-7',
-  'claude-opus-4-8',
-  'claude-sonnet-4-20250514',
-  'claude-sonnet-4-5-20250929',
-  'claude-sonnet-4-6',
-  'claude-fable-5',
-  // Gemini models (try various names)
-  'gemini-3.5-flash',
-  'gemini-flash-2-0',
-  'gemini-2.5-flash',
+  // ChatGPT
+  'gpt-5-nano-2025-08-07',
+  'gpt-5-mini-2025-08-07',
+  'gpt-5-2025-08-07',
+  'gpt-5.1',
+  'gpt-5.4',
+  'gpt-5.3-chat-latest',
+  'gpt-5.2',
+  'gpt-4.1-2025-04-14',
+  'gpt-4.1-nano-2025-04-14',
+  'gpt-4.1-mini-2025-04-14',
+  'gpt-5.5',
+  'gpt-5.4-pro',
+  // Gemini
   'gemini-2.5-pro',
-  // ChatGPT models
-  'gpt-4o',
-  'gpt-4o-mini',
-  'o3-mini',
+  'gemini-2.5-flash',
+  'gemini-3.5-flash',
+  'gemini-3.1-pro-preview',
   // Grok
-  'grok-3',
   'grok-4',
+  'grok-4.3',
+  'grok-3',
+  'grok-3-reasoner',
+  'grok-3-deepsearch',
   // Deepseek
-  'deepseek-chat',
   'deepseek-r1',
-  // Perplexity
-  'sonar-large',
-  'sonar-pro',
+  'deepseek-v3',
   // Qwen
-  'qwen-max',
-  'qwen-plus',
+  'qwen3-235b-a22b',
+  'qwen3-vl-30b-a3b-thinking',
+  'qwen3-max-2026-01-23',
+  'qwen3.7-max',
+  'qwen3.7-plus',
+  // Perplexity
+  'sonar-pro',
+  'sonar-deep-research',
+  'sonar',
 ];
 
 async function testModel(model) {
@@ -56,56 +54,42 @@ async function testModel(model) {
       null
     );
     const reply = (result || '').slice(0, 100);
-    console.log(`✅ ${model} → WORKS → "${reply}"`);
-    return { model, works: true, reply };
+    const isRealReply = !reply.toLowerCase().includes('oops') && !reply.toLowerCase().includes('something went wrong');
+    if (isRealReply) {
+      console.log(`✅ ${model} → WORKS → "${reply}"`);
+      return { model, works: true, reply };
+    } else {
+      console.log(`⚠️ ${model} → DEPRECATED → "${reply}"`);
+      return { model, works: false, reason: 'deprecated' };
+    }
   } catch (err) {
     const msg = err.message || '';
-    // Check if it's a "model not found" error vs rate limit
-    if (msg.includes('not found') || msg.includes('Available:')) {
-      console.log(`❌ ${model} → NOT AVAILABLE`);
+    if (msg.includes('402') || msg.includes('Insufficient tokens')) {
+      console.log(`❌ ${model} → PAID ONLY (402)`);
+      return { model, works: false, reason: 'paid_only' };
+    } else if (msg.includes('not found') || msg.includes('Available:')) {
+      console.log(`❌ ${model} → NOT FOUND`);
       return { model, works: false, reason: 'not_found' };
     } else if (msg.includes('rate-limited') || msg.includes('429') || msg.includes('semua akun')) {
-      console.log(`⚠️ ${model} → RATE LIMITED (may work, try later)`);
+      console.log(`⚠️ ${model} → RATE LIMITED`);
       return { model, works: false, reason: 'rate_limited' };
-    } else if (msg.includes('400')) {
-      console.log(`❌ ${model} → HTTP 400 (bad request)`);
-      return { model, works: false, reason: 'bad_request' };
-    } else if (msg.includes('401')) {
-      console.log(`❌ ${model} → HTTP 401 (unauthorized)`);
-      return { model, works: false, reason: 'unauthorized' };
     } else {
-      console.log(`⚠️ ${model} → ERROR: ${msg.slice(0, 120)}`);
-      return { model, works: false, reason: msg.slice(0, 120) };
+      console.log(`⚠️ ${model} → ERROR: ${msg.slice(0, 150)}`);
+      return { model, works: false, reason: msg.slice(0, 150) };
     }
   }
 }
 
 async function main() {
   console.log('═══════════════════════════════════════════');
-  console.log('  SYNTX MODEL COMPATIBILITY TEST');
+  console.log('  SYNTX NON-CLAUDE MODEL TEST');
   console.log('═══════════════════════════════════════════');
   console.log(`Testing ${ALL_MODELS.length} models...\n`);
-
-  // Ensure we have accounts
-  const status = syntxBot.getPoolStatus();
-  console.log(`Pool: ${status.activeAccountsCount}/${status.totalAccountsCount} active accounts`);
-  
-  if (status.activeAccountsCount === 0) {
-    console.log('No active accounts. Creating one...');
-    try {
-      await syntxBot.loginAndGetToken({});
-      console.log('Account created.');
-    } catch (e) {
-      console.error('Failed to create account:', e.message);
-      process.exit(1);
-    }
-  }
 
   const results = [];
   for (const model of ALL_MODELS) {
     const result = await testModel(model);
     results.push(result);
-    // Small delay between tests to avoid rate limits
     await new Promise(r => setTimeout(r, 2000));
   }
 
@@ -114,23 +98,34 @@ async function main() {
   console.log('═══════════════════════════════════════════');
   
   const working = results.filter(r => r.works);
+  const deprecated = results.filter(r => !r.works && r.reason === 'deprecated');
+  const paidOnly = results.filter(r => !r.works && r.reason === 'paid_only');
   const notFound = results.filter(r => !r.works && r.reason === 'not_found');
   const rateLimited = results.filter(r => !r.works && r.reason === 'rate_limited');
-  const otherErrors = results.filter(r => !r.works && r.reason !== 'not_found' && r.reason !== 'rate_limited');
+  const otherErrors = results.filter(r => !r.works && !['deprecated','paid_only','not_found','rate_limited'].includes(r.reason));
 
   console.log(`\n✅ WORKING (${working.length}):`);
   working.forEach(r => console.log(`   ${r.model} → "${r.reply}"`));
   
+  if (deprecated.length > 0) {
+    console.log(`\n⚠️ DEPRECATED (${deprecated.length}):`);
+    deprecated.forEach(r => console.log(`   ${r.model}`));
+  }
+  if (paidOnly.length > 0) {
+    console.log(`\n💰 PAID ONLY (${paidOnly.length}):`);
+    paidOnly.forEach(r => console.log(`   ${r.model}`));
+  }
   if (rateLimited.length > 0) {
-    console.log(`\n⚠️ RATE LIMITED (${rateLimited.length}):`);
+    console.log(`\n⏳ RATE LIMITED (${rateLimited.length}):`);
     rateLimited.forEach(r => console.log(`   ${r.model}`));
   }
-  
-  console.log(`\n❌ NOT FOUND / ERROR (${notFound.length + otherErrors.length}):`);
-  [...notFound, ...otherErrors].forEach(r => console.log(`   ${r.model} → ${r.reason}`));
+  if (notFound.length + otherErrors.length > 0) {
+    console.log(`\n❌ ERROR (${notFound.length + otherErrors.length}):`);
+    [...notFound, ...otherErrors].forEach(r => console.log(`   ${r.model} → ${r.reason}`));
+  }
 
   console.log('\n═══════════════════════════════════════════');
-  console.log('Working model names (for system config):');
+  console.log('Working model names:');
   console.log(JSON.stringify(working.map(r => r.model), null, 2));
 }
 
