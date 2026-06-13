@@ -4543,6 +4543,65 @@ app.get("/api/trends/raw", async (req, res) => {
   }
 });
 
+// GET /api/trends/events -> Ambil data event/hari penting internasional dari daysoftheyear.com
+app.get("/api/trends/events", async (req, res) => {
+  console.log("📡 Mengambil data event internasional dari daysoftheyear.com...");
+  try {
+    const url = 'https://www.daysoftheyear.com/';
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      },
+      timeout: 15000
+    });
+    
+    const $ = cheerio.load(response.data);
+    const events = [];
+
+    $('.card').each((i, el) => {
+      const card = $(el);
+      const title = card.find('.card__title, h2, h3').first().text().trim();
+      if (!title) return;
+      
+      let link = card.attr('href') || card.find('a').attr('href') || '';
+      if (link && link.startsWith('/')) {
+        link = 'https://www.daysoftheyear.com' + link;
+      }
+      
+      let excerpt = card.find('.card__excerpt, p').text().trim();
+      let dateText = card.find('.card__date, .calendar__date').text().trim().replace(/\s+/g, ' ');
+      
+      if (dateText && excerpt.startsWith(dateText)) {
+        excerpt = excerpt.substring(dateText.length).trim();
+      }
+      
+      let img = card.find('img').first().attr('src') || card.find('img').first().attr('data-src') || card.find('img').first().attr('data-lazy-src') || '';
+      
+      let cleanDate = dateText;
+      const match = dateText.match(/^(\d{1,2})([A-Z]{3})([A-Z]{3,4})$/i);
+      if (match) {
+        cleanDate = `${match[1]} ${match[2]} (${match[3]})`;
+      }
+      
+      events.push({
+        title,
+        link,
+        excerpt,
+        date: cleanDate,
+        rawDate: dateText,
+        image: img
+      });
+    });
+
+    console.log(`✅ Berhasil mengambil ${events.length} event internasional.`);
+    res.json(events);
+  } catch (error) {
+    console.error("❌ Gagal mengambil event internasional:", error.message);
+    res.status(500).json({ error: "Gagal mengambil data event internasional", details: error.message });
+  }
+});
+
 // POST /api/trends/analyze -> Analisis kata kunci tren dari klien dengan prompt kustom
 app.post("/api/trends/analyze", async (req, res) => {
   const { prompt } = req.body || {};
