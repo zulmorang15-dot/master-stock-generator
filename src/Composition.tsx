@@ -1,308 +1,105 @@
-import React, { useRef, useEffect } from 'react';
-import { useVideoConfig, useCurrentFrame } from 'remotion';
+import React, { useMemo } from 'react';
+import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 
-// Strict 4K Dimensions
-const ORIGINAL_WIDTH = 3840;
-const ORIGINAL_HEIGHT = 2160;
+const ORIGINAL_WIDTH = 1920;
+const ORIGINAL_HEIGHT = 1080;
 
-const W = ORIGINAL_WIDTH;
-const H = ORIGINAL_HEIGHT;
+export const YoutubeEndScreen: React.FC = () => {
+  const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
 
-// System Configuration
-const COLUMNS = 140; 
-const COL_WIDTH = Math.floor(W / COLUMNS); // ~27px
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-// Premium Luminous Color Palette
-const COLORS = [
-    { r: 255, g: 215, b: 0 },   // Luminous Gold
-    { r: 75, g: 0, b: 130 },    // Deep Amethyst Purple
-    { r: 255, g: 165, b: 0 },   // Amber Core Highlight
-    { r: 180, g: 100, b: 240 }  // Violet Highlight
-];
+  // 1. Background Gradient Motion
+  // Cycle duration: 15 seconds = 450 frames (divides 900 perfectly)
+  const bgX = interpolate(
+    frame % 450,
+    [0, 225, 450],
+    [0, 100, 0],
+    { easing: Easing.inOut(Easing.quad) }
+  );
 
-// Seeded random helper to ensure deterministic generation
-let seed = 987654321;
-function deterministicRandom() {
-    const x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
-}
+  // 2. Decorative Skewed Bands (Symmetrical 30s Loop)
+  // Top band (::before equivalent)
+  // Period: 15s one-way = 450 frames. Round-trip: 30s = 900 frames.
+  const transXAtas = interpolate(
+    frame,
+    [0, 450, 900],
+    [-5, 5, -5],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+  const opacityAtas = interpolate(
+    frame,
+    [0, 450, 900],
+    [0.5, 1, 0.5],
+    { easing: Easing.inOut(Easing.quad) }
+  );
 
-interface Fragment {
-    offset: number;
-    h: number;
-    alpha: number;
-    isHead: boolean;
-    bits: boolean[];
-    hexCount: number;
-}
+  // Bottom band (::after equivalent)
+  // Period: 7.5s one-way = 225 frames. Round-trip: 15s = 450 frames.
+  const transXBawah = interpolate(
+    frame % 450,
+    [0, 225, 450],
+    [5, -5, 5],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+  const opacityBawah = interpolate(
+    frame % 450,
+    [0, 225, 450],
+    [1, 0.3, 1],
+    { easing: Easing.inOut(Easing.quad) }
+  );
 
-interface StreamConfig {
-    x: number;
-    width: number;
-    cycles: number;
-    maxAlpha: number;
-    glow: number;
-    baseY: number;
-    color: { r: number; g: number; b: number };
-    type: number;
-    fragments: Fragment[];
-}
+  // 3. Border Lines around "SUBSCRIBE"
+  // Border cycle: 2 seconds = 60 frames
+  const borderFrame = frame % 60;
+  
+  // Span 1: Top Line (0s delay)
+  const leftPos1 = interpolate(borderFrame, [0, 30, 60], [-100, 100, 100], { extrapolateRight: 'clamp' });
+  
+  // Span 2: Right Line (0.5s delay = 15 frames)
+  const borderFrame2 = (frame + 45) % 60;
+  const topPos2 = interpolate(borderFrame2, [0, 30, 60], [-100, 100, 100], { extrapolateRight: 'clamp' });
+  
+  // Span 3: Bottom Line (1.0s delay = 30 frames)
+  const borderFrame3 = (frame + 30) % 60;
+  const rightPos3 = interpolate(borderFrame3, [0, 30, 60], [-100, 100, 100], { extrapolateRight: 'clamp' });
+  
+  // Span 4: Left Line (1.5s delay = 45 frames)
+  const borderFrame4 = (frame + 15) % 60;
+  const bottomPos4 = interpolate(borderFrame4, [0, 30, 60], [-100, 100, 100], { extrapolateRight: 'clamp' });
 
-// Pre-calculate all stream details statically outside the render tree to prevent frame-tearing
-const STREAMS: StreamConfig[] = [];
+  // 4. Meteor Lines (Symmetrical Loop)
+  // Line 1: Period 3s = 90 frames
+  const mFrame1 = frame % 90;
+  const mX1 = interpolate(mFrame1, [0, 90], [384, -2880]);
+  const mOp1 = interpolate(mFrame1, [0, 90], [1, 0]);
 
-function createStreamConfig(colIndex: number, depthLayer: number): StreamConfig {
-    let width = 0;
-    let cycles = 0;
-    let maxAlpha = 0;
-    let glow = 0;
+  // Line 2: Period 5s = 150 frames. Delay 1.5s = 45 frames
+  const mFrame2 = (frame + 105) % 150;
+  const mX2 = interpolate(mFrame2, [0, 150], [384, -2880]);
+  const mOp2 = interpolate(mFrame2, [0, 150], [1, 0]);
 
-    if (depthLayer === 0) {
-        width = COL_WIDTH * 0.25; // 6.75px
-        cycles = 1;               // 1 full screen drop per 10s
-        maxAlpha = 0.2;          // Very faint
-        glow = 1;
-    } else if (depthLayer === 1) {
-        width = COL_WIDTH * 0.5;  // 13.5px
-        cycles = 2;               // 2 drops per 10s
-        maxAlpha = 0.5;           // Medium
-        glow = 10;
-    } else {
-        width = COL_WIDTH * 0.8;  // ~21px
-        cycles = Math.floor(deterministicRandom() * 2) + 3; // 3 or 4 drops per 10s
-        maxAlpha = 1.0;           // Bright
-        glow = 40;                // Intense radiant glow
-    }
+  // Line 3: Period 2.5s = 75 frames. Delay 2.2s = 66 frames
+  const mFrame3 = (frame + 9) % 75;
+  const mX3 = interpolate(mFrame3, [0, 75], [384, -2880]);
+  const mOp3 = interpolate(mFrame3, [0, 75], [1, 0]);
 
-    const baseY = deterministicRandom(); 
-    const color = COLORS[Math.floor(deterministicRandom() * COLORS.length)];
-    
-    let x = colIndex * COL_WIDTH + (COL_WIDTH - width) / 2;
-    const type = Math.floor(deterministicRandom() * 4);
+  // 5. Video Boxes Breathing Animation (Period 5s = 150 frames)
+  // Left Video
+  const scaleLeft = interpolate(frame % 150, [0, 75, 150], [1, 1.04, 1], { easing: Easing.inOut(Easing.quad) });
+  const shadowLeft = interpolate(frame % 150, [0, 75, 150], [19.2, 38.4, 19.2]);
+  
+  // Right Video (Offset phase)
+  const scaleRight = interpolate((frame + 75) % 150, [0, 75, 150], [1, 1.04, 1], { easing: Easing.inOut(Easing.quad) });
+  const shadowRight = interpolate((frame + 75) % 150, [0, 75, 150], [19.2, 38.4, 19.2]);
 
-    const fragments: Fragment[] = [];
-    const numFrags = Math.floor(deterministicRandom() * 18) + 10; // 10 to 28 fragments per stream
-    let currentOffset = 0;
+  // Profile Circle Breathing (Period 5s = 150 frames, offset phase)
+  const scaleProfile = interpolate((frame + 35) % 150, [0, 75, 150], [1, 1.06, 1], { easing: Easing.inOut(Easing.quad) });
 
-    for (let i = 0; i < numFrags; i++) {
-        const h = deterministicRandom() * 240 + 60; // Height of this block (60px to 300px)
-        const gap = deterministicRandom() * 50 + 20; // Gap before next block
-        
-        // Opacity decays the further up the tail it goes
-        const alpha = maxAlpha * Math.pow(1 - (i / numFrags), 1.8); 
-        
-        // Pre-calculate randomized parameters
-        const bitPattern: boolean[] = [];
-        if (type === 2) {
-            for (let b = 0; b < 30; b++) {
-                bitPattern.push(deterministicRandom() > 0.35); 
-            }
-        }
-        
-        let hexCount = 0;
-        if (type === 3) {
-            hexCount = Math.floor(h / (width * 0.9)) + 1; // Fit hexagons along height
-        }
-
-        fragments.push({ 
-            offset: currentOffset, 
-            h, 
-            alpha, 
-            isHead: i === 0,
-            bits: bitPattern,
-            hexCount
-        });
-        
-        currentOffset += h + gap;
-    }
-
-    return {
-        x,
-        width,
-        cycles,
-        maxAlpha,
-        glow,
-        baseY,
-        color,
-        type,
-        fragments
-    };
-}
-
-// Generate streams across columns, stratified by depth layers
-for (let c = 0; c < COLUMNS; c++) {
-    // Every column gets a slow background stream
-    STREAMS.push(createStreamConfig(c, 0));
-    
-    // 45% chance for a midground stream
-    if (deterministicRandom() > 0.55) {
-        STREAMS.push(createStreamConfig(c, 1));
-    }
-    
-    // 25% chance for an intense, fast foreground stream
-    if (deterministicRandom() > 0.75) {
-        STREAMS.push(createStreamConfig(c, 2));
-    }
-}
-
-// Hexagon utility
-function drawHex(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) {
-    ctx.beginPath();
-    ctx.moveTo(x + width * 0.5, y);
-    ctx.lineTo(x + width, y + height * 0.25);
-    ctx.lineTo(x + width, y + height * 0.75);
-    ctx.lineTo(x + width * 0.5, y + height);
-    ctx.lineTo(x, y + height * 0.75);
-    ctx.lineTo(x, y + height * 0.25);
-    ctx.closePath();
-    ctx.fill();
-}
-
-function renderAt(ctx: CanvasRenderingContext2D, s: StreamConfig, x: number, y: number) {
-    ctx.save();
-    ctx.translate(x, y);
-
-    for (let f of s.fragments) {
-        let yDraw = -f.offset; 
-        
-        // Set color and dynamic opacity
-        ctx.fillStyle = `rgba(${s.color.r}, ${s.color.g}, ${s.color.b}, ${f.alpha})`;
-        
-        // Apply radiant glow effect, strongest on the head
-        if (s.glow > 0) {
-            ctx.shadowBlur = f.isHead ? s.glow : s.glow * 0.5;
-            ctx.shadowColor = `rgb(${s.color.r}, ${s.color.g}, ${s.color.b})`;
-            // Add a small offset to the shadow for extra depth
-            ctx.shadowOffsetX = f.isHead ? 2 : 1;
-            ctx.shadowOffsetY = f.isHead ? 2 : 1;
-        } else {
-            ctx.shadowBlur = 0;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 0;
-        }
-
-        // Render Geometric Abstract Data based on Type
-        if (s.type === 0) {
-            // TYPE 0: Solid Cryptographic Blocks
-            ctx.fillRect(0, yDraw - f.h, s.width, f.h);
-        } 
-        else if (s.type === 1) {
-            // TYPE 1: Horizontal Barcode Dashes
-            let dashHeight = 5;
-            let space = 7;
-            for (let dy = 0; dy < f.h; dy += dashHeight + space) {
-                let actualH = Math.min(dashHeight, f.h - dy);
-                ctx.fillRect(0, yDraw - dy - actualH, s.width, actualH);
-            }
-        } 
-        else if (s.type === 2) {
-            // TYPE 2: Dual-lane Micro-Grid Packets
-            let laneW = (s.width / 2) - 3;
-            if (laneW > 3) {
-                let cellH = laneW;
-                let space = 4;
-                let bitIndex = 0;
-                for (let dy = 0; dy < f.h; dy += cellH + space) {
-                    let actualH = Math.min(cellH, f.h - dy);
-                    // Left Lane
-                    if (f.bits[bitIndex % f.bits.length]) {
-                        ctx.fillRect(0, yDraw - dy - actualH, laneW, actualH);
-                    }
-                    // Right Lane
-                    if (f.bits[(bitIndex + 1) % f.bits.length]) {
-                        ctx.fillRect(laneW + 6, yDraw - dy - actualH, laneW, actualH);
-                    }
-                    bitIndex += 2;
-                }
-            } else {
-                ctx.fillRect(0, yDraw - f.h, s.width, f.h);
-            }
-        }
-        else if (s.type === 3) {
-            // TYPE 3: Hexagonal Core Packets
-            let hexW = s.width;
-            let hexH = hexW * 0.866; // Standard hexagon aspect ratio
-            let space = hexH * 0.2;
-            let yOffset = 0;
-            for (let i = 0; i < f.hexCount; i++) {
-                let drawY = yDraw - yOffset - hexH;
-                if (drawY + hexH > yDraw - f.h) {
-                    drawHex(ctx, 0, drawY, hexW, hexH);
-                }
-                yOffset += hexH + space;
-            }
-        }
-    }
-    ctx.restore();
-}
-
-function drawStream(ctx: CanvasRenderingContext2D, s: StreamConfig, t: number) {
-    // Calculate the true normalized Y based on loop progress and speed multiplier
-    let yNorm = (s.baseY + t * s.cycles) % 1.0;
-    let yBase = yNorm * H;
-
-    // Draw multiple vertical copies for the seamless wrapping
-    renderAt(ctx, s, s.x, yBase - H);
-    renderAt(ctx, s, s.x, yBase);
-    renderAt(ctx, s, s.x, yBase + H);
-    renderAt(ctx, s, s.x, yBase + (H * 2));
-}
-
-export const CyberDataStream: React.FC = () => {
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const { width, height, fps } = useVideoConfig();
-    const frame = useCurrentFrame();
-
-    // Responsive adaptation wrapper styling
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
-
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d', { alpha: false });
-        if (!ctx) return;
-
-        // Loop cycles seamlessly every 10 seconds (based on fps)
-        const loopDurationInFrames = fps * 10;
-        const t = (frame % loopDurationInFrames) / loopDurationInFrames;
-
-        // Reset composite mode to draw background
-        ctx.globalCompositeOperation = 'source-over';
-
-        // Draw deep cinematic gradient background with purple tint
-        const bgGrad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W);
-        bgGrad.addColorStop(0, '#1A102A'); // Lighter purple center
-        bgGrad.addColorStop(1, '#050308'); // Dark, purple-black edges
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, W, H);
-
-        // Add visual micro-grid dot overlay to the background
-        ctx.fillStyle = "rgba(50, 20, 80, 0.1)";
-        for (let dx = 0; dx < W; dx += 64) {
-            for (let dy = 0; dy < H; dy += 64) {
-                ctx.fillRect(dx, dy, 2, 2);
-            }
-        }
-
-        // Set composite mode to Screen for beautiful dynamic neon bloom layering
-        ctx.globalCompositeOperation = 'screen';
-
-        // Render all pre-computed streams
-        for (let i = 0; i < STREAMS.length; i++) {
-            drawStream(ctx, STREAMS[i], t);
-        }
-    }, [frame, fps]);
-
-    const containerStyle: React.CSSProperties = {
-        width: '100%',
-        height: '100%',
-        backgroundColor: '#050308',
-        position: 'relative',
-        overflow: 'hidden',
-    };
-
-    const wrapperStyle: React.CSSProperties = {
+  return (
+    <div
+      style={{
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
         position: 'absolute',
@@ -311,25 +108,274 @@ export const CyberDataStream: React.FC = () => {
         transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
         overflow: 'hidden',
-    };
+        backgroundColor: '#111',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        boxShadow: '0 0 30px rgba(0,0,0,0.8)',
+      }}
+    >
+      {/* 1. Dynamic Background Layer */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'linear-gradient(135deg, #2b0000 0%, #aa0000 25%, #400000 50%, #e60000 75%, #2b0000 100%)',
+          backgroundSize: '400% 400%',
+          backgroundPosition: `${bgX}% 50%`,
+          zIndex: 0,
+        }}
+      />
 
-    return (
-        <div style={containerStyle}>
-            <div style={wrapperStyle}>
-                <canvas
-                    ref={canvasRef}
-                    width={ORIGINAL_WIDTH}
-                    height={ORIGINAL_HEIGHT}
-                    style={{
-                        width: '100%',
-                        height: '100%',
-                        display: 'block',
-                    }}
-                />
-            </div>
+      {/* 2. Abstract Red Decorative Waves (Skewed) */}
+      <div
+        style={{
+          position: 'absolute',
+          width: '3840px', // 200%
+          height: '540px', // 50%
+          top: '-108px', // -10%
+          left: '-960px', // -50%
+          background: 'linear-gradient(90deg, rgba(255,0,0,0) 0%, rgba(200,0,0,0.4) 50%, rgba(255,0,0,0) 100%)',
+          transform: `skewX(-45deg) translateX(${transXAtas}%)`,
+          opacity: opacityAtas,
+          zIndex: 1,
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          width: '3840px', // 200%
+          height: '756px', // 70%
+          bottom: '-216px', // -20%
+          right: '-960px', // -50%
+          background: 'linear-gradient(90deg, rgba(150,0,0,0) 0%, rgba(255,0,0,0.2) 50%, rgba(150,0,0,0) 100%)',
+          transform: `skewX(-45deg) translateX(${transXBawah}%)`,
+          opacity: opacityBawah,
+          zIndex: 1,
+        }}
+      />
+
+      {/* 3. Meteor Lines */}
+      <div
+        style={{
+          position: 'absolute',
+          width: '288px', // 15cqw
+          height: '3.84px', // 0.2cqw
+          background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+          transform: `rotate(-45deg) translateX(${mX1}px)`,
+          top: '-192px', // -10cqw
+          right: '192px', // 10cqw
+          zIndex: 1,
+          opacity: mOp1,
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          width: '384px', // 20cqw
+          height: '3.84px', // 0.2cqw
+          background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+          transform: `rotate(-45deg) translateX(${mX2}px)`,
+          top: '192px', // 10cqw
+          right: '-192px', // -10cqw
+          zIndex: 1,
+          opacity: mOp2,
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          width: '192px', // 10cqw
+          height: '3.84px', // 0.2cqw
+          background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+          transform: `rotate(-45deg) translateX(${mX3}px)`,
+          top: '-384px', // -20cqw
+          right: '960px', // 50cqw
+          zIndex: 1,
+          opacity: mOp3,
+        }}
+      />
+
+      {/* Header "SUBSCRIBE" Area */}
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 2,
+          marginTop: '96px', // 5cqw
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <div
+          style={{
+            color: '#ffffff',
+            fontFamily: "'Impact', 'Arial Black', sans-serif",
+            fontSize: '115.2px', // 6cqw
+            fontStyle: 'italic',
+            fontWeight: 900,
+            letterSpacing: '3.84px', // 0.2cqw
+            textTransform: 'uppercase',
+            position: 'relative',
+            padding: '28.8px 57.6px', // 1.5cqw 3cqw
+            overflow: 'hidden',
+          }}
+        >
+          {/* Animated border lines */}
+          <span
+            style={{
+              position: 'absolute',
+              background: '#ffffff',
+              top: 0,
+              left: `${leftPos1}%`,
+              width: '100%',
+              height: '5.76px', // 0.3cqw
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              background: '#ffffff',
+              top: `${topPos2}%`,
+              right: 0,
+              width: '5.76px', // 0.3cqw
+              height: '100%',
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              background: '#ffffff',
+              bottom: 0,
+              right: `${rightPos3}%`,
+              width: '100%',
+              height: '5.76px', // 0.3cqw
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              background: '#ffffff',
+              bottom: `${bottomPos4}%`,
+              left: 0,
+              width: '5.76px', // 0.3cqw
+              height: '100%',
+            }}
+          />
+          SUBSCRIBE
         </div>
-    );
+      </div>
+
+      {/* Content Area */}
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 2,
+          display: 'flex',
+          width: '86%', // 1651.2px
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: '115.2px', // 6cqw
+        }}
+      >
+        {/* Left Watch More Box */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            width: '512px', // 31%
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              height: '288px', // aspect-ratio 16:9
+              backgroundColor: '#ffffff',
+              borderRadius: '7.68px', // 0.4cqw
+              transform: `scale(${scaleLeft})`,
+              boxShadow: `0 ${shadowLeft}px ${shadowLeft * 2}px rgba(0, 0, 0, 0.4)`,
+              transformOrigin: 'center center',
+            }}
+          />
+          <div
+            style={{
+              color: '#ffffff',
+              fontSize: '38.4px', // 2cqw
+              marginTop: '28.8px', // 1.5cqw
+              fontWeight: 300,
+              letterSpacing: '1.92px', // 0.1cqw
+              textTransform: 'uppercase',
+              textAlign: 'left',
+              fontFamily: "'Arial', sans-serif",
+            }}
+          >
+            WATCH MORE
+          </div>
+        </div>
+
+        {/* Center Profile Circle */}
+        <div
+          style={{
+            width: '363px', // 22%
+            display: 'flex',
+            justifyContent: 'center',
+            marginTop: '-57.6px', // -3cqw
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              height: '363px', // aspect-ratio 1:1
+              backgroundColor: '#ffffff',
+              borderRadius: '50%',
+              transform: `scale(${scaleProfile})`,
+              boxShadow: '0 19.2px 38.4px rgba(0, 0, 0, 0.4)',
+              transformOrigin: 'center center',
+            }}
+          />
+        </div>
+
+        {/* Right Suggestion Box */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            width: '512px', // 31%
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              height: '288px', // aspect-ratio 16:9
+              backgroundColor: '#ffffff',
+              borderRadius: '7.68px', // 0.4cqw
+              transform: `scale(${scaleRight})`,
+              boxShadow: `0 ${shadowRight}px ${shadowRight * 2}px rgba(0, 0, 0, 0.4)`,
+              transformOrigin: 'center center',
+            }}
+          />
+          <div
+            style={{
+              color: '#ffffff',
+              fontSize: '38.4px', // 2cqw
+              marginTop: '28.8px', // 1.5cqw
+              fontWeight: 300,
+              letterSpacing: '1.92px', // 0.1cqw
+              textTransform: 'uppercase',
+              textAlign: 'right',
+              fontFamily: "'Arial', sans-serif",
+            }}
+          >
+            MY SUGGESTION
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-export default CyberDataStream;
+export default YoutubeEndScreen;
 // END_OF_FILE
