@@ -1,511 +1,429 @@
 import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
 
-// DETERMINISTIC RANDOM GENERATION FOR PARTICLES/TRAILS (OUTSIDE COMPONENT)
-const SEED = 88;
-const random = (i: number) => {
-    const x = Math.sin(i * 9876.54) * 10000;
-    return x - Math.floor(x);
-};
+// Deterministic seed generation for digital cyberpunk particles
+const PARTICLE_COUNT = 300;
+const SEED_PARTICLES = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+  const r1 = Math.sin(i * 12.9898) * 43758.5453 % 1;
+  const r2 = Math.cos(i * 78.233) * 43758.5453 % 1;
+  const r3 = Math.sin(i * 45.123) * 12345.6789 % 1;
+  return {
+    x: (r1 - 0.5) * 2000,
+    y: (r2 - 0.5) * 1500,
+    z: Math.abs(r3) * 1000,
+    speed: 3 + Math.abs(r1) * 5,
+    size: 2 + Math.abs(r2) * 4,
+  };
+});
 
-const TRAILS = Array.from({ length: 30 }).map((_, i) => ({
-    x: (random(i * 5) - 0.5) * 2000,
-    y: (random(i * 5 + 1) - 0.5) * 1000,
-    speed: 0.003 + random(i * 5 + 2) * 0.007,
-    color: random(i * 5 + 3) > 0.5 ? '#00ffff' : '#0055ff',
-    initialProgress: random(i * 5 + 4),
-}));
+// Deterministic structural glitch triggers
+const GLITCH_TIMINGS = Array.from({ length: 45 }, (_, i) => {
+  const r = Math.sin(i * 99.123) * 43758.5453 % 1;
+  return Math.abs(r);
+});
 
-export const CinematicSciFiEsportsEndscreen = () => {
-    const frame = useCurrentFrame();
-    const { width, height, fps } = useVideoConfig();
+export const ProceduralCyberpunkEndScreen = () => {
+  const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
 
-    const ORIGINAL_WIDTH = 1920;
-    const ORIGINAL_HEIGHT = 1080;
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+  const ORIGINAL_WIDTH = 1920;
+  const ORIGINAL_HEIGHT = 1080;
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    // Dynamic looping timeline (15 seconds, matches 900 frames at 60fps)
-    const cycleDuration = fps * 15;
-    const localFrame = frame % cycleDuration;
+  // 15-second loop duration
+  const LOOP_FRAMES = fps * 15;
+  const localFrame = frame % LOOP_FRAMES;
+  const progress = localFrame / LOOP_FRAMES;
 
-    // Camera drift emulation (deterministic sine sweeps)
-    const cameraX = Math.sin((localFrame / cycleDuration) * Math.PI * 4) * 45;
-    const cameraY = Math.cos((localFrame / cycleDuration) * Math.PI * 3) * 30;
+  // React canvas rendering for infinite cyberpunk tunnel & particles
+  const canvasRef = (canvas: HTMLCanvasElement | null) => {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    // Outer thick border breathing (Video slots)
-    const borderPulse = Math.sin((localFrame / 90) * Math.PI * 2);
-    const borderColor = interpolate(borderPulse, [-1, 1], [0.0, 1.0]);
-    const borderGlowColor = `rgba(0, ${Math.floor(179 + borderColor * 76)}, ${Math.floor(179 + borderColor * 76)}, 1)`;
-    const borderGlowShadow = interpolate(borderPulse, [-1, 1], [30, 70]);
+    // Clear background
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
 
-    // Video Slots Inner Pulse overlay opacity
-    const innerPulseLeft = interpolate(
-        Math.sin((localFrame / 120) * Math.PI * 2),
-        [-1, 1],
-        [0.1, 0.45]
-    );
-    const innerPulseRight = interpolate(
-        Math.sin(((localFrame + 60) / 120) * Math.PI * 2),
-        [-1, 1],
-        [0.1, 0.45]
-    );
+    // Apply camera subtle motion/roll
+    const cameraRotation = Math.sin(progress * Math.PI * 2.0) * 0.05;
+    const cameraX = Math.cos(progress * Math.PI * 2.0) * 15;
+    const cameraY = Math.sin(progress * Math.PI * 2.0) * 15;
+    const centerX = 960 + cameraX;
+    const centerY = 540 + cameraY;
 
-    // Scanning lines frame calculation
-    const leftScanTop = interpolate(
-        (localFrame % 180),
-        [0, 180],
-        [-50, 326]
-    );
-    const rightScanTop = interpolate(
-        ((localFrame + 90) % 180),
-        [0, 180],
-        [-50, 326]
-    );
+    ctx.save();
+    ctx.translate(960, 540);
+    ctx.rotate(cameraRotation);
+    ctx.translate(-960, -540);
 
-    // Rotating Hologram Rings
-    const sr1Rotation = (localFrame * 0.5) % 360;
-    const sr2Rotation = -(localFrame * 0.7) % 360;
+    // 1. Draw Volumetric Tunnel Rings (Infinite Tunnel)
+    const NUM_RINGS = 20;
+    for (let i = 0; i < NUM_RINGS; i++) {
+      const ringProgress = ((i / NUM_RINGS) - progress + 1.0) % 1.0;
+      const depth = Math.pow(ringProgress, 2.5); // Perspective scaling
+      const radius = depth * 1500;
 
-    // Sub core pulse
-    const coreScale = interpolate(
-        Math.sin((localFrame / 90) * Math.PI * 2),
-        [-1, 1],
-        [0.96, 1.08]
-    );
-    const coreShadow = interpolate(
-        Math.sin((localFrame / 90) * Math.PI * 2),
-        [-1, 1],
-        [40, 80]
-    );
+      // Radial structural wave deformation matching original shader math
+      const wave = Math.sin(ringProgress * 40 - progress * Math.PI * 6) * 15 * (1 - depth);
+      const finalRadius = radius + wave;
 
-    // HUD Accent horizontal positions
-    const topAccentLeft = interpolate(
-        Math.sin((localFrame / 240) * Math.PI * 2),
-        [-1, 1],
-        [0, 1100]
-    );
-    const bottomAccentRight = interpolate(
-        Math.sin((localFrame / 240) * Math.PI * 2),
-        [-1, 1],
-        [0, 700]
-    );
+      // Depth Fading / Fog
+      const fog = Math.sin(ringProgress * Math.PI) * 0.6;
+      if (finalRadius > 10 && fog > 0) {
+        // Neon Gradient Color interpolation (Hot Cyan to Deep Magenta)
+        const r = Math.floor(interpolate(ringProgress, [0, 1], [0, 255]));
+        const g = Math.floor(interpolate(ringProgress, [0, 1], [255, 0]));
+        const b = Math.floor(interpolate(ringProgress, [0, 1], [255, 255]));
 
-    // Chunks geometric parallax floating paths
-    const chunk1Y = 200 + Math.sin((localFrame / 120) * Math.PI * 2) * 45;
-    const chunk1RotX = (localFrame * 0.6) % 360;
-    const chunk1RotY = (localFrame * 1.2) % 360;
+        // Dual stroke rendering for Unreal Bloom replication
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${fog * 0.25})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, finalRadius, 0, Math.PI * 2);
+        ctx.stroke();
 
-    const chunk2Y = -200 + Math.cos((localFrame / 120) * Math.PI * 2) * 45;
-    const chunk2RotX = -(localFrame * 1.2) % 360;
-    const chunk2RotY = -(localFrame * 0.6) % 360;
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${fog * 0.9})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, finalRadius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
 
-    // Cyberpunk Grid Scrolling Animation (linear looping coordinate)
-    const gridShiftY = interpolate(
-        (localFrame % 30),
-        [0, 30],
-        [0, 120]
-    );
+    // 2. Draw Tunnel Radial Connectors (Wireframe Grid Lines)
+    const NUM_RADIALS = 16;
+    for (let j = 0; j < NUM_RADIALS; j++) {
+      const angle = (j / NUM_RADIALS) * Math.PI * 2;
+      ctx.beginPath();
 
-    return (
-        <div
-            style={{
-                position: 'absolute',
-                width: ORIGINAL_WIDTH,
-                height: ORIGINAL_HEIGHT,
-                backgroundColor: '#010103',
-                top: '50%',
-                left: '50%',
-                transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-                transformOrigin: 'center center',
-                overflow: 'hidden',
-                color: '#fff',
-                fontFamily: `'Segoe UI', Roboto, Helvetica, sans-serif`,
-            }}
-        >
-            {/* 3D WEBGL EMULATION CONTAINER */}
-            <div
-                style={{
-                    position: 'absolute',
-                    width: '100%',
-                    height: '100%',
-                    transform: `translate(${cameraX}px, ${cameraY}px)`,
-                    pointerEvents: 'none',
-                    zIndex: 1,
-                }}
+      for (let s = 0; s <= 30; s++) {
+        const stepProgress = s / 30;
+        const depth = Math.pow(stepProgress, 2.5);
+        const radius = depth * 1500;
+        const wave = Math.sin(stepProgress * 40 - progress * Math.PI * 6) * 15 * (1 - depth);
+        const finalRadius = radius + wave;
+
+        const px = centerX + Math.cos(angle) * finalRadius;
+        const py = centerY + Math.sin(angle) * finalRadius;
+
+        if (s === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
+      }
+
+      // Draw glowing structural radial line
+      ctx.strokeStyle = 'rgba(0, 255, 255, 0.15)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(0, 255, 255, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // 3. Digital Particles (Deterministic wrap-around motion)
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const particle = SEED_PARTICLES[i];
+      const currentZ = (particle.z - progress * 1000 + 1000) % 1000;
+      
+      // Infinite perspective projection
+      const projFactor = 350 / (currentZ + 1);
+      const px = centerX + particle.x * projFactor;
+      const py = centerY + particle.y * projFactor;
+      const size = particle.size * projFactor * 0.4;
+
+      // Fade visual edges
+      const fog = Math.sin((currentZ / 1000) * Math.PI);
+      if (px >= 0 && px <= ORIGINAL_WIDTH && py >= 0 && py <= ORIGINAL_HEIGHT && currentZ > 10) {
+        ctx.fillStyle = `rgba(255, 0, 255, ${fog * 0.75})`;
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(0.2, size), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 4. Glitch / Random Digital Overlay Matrix lines
+    const glitchSeedIdx = Math.floor(localFrame % GLITCH_TIMINGS.length);
+    if (GLITCH_TIMINGS[glitchSeedIdx] > 0.85) {
+      ctx.fillStyle = 'rgba(0, 255, 255, 0.12)';
+      const barHeight = GLITCH_TIMINGS[glitchSeedIdx] * 40;
+      const barY = GLITCH_TIMINGS[(glitchSeedIdx + 1) % GLITCH_TIMINGS.length] * ORIGINAL_HEIGHT;
+      ctx.fillRect(0, barY, ORIGINAL_WIDTH, barHeight);
+    }
+
+    ctx.restore();
+  };
+
+  // GSAP Timeline to Remotion Interpolations
+  const boxScale = interpolate(
+    localFrame,
+    [0, 150, 156, 180, 510, 516, 540, 900],
+    [1, 1, 1.02, 1, 1, 1.02, 1, 1],
+    {
+      easing: Easing.bezier(0.25, 1, 0.5, 1),
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    }
+  );
+
+  const subScale = interpolate(
+    localFrame,
+    [0, 150, 156, 180, 510, 516, 540, 900],
+    [1, 1, 1.01, 1, 1, 1.05, 1, 1],
+    {
+      easing: Easing.bezier(0.25, 1, 0.5, 1),
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    }
+  );
+
+  // Exact CSS inline styles mimicking original HTML definitions
+  const bodyStyle: React.CSSProperties = {
+    backgroundColor: '#000000',
+    margin: 0,
+    padding: 0,
+    width: '100vw',
+    height: '100vh',
+    overflow: 'hidden',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'none',
+  };
+
+  const appContainerStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+  };
+
+  const webglCanvasStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    zIndex: 1,
+  };
+
+  const uiLayerStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    zIndex: 2,
+  };
+
+  const baseVideoPlaceholderStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 640,
+    height: 360,
+    top: 360,
+  };
+
+  const leftBoxStyle: React.CSSProperties = {
+    ...baseVideoPlaceholderStyle,
+    left: 160,
+  };
+
+  const rightBoxStyle: React.CSSProperties = {
+    ...baseVideoPlaceholderStyle,
+    right: 160,
+  };
+
+  const subPlaceholderStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    left: 860,
+    bottom: 100,
+  };
+
+  const chromaBoxStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#00FF00',
+    boxShadow: 'inset 0 0 0 2px rgba(0, 0, 0, 1)',
+  };
+
+  const chromaCircleStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#00FF00',
+    borderRadius: '50%',
+    boxShadow: 'inset 0 0 0 2px rgba(0, 0, 0, 1)',
+  };
+
+  const hudBorderStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: -30,
+    left: -30,
+    width: 700,
+    height: 420,
+  };
+
+  const hudBorderCircleStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: -30,
+    left: -30,
+    width: 260,
+    height: 260,
+  };
+
+  const glitchWrapperStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+  };
+
+  return (
+    <div style={bodyStyle}>
+      <div id="app-container" style={appContainerStyle}>
+        
+        {/* Procedural WebGL Simulation via Deterministic high-framerate Canvas 2D */}
+        <canvas 
+          ref={canvasRef} 
+          id="webgl-canvas" 
+          width={ORIGINAL_WIDTH} 
+          height={ORIGINAL_HEIGHT} 
+          style={webglCanvasStyle} 
+        />
+
+        <div id="ui-layer" style={uiLayerStyle}>
+            
+          {/* Left Video Placeholder Component */}
+          <div className="video-placeholder left-box" style={leftBoxStyle}>
+            <div 
+              className="glitch-wrapper box-fx" 
+              style={{
+                ...glitchWrapperStyle,
+                transform: `scale(${boxScale})`,
+                transformOrigin: 'center center'
+              }}
             >
-                {/* CEILING CYBERPUNK GRID */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        width: '6000px',
-                        height: '3000px',
-                        left: '-2040px',
-                        top: '-1500px',
-                        backgroundImage: `
-                            linear-gradient(to right, rgba(0, 170, 255, 0.15) 2px, transparent 2px),
-                            linear-gradient(to bottom, rgba(0, 170, 255, 0.15) 2px, transparent 2px)
-                        `,
-                        backgroundSize: '120px 120px',
-                        backgroundPositionY: `${gridShiftY}px`,
-                        transform: 'perspective(1000px) rotateX(-80deg)',
-                        transformOrigin: 'center bottom',
-                        opacity: 0.8,
-                    }}
+              <svg className="hud-border" style={hudBorderStyle} viewBox="0 0 700 420" xmlns="http://www.w3.org/2000/svg">
+                <path d="M 30 60 L 30 30 L 60 30" fill="none" stroke="#FF00FF" strokeWidth="4" strokeLinecap="square"/>
+                <path d="M 670 60 L 670 30 L 640 30" fill="none" stroke="#FF00FF" strokeWidth="4" strokeLinecap="square"/>
+                <path d="M 30 360 L 30 390 L 60 390" fill="none" stroke="#FF00FF" strokeWidth="4" strokeLinecap="square"/>
+                <path d="M 670 360 L 670 390 L 640 390" fill="none" stroke="#FF00FF" strokeWidth="4" strokeLinecap="square"/>
+                <rect x="25" y="25" width="650" height="370" fill="none" stroke="#00FFFF" strokeWidth="1" opacity="0.3"/>
+                
+                {/* Clockwise energy flowing stroke line */}
+                <path 
+                  className="energy-line-cw" 
+                  d="M 25 25 h 650 v 370 h -650 z" 
+                  fill="none" 
+                  stroke="#00FFFF" 
+                  strokeWidth="3" 
+                  strokeDasharray="510 510"
+                  strokeDashoffset={-(2040 * progress)}
                 />
-
-                {/* FLOOR CYBERPUNK GRID */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        width: '6000px',
-                        height: '3000px',
-                        left: '-2040px',
-                        bottom: '-1500px',
-                        backgroundImage: `
-                            linear-gradient(to right, rgba(0, 170, 255, 0.15) 2px, transparent 2px),
-                            linear-gradient(to bottom, rgba(0, 170, 255, 0.15) 2px, transparent 2px)
-                        `,
-                        backgroundSize: '120px 120px',
-                        backgroundPositionY: `${gridShiftY}px`,
-                        transform: 'perspective(1000px) rotateX(80deg)',
-                        transformOrigin: 'center top',
-                        opacity: 0.8,
-                    }}
-                />
-
-                {/* ENERGY SWEEP TRAILS (Z-DEPTH EMULATION) */}
-                <div style={{ position: 'absolute', width: '100%', height: '100%' }}>
-                    {TRAILS.map((trail, index) => {
-                        const progress = ((trail.initialProgress + localFrame * trail.speed) % 1);
-                        const z = interpolate(progress, [0, 1], [0.1, 3.2]);
-                        const x = trail.x * z;
-                        const y = trail.y * z;
-                        const opacity = interpolate(progress, [0, 0.1, 0.85, 1], [0, 0.75, 0.75, 0]);
-                        const scale = z;
-                        const heightLength = 150 * z;
-
-                        return (
-                            <div
-                                key={index}
-                                style={{
-                                    position: 'absolute',
-                                    left: '50%',
-                                    top: '50%',
-                                    width: 6,
-                                    height: heightLength,
-                                    backgroundColor: trail.color,
-                                    boxShadow: `0 0 20px ${trail.color}`,
-                                    transform: `translate(-50%, -50%) translate3d(${x}px, ${y}px, 0) scale(${scale})`,
-                                    opacity,
-                                    pointerEvents: 'none',
-                                }}
-                            />
-                        );
-                    })}
-                </div>
-
-                {/* FLOATING GEOMETRIC CHUNKS */}
-                {/* Left Wireframe Chunk */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        left: '50%',
-                        top: '50%',
-                        transform: `translate(-50%, -50%) translate3d(-800px, ${chunk1Y - 540}px, 0) rotateX(${chunk1RotX}deg) rotateY(${chunk1RotY}deg)`,
-                    }}
-                >
-                    <svg viewBox="-50 -50 100 100" style={{ width: 140, height: 140 }}>
-                        <polygon points="0,-40 -35,0 0,20" stroke="#00ffff" fill="rgba(0,255,255,0.1)" strokeWidth={1.5} />
-                        <polygon points="0,-40 35,0 0,20" stroke="#00ffff" fill="rgba(0,255,255,0.05)" strokeWidth={1.5} />
-                        <polygon points="0,40 -35,0 0,20" stroke="#00ffff" fill="rgba(0,255,255,0.15)" strokeWidth={1.5} />
-                        <polygon points="0,40 35,0 0,20" stroke="#00ffff" fill="rgba(0,255,255,0.2)" strokeWidth={1.5} />
-                    </svg>
-                </div>
-
-                {/* Right Wireframe Chunk */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        left: '50%',
-                        top: '50%',
-                        transform: `translate(-50%, -50%) translate3d(800px, ${chunk2Y - 540}px, 0) rotateX(${chunk2RotX}deg) rotateY(${chunk2RotY}deg)`,
-                    }}
-                >
-                    <svg viewBox="-50 -50 100 100" style={{ width: 140, height: 140 }}>
-                        <polygon points="0,-40 -35,0 0,20" stroke="#00ffff" fill="rgba(0,255,255,0.1)" strokeWidth={1.5} />
-                        <polygon points="0,-40 35,0 0,20" stroke="#00ffff" fill="rgba(0,255,255,0.05)" strokeWidth={1.5} />
-                        <polygon points="0,40 -35,0 0,20" stroke="#00ffff" fill="rgba(0,255,255,0.15)" strokeWidth={1.5} />
-                        <polygon points="0,40 35,0 0,20" stroke="#00ffff" fill="rgba(0,255,255,0.2)" strokeWidth={1.5} />
-                    </svg>
-                </div>
-
-                {/* DEPTH VIGNETTE & FOG COUPLING */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        background: 'radial-gradient(circle, transparent 35%, rgba(1, 1, 3, 0.95) 90%)',
-                        pointerEvents: 'none',
-                    }}
-                />
+              </svg>
             </div>
+            <div className="chroma-box" style={chromaBoxStyle} />
+          </div>
 
-            {/* UI LAYER OVERLAYS */}
-            <div
-                id="ui-layer"
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: 1920,
-                    height: 1080,
-                    zIndex: 2,
-                    pointerEvents: 'none',
-                }}
+          {/* Right Video Placeholder Component */}
+          <div className="video-placeholder right-box" style={rightBoxStyle}>
+            <div 
+              className="glitch-wrapper box-fx" 
+              style={{
+                ...glitchWrapperStyle,
+                transform: `scale(${boxScale})`,
+                transformOrigin: 'center center'
+              }}
             >
-                {/* TOP HUD BAR */}
-                <div
-                    className="hud-bar top"
-                    style={{
-                        position: 'absolute',
-                        height: 6,
-                        background: '#00ffff',
-                        boxShadow: '0 0 20px #00ffff',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        top: 120,
-                        width: 1200,
-                    }}
-                >
-                    <div
-                        className="hud-accent"
-                        style={{
-                            position: 'absolute',
-                            width: 100,
-                            height: 6,
-                            background: '#fff',
-                            boxShadow: '0 0 20px #fff',
-                            top: 0,
-                            left: topAccentLeft,
-                        }}
-                    />
-                </div>
-
-                {/* LEFT HUD BRACKET */}
-                <div
-                    className="hud-bracket left"
-                    style={{
-                        position: 'absolute',
-                        width: 80,
-                        height: 180,
-                        border: '6px solid #00ffff',
-                        top: 450,
-                        boxShadow: '0 0 20px rgba(0, 255, 255, 0.5)',
-                        left: 40,
-                        borderRight: 'none',
-                    }}
+              <svg className="hud-border" style={hudBorderStyle} viewBox="0 0 700 420" xmlns="http://www.w3.org/2000/svg">
+                <path d="M 30 60 L 30 30 L 60 30" fill="none" stroke="#FF00FF" strokeWidth="4" strokeLinecap="square"/>
+                <path d="M 670 60 L 670 30 L 640 30" fill="none" stroke="#FF00FF" strokeWidth="4" strokeLinecap="square"/>
+                <path d="M 30 360 L 30 390 L 60 390" fill="none" stroke="#FF00FF" strokeWidth="4" strokeLinecap="square"/>
+                <path d="M 670 360 L 670 390 L 640 390" fill="none" stroke="#FF00FF" strokeWidth="4" strokeLinecap="square"/>
+                <rect x="25" y="25" width="650" height="370" fill="none" stroke="#00FFFF" strokeWidth="1" opacity="0.3"/>
+                
+                {/* Counter-Clockwise energy flowing stroke line */}
+                <path 
+                  className="energy-line-ccw" 
+                  d="M 25 25 h 650 v 370 h -650 z" 
+                  fill="none" 
+                  stroke="#00FFFF" 
+                  strokeWidth="3" 
+                  strokeDasharray="510 510"
+                  strokeDashoffset={2040 * progress}
                 />
-
-                {/* LEFT VIDEO SLOT */}
-                <div
-                    className="video-slot left"
-                    style={{
-                        position: 'absolute',
-                        width: 580,
-                        height: 326,
-                        top: 377,
-                        border: `6px solid ${borderGlowColor}`,
-                        boxSizing: 'border-box',
-                        background: 'rgba(0, 15, 35, 0.45)',
-                        backdropFilter: 'blur(12px)',
-                        boxShadow: `0 0 ${borderGlowShadow}px rgba(0, 255, 255, 0.4), inset 0 0 50px rgba(0, 255, 255, 0.15)`,
-                        overflow: 'hidden',
-                        left: 100,
-                    }}
-                >
-                    <div className="corner corner-tl" style={{ position: 'absolute', width: 50, height: 50, border: '10px solid transparent', zIndex: 3, top: -10, left: -10, borderTopColor: '#fff', borderLeftColor: '#fff' }} />
-                    <div className="corner corner-br" style={{ position: 'absolute', width: 50, height: 50, border: '10px solid transparent', zIndex: 3, bottom: -10, right: -10, borderBottomColor: '#fff', borderRightColor: '#fff' }} />
-                    <div className="scanline-container" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden' }}>
-                        <div
-                            className="scanline sl-left"
-                            style={{
-                                position: 'absolute',
-                                left: 0,
-                                width: '100%',
-                                height: 50,
-                                background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.8), transparent)',
-                                opacity: 0.6,
-                                top: leftScanTop,
-                            }}
-                        />
-                    </div>
-                    <div
-                        className="pulse-overlay po-left"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            boxShadow: `inset 0 0 80px rgba(0, 255, 255, ${innerPulseLeft})`,
-                        }}
-                    />
-                </div>
-
-                {/* SUBSCRIBE CENTERPIECE */}
-                <div
-                    className="sub-slot"
-                    style={{
-                        position: 'absolute',
-                        width: 380,
-                        height: 380,
-                        top: 350,
-                        left: 770,
-                        borderRadius: '50%',
-                        border: '8px solid #0055ff',
-                        boxShadow: '0 0 80px rgba(0, 85, 255, 0.6), inset 0 0 80px rgba(0, 85, 255, 0.3)',
-                        background: 'rgba(0, 10, 30, 0.5)',
-                        backdropFilter: 'blur(15px)',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                    }}
-                >
-                    <div
-                        className="sub-ring-1 sr1"
-                        style={{
-                            position: 'absolute',
-                            width: 420,
-                            height: 420,
-                            borderRadius: '50%',
-                            border: '4px dashed #00ffff',
-                            boxShadow: '0 0 30px rgba(0, 255, 255, 0.5)',
-                            transform: `rotate(${sr1Rotation}deg)`,
-                        }}
-                    />
-                    <div
-                        className="sub-ring-2 sr2"
-                        style={{
-                            position: 'absolute',
-                            width: 330,
-                            height: 330,
-                            borderRadius: '50%',
-                            border: '6px solid transparent',
-                            borderTopColor: '#00ffff',
-                            borderBottomColor: '#00ffff',
-                            boxShadow: '0 0 40px rgba(0, 255, 255, 0.4)',
-                            transform: `rotate(${sr2Rotation}deg)`,
-                        }}
-                    />
-                    <div
-                        className="sub-core core"
-                        style={{
-                            position: 'absolute',
-                            width: 280,
-                            height: 280,
-                            borderRadius: '50%',
-                            background: 'radial-gradient(circle, rgba(0, 255, 255, 0.25) 0%, rgba(0, 0, 0, 0) 70%)',
-                            border: '3px solid rgba(0, 255, 255, 0.6)',
-                            transform: `scale(${coreScale})`,
-                            boxShadow: `0 0 ${coreShadow}px rgba(0, 255, 255, 0.8)`,
-                        }}
-                    />
-                </div>
-
-                {/* RIGHT VIDEO SLOT */}
-                <div
-                    className="video-slot right"
-                    style={{
-                        position: 'absolute',
-                        width: 580,
-                        height: 326,
-                        top: 377,
-                        border: `6px solid ${borderGlowColor}`,
-                        boxSizing: 'border-box',
-                        background: 'rgba(0, 15, 35, 0.45)',
-                        backdropFilter: 'blur(12px)',
-                        boxShadow: `0 0 ${borderGlowShadow}px rgba(0, 255, 255, 0.4), inset 0 0 50px rgba(0, 255, 255, 0.15)`,
-                        overflow: 'hidden',
-                        right: 100,
-                    }}
-                >
-                    <div className="corner corner-tr" style={{ position: 'absolute', width: 50, height: 50, border: '10px solid transparent', zIndex: 3, top: -10, right: -10, borderTopColor: '#fff', borderRightColor: '#fff' }} />
-                    <div className="corner corner-bl" style={{ position: 'absolute', width: 50, height: 50, border: '10px solid transparent', zIndex: 3, bottom: -10, left: -10, borderBottomColor: '#fff', borderLeftColor: '#fff' }} />
-                    <div className="scanline-container" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden' }}>
-                        <div
-                            className="scanline sl-right"
-                            style={{
-                                position: 'absolute',
-                                left: 0,
-                                width: '100%',
-                                height: 50,
-                                background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.8), transparent)',
-                                opacity: 0.6,
-                                top: rightScanTop,
-                            }}
-                        />
-                    </div>
-                    <div
-                        className="pulse-overlay po-right"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            boxShadow: `inset 0 0 80px rgba(0, 255, 255, ${innerPulseRight})`,
-                        }}
-                    />
-                </div>
-
-                {/* RIGHT HUD BRACKET */}
-                <div
-                    className="hud-bracket right"
-                    style={{
-                        position: 'absolute',
-                        width: 80,
-                        height: 180,
-                        border: '6px solid #00ffff',
-                        top: 450,
-                        boxShadow: '0 0 20px rgba(0, 255, 255, 0.5)',
-                        right: 40,
-                        borderLeft: 'none',
-                    }}
-                />
-
-                {/* BOTTOM HUD BAR */}
-                <div
-                    className="hud-bar bottom"
-                    style={{
-                        position: 'absolute',
-                        height: 6,
-                        background: '#00ffff',
-                        boxShadow: '0 0 20px #00ffff',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        bottom: 120,
-                        width: 800,
-                    }}
-                >
-                    <div
-                        className="hud-accent"
-                        style={{
-                            position: 'absolute',
-                            width: 100,
-                            height: 6,
-                            background: '#fff',
-                            boxShadow: '0 0 20px #fff',
-                            top: 0,
-                            right: bottomAccentRight,
-                        }}
-                    />
-                </div>
+              </svg>
             </div>
+            <div className="chroma-box" style={chromaBoxStyle} />
+          </div>
+
+          {/* Sub Logo Placeholder Circle Component */}
+          <div className="sub-placeholder" style={subPlaceholderStyle}>
+            <div 
+              className="glitch-wrapper sub-fx" 
+              style={{
+                ...glitchWrapperStyle,
+                transform: `scale(${subScale})`,
+                transformOrigin: 'center center'
+              }}
+            >
+              <svg className="hud-border-circle" style={hudBorderCircleStyle} viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg">
+                <path d="M 130 5 L 130 20 M 130 255 L 130 240 M 5 130 L 20 130 M 255 130 L 240 130" fill="none" stroke="#FF00FF" strokeWidth="4"/>
+                
+                {/* Spin Rings */}
+                <g 
+                  className="spin-ring-inner"
+                  style={{
+                    transform: `rotate(${360 * progress}deg)`,
+                    transformOrigin: '130px 130px'
+                  }}
+                >
+                  <circle cx="130" cy="130" r="115" fill="none" stroke="#00FFFF" strokeWidth="2" strokeDasharray="20 10 50 20 5 10"/>
+                </g>
+                <g 
+                  className="spin-ring-outer"
+                  style={{
+                    transform: `rotate(${-360 * progress}deg)`,
+                    transformOrigin: '130px 130px'
+                  }}
+                >
+                  <circle cx="130" cy="130" r="125" fill="none" stroke="#FF00FF" strokeWidth="2" strokeDasharray="100 50 30 40"/>
+                </g>
+
+                {/* Flowing outer circle path */}
+                <circle 
+                  className="energy-circle" 
+                  cx="130" 
+                  cy="130" 
+                  r="105" 
+                  fill="none" 
+                  stroke="#00FFFF" 
+                  strokeWidth="3" 
+                  strokeDasharray="165 165"
+                  strokeDashoffset={-(660 * progress)}
+                />
+              </svg>
+            </div>
+            <div className="chroma-circle" style={chromaCircleStyle} />
+          </div>
+
         </div>
-    );
+      </div>
+    </div>
+  );
 };
 
-export default CinematicSciFiEsportsEndscreen;
+export default ProceduralCyberpunkEndScreen;
 // END_OF_FILE
