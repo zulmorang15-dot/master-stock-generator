@@ -2263,35 +2263,75 @@ async function executeSingleTask(itemId) {
       item.shutterstockCategory = shutterCat;
       item.shutterstockCategory2 = shutterCat2;
 
-      // AI-driven video configuration recommendations
-      if (seoData.loop !== undefined) {
-        item.loop = seoData.loop === true || seoData.loop === 'true';
+      item.seoAiUsed = item.aiModel || 'auto';
+      saveOrUpdateItem(item);
+
+      addTaskLog(itemId, `Metadata SEO berhasil disesuaikan oleh AI. Judul: "${seoData.judul}"`, "success");
+    }
+
+    // 2.5. Analisis HTML untuk konfigurasi video (loop, solid, durasi, fps)
+    addTaskLog(itemId, "Menganalisis HTML untuk konfigurasi video optimal...", "info");
+    try {
+      const cleanHtmlForAnalysis = stripScripts(item.htmlPreview);
+      const analysisPrompt = `Analyze this HTML/CSS/JS code and determine the optimal video configuration for microstock sale. Output ONLY a valid JSON object (no markdown, no explanation):
+{
+  "loop": true or false (true if the animation is designed to loop seamlessly like backgrounds, patterns, particles; false if it has a clear start/end like UI interactions, text reveals, progress bars),
+  "transparent": true or false (true ONLY if the HTML explicitly uses transparent/alpha background; false for solid color or gradient backgrounds),
+  "duration": optimal duration in seconds from [5, 8, 10, 12, 15, 20, 30] (shorter for UI interactions/buttons, longer for backgrounds/patterns),
+  "fps": 30 or 60 (60 only if the animation has fast motion, particles, or smooth high-speed movement; 30 for most cases)
+}
+
+HTML:
+${cleanHtmlForAnalysis.substring(0, 3000)}`;
+
+      const analysisResponse = await runAbortable(
+        callAIWithFallback(analysisPrompt, { preferModel: item.aiModel || 'auto', taskId: itemId }),
+        signal
+      );
+
+      let analysisText = analysisResponse.trim();
+      if (analysisText.startsWith("```json")) {
+        analysisText = analysisText.split("```json")[1].split("```")[0].trim();
+      } else if (analysisText.includes("```")) {
+        analysisText = analysisText.split("```")[1].split("```")[0].trim();
       }
-      if (seoData.transparent !== undefined) {
-        item.transparent = seoData.transparent === true || seoData.transparent === 'true';
+      analysisText = analysisText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+      const config = JSON.parse(analysisText);
+
+      if (config.loop !== undefined) {
+        item.loop = config.loop === true || config.loop === 'true';
       }
-      if (seoData.duration !== undefined) {
-        const parsedDur = Number(seoData.duration);
+      if (config.transparent !== undefined) {
+        item.transparent = config.transparent === true || config.transparent === 'true';
+      }
+      if (config.duration !== undefined) {
+        const parsedDur = Number(config.duration);
         if ([5, 8, 10, 12, 15, 20, 30].includes(parsedDur)) {
           item.animationDuration = parsedDur;
         }
       }
-      if (seoData.fps !== undefined) {
-        const parsedFps = Number(seoData.fps);
+      if (config.fps !== undefined) {
+        const parsedFps = Number(config.fps);
         if ([30, 60].includes(parsedFps)) {
           item.fps = parsedFps;
         }
       }
-      
-      // Recalculate durationInFrames
-      const targetFps = item.fps || 30;
-      const targetDur = item.animationDuration || 10;
-      item.durationInFrames = targetDur * targetFps;
 
-      item.seoAiUsed = item.aiModel || 'auto';
+      // Recalculate durationInFrames
+      const calcFps = item.fps || 30;
+      const calcDur = item.animationDuration || 10;
+      item.durationInFrames = calcDur * calcFps;
       saveOrUpdateItem(item);
 
-      addTaskLog(itemId, `Metadata SEO & konfigurasi video berhasil disesuaikan oleh AI. Judul: "${seoData.judul}"`, "success");
+      addTaskLog(itemId, `Konfigurasi video: Loop=${item.loop ? 'Ya' : 'Tidak'}, Background=${item.transparent ? 'Transparan' : 'Solid'}, Durasi=${item.animationDuration}s, FPS=${item.fps || 30}`, "success");
+    } catch (analysisErr) {
+      addTaskLog(itemId, `Analisis konfigurasi video gagal (${analysisErr.message}), menggunakan default: 10s, 30fps, loop, solid`, "warning");
+      if (!item.animationDuration) item.animationDuration = 10;
+      if (!item.fps) item.fps = 30;
+      if (!item.durationInFrames) item.durationInFrames = (item.animationDuration || 10) * (item.fps || 30);
+      if (item.loop === undefined) item.loop = true;
+      if (item.transparent === undefined) item.transparent = false;
+      saveOrUpdateItem(item);
     }
 
     // 3. Konversi HTML ke TSX
@@ -3932,36 +3972,11 @@ app.post("/api/regenerate-seo/:id", async (req, res) => {
     item.shutterstockCategory = shutterCat;
     item.shutterstockCategory2 = shutterCat2;
 
-    // AI-driven video configuration recommendations
-    if (seoData.loop !== undefined) {
-      item.loop = seoData.loop === true || seoData.loop === 'true';
-    }
-    if (seoData.transparent !== undefined) {
-      item.transparent = seoData.transparent === true || seoData.transparent === 'true';
-    }
-    if (seoData.duration !== undefined) {
-      const parsedDur = Number(seoData.duration);
-      if ([5, 8, 10, 12, 15, 20, 30].includes(parsedDur)) {
-        item.animationDuration = parsedDur;
-      }
-    }
-    if (seoData.fps !== undefined) {
-      const parsedFps = Number(seoData.fps);
-      if ([30, 60].includes(parsedFps)) {
-        item.fps = parsedFps;
-      }
-    }
-    
-    // Recalculate durationInFrames
-    const targetFps = item.fps || 30;
-    const targetDur = item.animationDuration || 10;
-    item.durationInFrames = targetDur * targetFps;
-
     item.seoAiUsed = aiModel || 'auto';
     
     saveOrUpdateItem(item);
     
-    addTaskLog(id, `Judul & keywords berhasil di-regenerate! (Konfigurasi video disesuaikan oleh AI)`, "success");
+    addTaskLog(id, `Judul & keywords berhasil di-regenerate!`, "success");
     
     res.json({ success: true, item });
   } catch (err) {

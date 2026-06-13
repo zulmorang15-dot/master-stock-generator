@@ -1151,42 +1151,7 @@
       <textarea class="code-editor-textarea" id="pasteHtmlCode" placeholder="Tempelkan (paste) kode HTML lengkap Anda di sini..." oninput="checkPasteInput()"></textarea>
     </div>
 
-    <!-- Options -->
-    <div class="options-row">
-      <div class="option-group">
-        <span class="option-label">🔄 Loop Video</span>
-        <div class="toggle-group">
-          <button class="toggle-btn active" id="loopYes" onclick="setLoop(true)">Ya</button>
-          <button class="toggle-btn" id="loopNo" onclick="setLoop(false)">Tidak</button>
-        </div>
-      </div>
-      <div class="option-group">
-        <span class="option-label">🎨 Background</span>
-        <div class="toggle-group">
-          <button class="toggle-btn" id="bgTransp" onclick="setBg(true)">Transparan</button>
-          <button class="toggle-btn active" id="bgSolid" onclick="setBg(false)">Solid</button>
-        </div>
-      </div>
-      <div class="option-group">
-        <span class="option-label">⏱️ Durasi</span>
-        <select class="select-input" id="animationDurationSelect">
-          <option value="5">5 Detik</option>
-          <option value="8">8 Detik</option>
-          <option value="10" selected>10 Detik</option>
-          <option value="12">12 Detik</option>
-          <option value="15">15 Detik</option>
-          <option value="20">20 Detik</option>
-          <option value="30">30 Detik</option>
-        </select>
-      </div>
-      <div class="option-group">
-        <span class="option-label">📺 FPS</span>
-        <select class="select-input" id="animationFpsSelect">
-          <option value="30" selected>30 FPS</option>
-          <option value="60">60 FPS</option>
-        </select>
-      </div>
-    </div>
+
 
     <!-- Generate Button -->
     <button class="btn-generate" id="btnGenerate" onclick="startGenerate()" disabled>
@@ -1585,8 +1550,6 @@
   // STATE
   // ═══════════════════════════════════════════
   let selectedFiles = [];
-  let loopEnabled = true;
-  let transparentBg = false;
   let isGenerating = false;
   let pollTimers = {};
   let batchModeActive = false;
@@ -2146,19 +2109,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   }
 
   // ═══════════════════════════════════════════
-  // TOGGLES
-  // ═══════════════════════════════════════════
-  function setLoop(val) {
-    loopEnabled = val;
-    document.getElementById('loopYes').classList.toggle('active', val);
-    document.getElementById('loopNo').classList.toggle('active', !val);
-  }
-
-  function setBg(isTransparent) {
-    transparentBg = isTransparent;
-    document.getElementById('bgTransp').classList.toggle('active', isTransparent);
-    document.getElementById('bgSolid').classList.toggle('active', !isTransparent);
-  }
 
   // ═══════════════════════════════════════════
   // GENERATE
@@ -2199,8 +2149,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   // ═══════════════════════════════════════════
   async function startGenerate() {
     const aiModel = 'auto'; // Model AI dipilih per-item di tabel
-    const animationDuration = Number(document.getElementById('animationDurationSelect').value);
-    const fps = Number(document.getElementById('animationFpsSelect').value);
     
     isGenerating = true;
     updateGenerateBtn();
@@ -2220,11 +2168,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             files: filesPayload, 
-            loop: loopEnabled, 
-            transparent: transparentBg,
-            aiModel,
-            animationDuration,
-            fps
+            aiModel
           })
         });
         
@@ -2248,11 +2192,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
           body: JSON.stringify({
             id: customId,
             htmlContent,
-            loop: loopEnabled,
-            transparent: transparentBg,
-            aiModel,
-            animationDuration,
-            fps
+            aiModel
           })
         });
 
@@ -2358,14 +2298,12 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 
   async function retryTask(id) {
     const aiModel = document.getElementById(`seo_model_${id}`)?.value || 'auto';
-    const animationDuration = Number(document.getElementById('animationDurationSelect').value);
-    const fps = Number(document.getElementById('animationFpsSelect').value);
     if (!confirm(`Retry proses generate untuk "${id}"?\n\nAkan memulai ulang dari awal dengan AI yang sama.`)) return;
     try {
       const resp = await fetch(`/api/retry-task/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aiModel, animationDuration, fps })
+        body: JSON.stringify({ aiModel })
       });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
@@ -2622,20 +2560,16 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         if (!item) continue;
         
         const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
-        const loopVal = document.getElementById(`loop_${id}`)?.value === 'true';
-        const transparentVal = document.getElementById(`transparent_${id}`)?.value === 'true';
-        const animationDuration = Number(document.getElementById(`duration_${id}`)?.value || 10);
-        const animationFps = Number(document.getElementById(`fps_${id}`)?.value || 30);
         const status = item.statusConvertTsx || 'waiting';
         
         try {
           let url, body;
           if (status === 'waiting') {
             url = `/api/start-task/${id}`;
-            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal });
+            body = JSON.stringify({ aiModel });
           } else {
             url = `/api/retry-task/${id}`;
-            body = JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal });
+            body = JSON.stringify({ aiModel });
           }
           
           const startResp = await fetch(url, {
@@ -3021,30 +2955,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
                 </select>
               </div>
               
-              <!-- Row 2: Pengaturan video lokal (Loop, Trans, Durasi, FPS) -->
-              <div style="display:flex; align-items:center; gap:4px; padding: 2px 6px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 6px;">
-                <select id="loop_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="saveField('${item.id}', 'loop', this.value === 'true')" title="Loop Video">
-                  <option value="true" ${item.loop !== false ? 'selected' : ''}>🔄 Loop</option>
-                  <option value="false" ${item.loop === false ? 'selected' : ''}>➡ No-Loop</option>
-                </select>
-                <select id="transparent_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="saveField('${item.id}', 'transparent', this.value === 'true')" title="Background Transparency">
-                  <option value="false" ${item.transparent !== true ? 'selected' : ''}>🎨 Solid</option>
-                  <option value="true" ${item.transparent === true ? 'selected' : ''}>🏁 Trans</option>
-                </select>
-                <select id="duration_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="updateRowDuration('${item.id}', Number(this.value))" title="Durasi Video">
-                  <option value="5" ${item.animationDuration === 5 ? 'selected' : ''}>5s</option>
-                  <option value="8" ${item.animationDuration === 8 ? 'selected' : ''}>8s</option>
-                  <option value="10" ${item.animationDuration === 10 || !item.animationDuration ? 'selected' : ''}>10s</option>
-                  <option value="12" ${item.animationDuration === 12 ? 'selected' : ''}>12s</option>
-                  <option value="15" ${item.animationDuration === 15 ? 'selected' : ''}>15s</option>
-                  <option value="20" ${item.animationDuration === 20 ? 'selected' : ''}>20s</option>
-                  <option value="30" ${item.animationDuration === 30 ? 'selected' : ''}>30s</option>
-                </select>
-                <select id="fps_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="updateRowFps('${item.id}', Number(this.value))" title="FPS Video">
-                  <option value="30" ${item.fps === 30 || !item.fps ? 'selected' : ''}>30 FPS</option>
-                  <option value="60" ${item.fps === 60 ? 'selected' : ''}>60 FPS</option>
-                </select>
-              </div>
+
             </div>
           </div>
         </td>
@@ -3118,7 +3029,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const aiSelect = `
       <select id="ai_model_${item.id}" class="select-input" style="padding: 4px 8px; font-size: 11px; height: auto; font-weight: 600; width: 100%; margin-bottom: 8px;" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}>
         <option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>🤖 Auto AI</option>
-        <option value="groq" ${item.aiModel === 'groq' ? 'selected' : ''}>⚡ Groq</option>
         <option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>🎯 Syntx Claude 4.6</option>
         <option value="syntx-chatgpt" ${item.aiModel === 'syntx-chatgpt' ? 'selected' : ''}>💬 Syntx ChatGPT 5.5</option>
         <option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>✨ Syntx Gemini 3.5</option>
@@ -3128,6 +3038,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         <option value="syntx-perplexity" ${item.aiModel === 'syntx-perplexity' ? 'selected' : ''}>🔍 Syntx Perplexity</option>
         <option value="gemini" ${item.aiModel === 'gemini' ? 'selected' : ''}>🧠 Gemini API</option>
         <option value="openrouter" ${item.aiModel === 'openrouter' ? 'selected' : ''}>🔀 OpenRouter</option>
+        <option value="groq" ${item.aiModel === 'groq' ? 'selected' : ''}>⚡ Groq</option>
       </select>
     `;
 
@@ -3651,19 +3562,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     }
   });
 
-  window.updateRowDuration = function(id, durationSec) {
-    const fpsSelect = document.getElementById(`fps_${id}`);
-    const fps = fpsSelect ? Number(fpsSelect.value) : 30;
-    saveField(id, 'animationDuration', durationSec);
-    saveField(id, 'durationInFrames', durationSec * fps);
-  }
-
-  window.updateRowFps = function(id, fps) {
-    const durSelect = document.getElementById(`duration_${id}`);
-    const durationSec = durSelect ? Number(durSelect.value) : 10;
-    saveField(id, 'fps', fps);
-    saveField(id, 'durationInFrames', durationSec * fps);
-  }
 
   // ═══════════════════════════════════════════
   // HTML COMPILER HELPERS
