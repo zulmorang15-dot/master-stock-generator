@@ -2157,13 +2157,20 @@ You need to understand that Remotion renders videos frame-by-frame offline (usin
 **OBJECTIVE:**
 Convert the provided HTML/CSS/JS code into a single, production-grade Remotion component (.tsx). The visual output must be a 1:1 mirror of the original HTML, but entirely re-engineered for frame-locked rendering.
 
-**0. MANDATORY IMPORT RULE (ABSOLUTE — NEVER VIOLATE):**
-The FIRST LINE of the output file MUST ALWAYS be exactly this (copy-paste, no changes):
-import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
-- Do NOT import from any local files (e.g. './input', './utils', './config', etc.) — these files do not exist.
-- Do NOT import from 'three', 'gsap', or any external library.
-- Do NOT import React — it is auto-injected by the JSX transform.
-- NEVER add any import other than the single remotion import line above.
+**0. ALLOWED IMPORTS RULE (CRITICAL):**
+- You can import hooks/APIs from 'remotion':
+  \`import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';\`
+- If you need React hooks (like useRef, useEffect, useState, useMemo), import React and the hooks:
+  \`import React, { useRef, useEffect, useState, useMemo } from 'react';\`
+- If the original HTML uses Three.js, you MUST import THREE:
+  \`import * as THREE from 'three';\`
+- If the original HTML uses GSAP, you MUST import GSAP:
+  \`import { gsap } from 'gsap';\`
+- Do NOT import from any local files (e.g. './input', './utils', etc.) — these files do not exist.
+- NEVER add any import other than the ones listed above.
+
+**0.1 REACT INLINE STYLES camelCase RULE (CRITICAL):**
+All style keys in JSX style objects (e.g., style={{ ... }}) MUST be camelCased. NEVER use hyphenated CSS properties as keys. For example: use 'boxShadow' instead of 'box-shadow', 'backgroundColor' instead of 'background-color', 'borderRadius' instead of 'border-radius', 'zIndex' instead of 'z-index', 'pointerEvents' instead of 'pointer-events', 'transformOrigin' instead of 'transform-origin', 'borderRight' instead of 'border-right', 'borderBottom' instead of 'border-bottom', 'borderLeft' instead of 'border-left', 'borderTop' instead of 'border-top', 'fontFamily' instead of 'font-family', 'fontSize' instead of 'font-size', 'lineHeight' instead of 'line-height', etc. Hyphenated keys are syntactically invalid inside JS objects and will crash the compiler.
 
 **BANNED FUNCTIONS (WILL CAUSE RUNTIME CRASH — NEVER USE):**
 - EasingEaseOut, EasingEaseIn, EasingEaseInOut — these do not exist in Remotion. Use Easing.out(Easing.quad), Easing.in(Easing.quad), Easing.inOut(Easing.quad).
@@ -2176,15 +2183,37 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 **1. Dynamic Identification:**
 - Identify the main subject from the HTML and use it as the PascalCase component name (e.g., GlowingButton).
 
+**1.1 Preserve All Elements (CRITICAL):**
+- You must keep and translate ALL structural elements, divs, spans, SVGs, and textual content from the original HTML. Do NOT omit, delete, or skip any elements, styling layers, or decorative details present in the source code.
+
 **2. Visual Parity & Animation (CRITICAL):**
 - Motion Mirroring: Analyze the original CSS @keyframes. Map every percentage (0%, 50%, 100%) exactly into the inputRange of Remotion's interpolate() function.
 - Easing Match: Translate CSS easing (e.g., ease-in-out) to the exact equivalent Remotion Easing API.
 - Frame-Locked: ALL motion, opacity, and scale changes MUST be strictly driven by useCurrentFrame().
 
+**2.1 THREE.JS / WEBGL CONVERSION GUIDELINES (CRITICAL FOR 3D):**
+If the original HTML utilizes Three.js or WebGL:
+- **Canvas Reference:** Use a React \`useRef\` to reference the canvas element: \`<canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />\`.
+- **Initialization useEffect:** Initialize the Three.js \`Scene\`, \`PerspectiveCamera\`, \`WebGLRenderer\` (with \`{ canvas: canvasRef.current, antialias: true, alpha: true }\`), grids, lights, and meshes inside a single React \`useEffect\` with an empty dependency array (\`[]\`) to run once on mount. Store these instances in refs (e.g., \`sceneRef\`, \`cameraRef\`, \`rendererRef\`, and references to animated elements like grids or particle systems) so they are accessible on subsequent renders.
+- **Dispose Cleanup:** Always return a cleanup function in the initialization \`useEffect\` that calls \`renderer.dispose()\` and disposes of all geometries and materials. This prevents WebGL memory leaks during multi-file batch renders.
+- **Deterministic Render Effect:** Create a second \`useEffect\` keyed on the current frame: \`const frame = useCurrentFrame();\`. Inside this effect:
+  1. Retrieve references to the scene, camera, renderer, and any animated objects.
+  2. Compute simulated elapsed time from the frame: \`const elapsedTime = frame / fps;\` (retrieve \`fps\` from \`useVideoConfig()\`).
+  3. Update animated properties (e.g. mesh rotation, positions, grid movement) using \`elapsedTime\` or \`frame\` deterministically (e.g., \`gridFloor.position.z = (elapsedTime * speed) % limit\`).
+  4. Call \`renderer.render(scene, camera)\` manually to paint the new frame.
+- **Never use \`requestAnimationFrame\` or \`clock.getElapsedTime()\`** (which rely on real-world time and break frame-by-frame rendering). All updates must be strictly computed from \`frame / fps\`.
+
+**2.2 GSAP / CSS ANIMATIONS CONVERSION GUIDELINES:**
+- For simple animations (opacity, position, scale, rotation, color transitions), map them directly to Remotion's \`interpolate()\` and \`Easing\` APIs.
+- If GSAP is used in the HTML for complex timelines:
+  1. Initialize the GSAP timeline paused in a React \`useEffect\` or \`useMemo\`: \`const tl = gsap.timeline({ paused: true });\`.
+  2. Inside a \`useEffect\` keyed on \`frame\`, seek the timeline to the current time: \`tl.seek(frame / fps);\` or set progress: \`tl.progress(frame / totalFrames);\`.
+  3. Never let GSAP animations run automatically with real-world timers.
+
 **3. Deterministic Rendering:**
 - Never use Math.random() inside the component render. Pre-calculate random elements (particles, positions, delays) in a static const array OUTSIDE the component function.
 
-**4. FULLSCREEN 16:9 FILL (CRITICAL \u2014 NO BLACK BARS):**
+**4. FULLSCREEN 16:9 FILL (CRITICAL — NO BLACK BARS):**
 - Define: const ORIGINAL_WIDTH = 1920; const ORIGINAL_HEIGHT = 1080;
 - Inside the component: const { width, height, fps } = useVideoConfig();
 - const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
@@ -2194,13 +2223,14 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 - All background colors, gradients, and patterns MUST extend to cover the entire 1920x1080 area. Use 'backgroundSize: cover' or explicit width/height: '100%' on background layers.
 
 **5. Absolute Seamless Looping & Duration (CRITICAL):**
-- The animation MUST loop seamlessly and exactly match a duration of {{ANIMATION_DURATION}} seconds ({{DURATION_FRAMES}} frames at 30fps).
+- The animation MUST loop seamlessly and exactly match a duration of {{ANIMATION_DURATION}} seconds ({{DURATION_FRAMES}} frames at {{FPS}}fps).
 - Set the component's duration/cycles to fit this {{ANIMATION_DURATION}}-second window.
 - Apply const localFrame = frame % (fps * cycleDuration) for each element to loop perfectly.
 - Symmetrical Interpolation: First and last value in every interpolate() output MUST be identical for seamless looping.
 
-**6. Clean Visuals (NO OVERLAYS):**
-- Do NOT render the video's title or keywords as text overlay, badges, or watermark tags on the video frame. The video canvas must only show the clean, stylized HTML conversion animation without any added watermarks, titles, or tag overlays.
+**6. Clean Visuals (NO WATERMARK OVERLAYS):**
+- Do NOT add any new text overlays, badges, or watermark tags that represent the video's microstock title or keywords (e.g. do not display the SEO metadata title generated for the file).
+- Crucially, you MUST PRESERVE all original text, typography, headings, buttons, and content elements from the provided HTML. Do NOT delete any content or elements that are part of the original HTML design, as this will break the visual styling and layout. Only avoid injecting *new* external metadata text as overlays.
 
 **7. Output Structure:**
 - Provide ONLY the raw .tsx file content — no markdown fences, no explanation text.
