@@ -3042,7 +3042,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       </select>
     `;
 
-
     // Per-item video config selectors (auto-filled by AI analysis, editable by user)
     const videoConfigRow = `
       <div style="display:flex; align-items:center; gap:4px; padding: 2px 6px; margin-bottom:4px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 6px;">
@@ -3069,7 +3068,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         </select>
       </div>
     `;
-
     // Button 1: TSX & Preview (FIRST — must be done before SEO)
     const hasPreview = !!item.previewUrl;
     const hasJudul = !!(item.judul && item.judul.trim());
@@ -3593,7 +3591,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 
 
   // ═══════════════════════════════════════════
-    window.updateRowDuration = function(id, durationSec) {
+  window.updateRowDuration = function(id, durationSec) {
     const fpsSelect = document.getElementById(`fps_${id}`);
     const fps = fpsSelect ? Number(fpsSelect.value) : 30;
     saveField(id, 'animationDuration', durationSec);
@@ -3606,8 +3604,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     saveField(id, 'fps', fps);
     saveField(id, 'durationInFrames', durationSec * fps);
   }
-
-// HTML COMPILER HELPERS
+  // HTML COMPILER HELPERS
   // ═══════════════════════════════════════════
   const BOILERPLATE_TEMPLATE = `<!DOCTYPE html>
 <html lang="id">
@@ -3756,88 +3753,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     if (savedCompilerCode) {
       const editor = document.getElementById('compilerHtmlCode');
       if (editor) {
-        editor.value = savedCompilerCode;
-        runHtmlCompiler();
-      }
-    } else {
-      // Load boilerplate by default if empty
-      loadCompilerTemplate(false);
-    }
-  }
-
-  // ═══════════════════════════════════════════
-  // INIT
-  // ═══════════════════════════════════════════
-  loadResults();
-  loadPrompts();
-  restoreState();
-  // Auto-refresh every 30s
-  setInterval(loadResults, 30000);
-</script>
-
-<!-- Modal Preview Besar -->
-<div id="videoModal" class="modal">
-  <span class="close-modal" onclick="closeVideoModal()">&times;</span>
-  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; border:3px solid var(--cyan); box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); background:#000;"></video>
-</div>
-
-</body>
-</html>f (editor) {
-        editor.value = savedCompilerCode;
-        runHtmlCompiler();
-      }
-    } else {
-      // Load boilerplate by default if empty
-      loadCompilerTemplate(false);
-    }
-  }
-
-  // ═══════════════════════════════════════════
-  // INIT
-  // ═══════════════════════════════════════════
-  loadResults();
-  loadPrompts();
-  restoreState();
-  // Auto-refresh every 30s
-  setInterval(loadResults, 30000);
-</script>
-
-<!-- Modal Preview Besar -->
-<div id="videoModal" class="modal">
-  <span class="close-modal" onclick="closeVideoModal()">&times;</span>
-  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; border:3px solid var(--cyan); box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); background:#000;"></video>
-</div>
-
-</body>
-</html>onst editor = document.getElementById('compilerHtmlCode');
-      if (editor) {
-        editor.value = savedCompilerCode;
-        runHtmlCompiler();
-      }
-    } else {
-      // Load boilerplate by default if empty
-      loadCompilerTemplate(false);
-    }
-  }
-
-  // ═══════════════════════════════════════════
-  // INIT
-  // ═══════════════════════════════════════════
-  loadResults();
-  loadPrompts();
-  restoreState();
-  // Auto-refresh every 30s
-  setInterval(loadResults, 30000);
-</script>
-
-<!-- Modal Preview Besar -->
-<div id="videoModal" class="modal">
-  <span class="close-modal" onclick="closeVideoModal()">&times;</span>
-  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; border:3px solid var(--cyan); box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); background:#000;"></video>
-</div>
-
-</body>
-</html>f (editor) {
         editor.value = savedCompilerCode;
         runHtmlCompiler();
       }
