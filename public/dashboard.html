@@ -1461,24 +1461,73 @@
         </div>
       </div>
 
-      <!-- CARD 2: MICROSTOCK SEARCH SHORTCUT -->
+      <!-- CARD 2: MARKET RESEARCH SCRAPER -->
       <div class="input-card" style="padding: 28px; width: 100%;">
         <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
-          <h3 style="font-size:18px; font-weight:800; color:var(--purple); margin:0;">🔎 Shortcut Pencarian Microstock</h3>
+          <h3 style="font-size:18px; font-weight:800; color:var(--purple); margin:0;">🔬 Riset Pasar Microstock (Live Scrape)</h3>
           <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
-            Cari ide video atau animasi secara instan langsung di website resmi Adobe Stock atau Shutterstock.
+            Scrape data langsung dari Adobe Stock & Shutterstock, lalu analisis dengan AI untuk menemukan niche yang kurang terlayani.
           </p>
         </div>
 
         <!-- Search Bar -->
-        <div style="display:flex; gap:12px; align-items: center;">
-          <input type="text" class="input-text-field" id="stockSearchInput" placeholder="Ketik kata kunci pencarian (contoh: cyberpunk neon loop)..." style="margin-bottom:0; flex:1;" onkeydown="if(event.key==='Enter') searchDirectly('adobe')" />
-          <button class="btn-generate" onclick="searchDirectly('adobe')" style="margin-top:0; width:180px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--purple), #6366f1);">
-            Cari di Adobe Stock
+        <div style="display:flex; gap:12px; align-items: center; margin-bottom:16px;">
+          <input type="text" class="input-text-field" id="stockSearchInput" placeholder="Ketik kata kunci riset (contoh: cyberpunk neon loop)..." style="margin-bottom:0; flex:1;" onkeydown="if(event.key==='Enter') researchMarket()" />
+          <button class="btn-generate" id="btnResearchMarket" onclick="researchMarket()" style="margin-top:0; width:220px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, #f59e0b, #ef4444);">
+            🔬 Riset Pasar (AI)
           </button>
-          <button class="btn-generate" onclick="searchDirectly('shutterstock')" style="margin-top:0; width:180px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--cyan), #3b82f6);">
-            Cari di Shutterstock
-          </button>
+        </div>
+
+        <!-- Quick Links -->
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+          <button class="btn-refresh" onclick="searchDirectly('adobe')" style="flex:1; padding:8px; font-size:11px; border-color:rgba(168,85,247,0.4); color:var(--purple);">🔗 Buka di Adobe Stock</button>
+          <button class="btn-refresh" onclick="searchDirectly('shutterstock')" style="flex:1; padding:8px; font-size:11px; border-color:rgba(56,189,248,0.4); color:var(--cyan);">🔗 Buka di Shutterstock</button>
+        </div>
+
+        <!-- Loading -->
+        <div id="researchLoading" style="display:none; text-align:center; padding:20px;">
+          <div style="font-size:14px; color:var(--cyan); font-weight:600;">🔍 Sedang scraping Adobe Stock & Shutterstock...</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">Ini bisa memakan waktu 15-30 detik</div>
+        </div>
+
+        <!-- Results Container -->
+        <div id="researchResults" style="display:none;">
+          <!-- Summary Header -->
+          <div id="researchSummary" style="background:rgba(56,189,248,0.05); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:16px; margin-bottom:16px;"></div>
+
+          <!-- Competition & Demand -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+            <div id="researchCompetition" style="background:rgba(168,85,247,0.05); border:1px solid rgba(168,85,247,0.2); border-radius:8px; padding:14px;"></div>
+            <div id="researchDemand" style="background:rgba(245,158,11,0.05); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:14px;"></div>
+          </div>
+
+          <!-- Trends & Keywords -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+            <div id="researchTrends" style="background:rgba(34,197,94,0.05); border:1px solid rgba(34,197,94,0.2); border-radius:8px; padding:14px;"></div>
+            <div id="researchKeywords" style="background:rgba(236,72,153,0.05); border:1px solid rgba(236,72,153,0.2); border-radius:8px; padding:14px;"></div>
+          </div>
+
+          <!-- Underserved Niches -->
+          <div id="researchNiches" style="background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:14px; margin-bottom:16px;"></div>
+
+          <!-- Recommended Titles -->
+          <div id="researchTitles" style="background:rgba(56,189,248,0.05); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:14px; margin-bottom:16px;"></div>
+
+          <!-- Strategy -->
+          <div id="researchStrategy" style="background:rgba(245,158,11,0.05); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:14px; margin-bottom:16px;"></div>
+
+          <!-- Scraped Competitor Data (collapsible) -->
+          <details style="margin-top:12px;">
+            <summary style="cursor:pointer; font-size:12px; color:var(--text-dim); font-weight:600;">📋 Lihat Data Mentah Kompetitor</summary>
+            <div id="researchRawData" style="background:#050810; border:1px solid var(--border); border-radius:6px; padding:12px; margin-top:8px; font-size:11px; color:var(--text-dim); max-height:300px; overflow-y:auto; font-family:monospace; white-space:pre-wrap;"></div>
+          </details>
+
+          <!-- Apply to Generator -->
+          <div style="display:flex; gap:12px; margin-top:16px;">
+            <button class="btn-generate" id="btnApplyResearch" onclick="applyResearchToGenerator()" style="margin-top:0; flex:1; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, #10b981, #059669);">
+              🚀 Gunakan Hasil Riset untuk Generate
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1828,6 +1877,147 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     showToast('🚀 Ide visual berhasil dimasukkan ke tab Paste HTML!', 'success');
   }
 
+    let lastResearchData = null;
+  
+    // ─── MARKET RESEARCH FUNCTIONS ──────────────
+    async function researchMarket() {
+      const input = document.getElementById('stockSearchInput');
+      const keyword = input.value.trim();
+      if (!keyword) {
+        showToast('Silakan masukkan kata kunci riset!', 'warning');
+        return;
+      }
+  
+      const btn = document.getElementById('btnResearchMarket');
+      const loading = document.getElementById('researchLoading');
+      const results = document.getElementById('researchResults');
+  
+      btn.disabled = true;
+      btn.textContent = '⏳ Scraping...';
+      loading.style.display = 'block';
+      results.style.display = 'none';
+      showToast('🔬 Memulai riset pasar untuk: ' + keyword, 'info');
+  
+      try {
+        const resp = await fetch('/api/research-market', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword })
+        });
+        const data = await resp.json();
+  
+        if (data.error) throw new Error(data.error + (data.details ? ': ' + data.details : ''));
+  
+        lastResearchData = data;
+        renderResearchResults(data);
+        results.style.display = 'block';
+        showToast('✅ Riset pasar selesai!', 'success');
+      } catch (err) {
+        showToast('❌ Riset gagal: ' + err.message, 'error');
+      } finally {
+        loading.style.display = 'none';
+        btn.disabled = false;
+        btn.textContent = '🔬 Riset Pasar (AI)';
+      }
+    }
+  
+    function renderResearchResults(data) {
+      const a = data.analysis || {};
+      const s = data.scrapeData || {};
+  
+      // Summary
+      document.getElementById('researchSummary').innerHTML = `
+        <div style="font-size:16px; font-weight:800; color:#fff; margin-bottom:8px;">📊 Riset: "${data.keyword}"</div>
+        <div style="font-size:13px; color:var(--text-mid); line-height:1.5;">${a.marketSummary || 'No summary available'}</div>
+      `;
+  
+      // Competition
+      const compColor = a.competitionLevel === 'Low' ? '#22c55e' : a.competitionLevel === 'Medium' ? '#f59e0b' : '#ef4444';
+      document.getElementById('researchCompetition').innerHTML = `
+        <div style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Kompetisi</div>
+        <div style="font-size:22px; font-weight:800; color:${compColor};">${a.competitionLevel || 'N/A'}</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">Adobe: ${s.adobe?.count || 0} | Shutterstock: ${s.shutter?.count || 0}</div>
+      `;
+  
+      // Demand
+      const demandColor = a.demandSignal === 'Very High' ? '#22c55e' : a.demandSignal === 'High' ? '#38bdf8' : a.demandSignal === 'Medium' ? '#f59e0b' : '#94a3b8';
+      document.getElementById('researchDemand').innerHTML = `
+        <div style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Demand Signal</div>
+        <div style="font-size:22px; font-weight:800; color:${demandColor};">${a.demandSignal || 'N/A'}</div>
+        <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">${a.pricingInsight || ''}</div>
+      `;
+  
+      // Trends
+      const trends = (a.topTrends || []).map(t => `<span style="display:inline-block; background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.3); color:#22c55e; padding:3px 8px; border-radius:12px; font-size:11px; margin:2px;">${t}</span>`).join('');
+      document.getElementById('researchTrends').innerHTML = `
+        <div style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">🔥 Tren Visual</div>
+        <div style="display:flex; flex-wrap:wrap; gap:2px;">${trends || '<span style="color:var(--text-dim); font-size:12px;">No data</span>'}</div>
+      `;
+  
+      // Keywords
+      const kwList = (a.commonKeywords || []).slice(0, 12).map(k => `<span style="display:inline-block; background:rgba(236,72,153,0.12); border:1px solid rgba(236,72,153,0.25); color:#ec4899; padding:2px 7px; border-radius:10px; font-size:10px; margin:2px;">${k}</span>`).join('');
+      document.getElementById('researchKeywords').innerHTML = `
+        <div style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">🏷 Top Keywords</div>
+        <div style="display:flex; flex-wrap:wrap; gap:2px;">${kwList || '<span style="color:var(--text-dim); font-size:12px;">No data</span>'}</div>
+      `;
+  
+      // Underserved Niches
+      const niches = (a.underservedNiches || []).map((n, i) => `<div style="padding:6px 0; border-bottom:1px solid rgba(239,68,68,0.1); font-size:12px; color:var(--text-mid);"><span style="color:#ef4444; font-weight:700;">${i+1}.</span> ${n}</div>`).join('');
+      document.getElementById('researchNiches').innerHTML = `
+        <div style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">🎯 Niche Kurang Terlayani (Peluang!)</div>
+        ${niches || '<div style="color:var(--text-dim); font-size:12px;">No data</div>'}
+      `;
+  
+      // Recommended Titles
+      const titles = (a.recommendedTitles || []).map((t, i) => `
+        <div style="padding:8px 0; border-bottom:1px solid rgba(56,189,248,0.1);">
+          <div style="font-size:13px; font-weight:700; color:#fff;">${i+1}. ${t.title}</div>
+          <div style="font-size:11px; color:var(--text-dim); margin-top:3px;">💡 ${t.why || ''}</div>
+        </div>
+      `).join('');
+      document.getElementById('researchTitles').innerHTML = `
+        <div style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">✨ Judul Rekomendasi (Outperform Competitors)</div>
+        ${titles || '<div style="color:var(--text-dim); font-size:12px;">No data</div>'}
+      `;
+  
+      // Strategy
+      document.getElementById('researchStrategy').innerHTML = `
+        <div style="font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">📈 Strategi Aksi</div>
+        <div style="font-size:13px; color:var(--text-mid); line-height:1.6;">${a.actionableStrategy || 'No strategy available'}</div>
+        ${a.recommendedKeywords ? `<div style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(245,158,11,0.15);"><div style="font-size:10px; color:var(--text-dim); font-weight:600; margin-bottom:4px;">RECOMMENDED KEYWORDS FOR CSV:</div><div style="font-size:11px; color:#f59e0b; word-break:break-all;">${a.recommendedKeywords}</div></div>` : ''}
+        ${a.recommendedCategories ? `<div style="margin-top:8px;"><span style="font-size:10px; color:var(--text-dim);">Adobe: </span><span style="font-size:11px; color:var(--purple);">${a.recommendedCategories.adobe || ''}</span> | <span style="font-size:10px; color:var(--text-dim);">Shutterstock: </span><span style="font-size:11px; color:var(--cyan);">${a.recommendedCategories.shutterstock || ''}</span></div>` : ''}
+      `;
+  
+      // Raw Data
+      let rawHtml = `=== ADOBE STOCK (${s.adobe?.count || 0} results) ===\n`;
+      (s.adobe?.titles || []).forEach((t, i) => { rawHtml += `${i+1}. ${t}\n`; });
+      rawHtml += `\n=== SHUTTERSTOCK (${s.shutter?.count || 0} results) ===\n`;
+      (s.shutter?.titles || []).forEach((t, i) => { rawHtml += `${i+1}. ${t}\n`; });
+      document.getElementById('researchRawData').textContent = rawHtml;
+    }
+  
+    function applyResearchToGenerator() {
+      if (!lastResearchData || !lastResearchData.analysis) {
+        showToast('Belum ada data riset untuk diterapkan!', 'warning');
+        return;
+      }
+  
+      const a = lastResearchData.analysis;
+      const titles = a.recommendedTitles || [];
+      const keywordInput = document.getElementById('keyword');
+  
+      if (titles.length > 0 && keywordInput) {
+        // Use the first recommended title as keyword seed
+        keywordInput.value = lastResearchData.keyword;
+        showToast('✅ Keyword diisi dari riset. Klik GENERATE ASSET untuk membuat video!', 'success');
+  
+        // Scroll to generate section
+        keywordInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        showToast('Tidak ada judul rekomendasi untuk diterapkan.', 'warning');
+      }
+    }
+  
   function searchDirectly(platform) {
     const input = document.getElementById('stockSearchInput');
     const query = input.value.trim();
