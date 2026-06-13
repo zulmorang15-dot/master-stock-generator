@@ -1,284 +1,275 @@
 import React, { useRef, useEffect } from 'react';
-import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import { useVideoConfig, useCurrentFrame, interpolate } from 'remotion';
 import * as THREE from 'three';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
-const PARTICLE_COUNT = 1800;
 
-// Deterministic random generation for consistent renders
-const createSeededRandom = (seed: number) => {
-    let s = seed;
-    return () => {
-        s = (s * 9301 + 49297) % 233280;
-        return s / 233280;
-    };
-};
-
-const generateStaticParticles = () => {
-    const random = createSeededRandom(42);
-    const positions = [];
-    const phases = [];
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-        const radius = random() * 55 + 5;
-        const theta = random() * Math.PI * 2;
-        const z = (random() - 0.5) * 120;
-        positions.push(Math.cos(theta) * radius, Math.sin(theta) * radius, z);
-        phases.push(random() * Math.PI * 2);
+// Custom shaders
+const vertexShader = `
+    uniform float uTime;
+    uniform float uFrequency;
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec3 vViewPosition;
+    
+    vec3 distort(vec3 p) {
+        float t = uTime * 0.4;
+        p.x += sin(p.y * uFrequency + t) * 0.25;
+        p.y += cos(p.z * uFrequency + t * 1.2) * 0.25;
+        p.z += sin(p.x * uFrequency + t * 0.8) * 0.20;
+        p.x += cos(p.z * 4.0 + t * 2.0) * 0.05;
+        p.y += sin(p.x * 4.0 + t * 1.5) * 0.05;
+        return p;
     }
-    return {
-        positions: new Float32Array(positions),
-        phases: new Float32Array(phases),
-    };
-};
 
-const STATIC_PARTICLES = generateStaticParticles();
+    void main() {
+        vUv = uv;
+        vec3 stablePosition = position;
+        vec3 displacedPosition = distort(stablePosition);
+        
+        float delta = 0.01;
+        vec3 pX = distort(stablePosition + vec3(delta, 0.0, 0.0));
+        vec3 pY = distort(stablePosition + vec3(0.0, delta, 0.0));
+        vec3 normalOut = normalize(cross(pX - displacedPosition, pY - displacedPosition));
+        
+        vNormal = normalize(normalMatrix * normalOut);
+        vec4 mvPosition = modelViewMatrix * vec4(displacedPosition, 1.0);
+        vViewPosition = -mvPosition.xyz;
+        
+        gl_Position = projectionMatrix * mvPosition;
+    }
+`;
 
-const PremiumCinematicEndscreen: React.FC = () => {
-    const { width, height } = useVideoConfig();
+const fragmentShader = `
+    uniform vec3 uColorBase;
+    uniform vec3 uColorHighlight;
+    uniform vec3 uColorGlow;
+    uniform float uTime;
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec3 vViewPosition;
+
+    void main() {
+        vec3 normal = normalize(vNormal);
+        vec3 viewDir = normalize(vViewPosition);
+        
+        float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+        
+        vec3 lightDir1 = normalize(vec3(2.0, 3.0, 4.0));
+        vec3 lightDir2 = normalize(vec3(-3.0, -2.0, 2.0));
+        
+        float diffuse1 = max(dot(normal, lightDir1), 0.0);
+        float diffuse2 = max(dot(normal, lightDir2), 0.0);
+        
+        vec3 reflectDir = reflect(-lightDir1, normal);
+        float spec = pow(max(dot(reflectDir, viewDir), 0.0), 32.0);
+        
+        vec3 chromeSurface = mix(uColorBase, uColorHighlight, normal.z * 0.5 + 0.5);
+        chromeSurface += vec3(fresnel * 0.6) * uColorGlow;
+        
+        vec3 finalColor = chromeSurface + (diffuse1 * 0.1) + (diffuse2 * vec3(0.0, 0.3, 0.4)) + (spec * 0.7);
+        
+        gl_FragColor = vec4(finalColor, 0.92);
+    }
+`;
+
+export const PremiumLiquidChromeEndscreen: React.FC = () => {
+    const { width, height, fps } = useVideoConfig();
     const frame = useCurrentFrame();
+    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-    const particlesRef = useRef<THREE.Points | null>(null);
-    const meshRef = useRef<THREE.Mesh | null>(null);
+    const ribbonMeshRef = useRef<THREE.Mesh | null>(null);
+    const centerRingMeshRef = useRef<THREE.Mesh | null>(null);
+    const customUniformsRef = useRef<any>(null);
+    const secondaryUniformsRef = useRef<any>(null);
 
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
-
-    // Initial 3D Scene Setup
+    // Three.js Scene Setup (Once on Mount)
     useEffect(() => {
         if (!canvasRef.current) return;
-
-        const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020105, 0.015);
-
-        const camera = new THREE.PerspectiveCamera(60, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 1000);
-        camera.position.z = 45;
 
         const renderer = new THREE.WebGLRenderer({
             canvas: canvasRef.current,
             antialias: true,
-            alpha: true,
+            alpha: false
         });
         renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-        renderer.setPixelRatio(1);
-
-        // Particle System
-        const particleGeo = new THREE.BufferGeometry();
-        particleGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(STATIC_PARTICLES.positions), 3));
-
-        const pMaterial = new THREE.PointsMaterial({
-            color: 0x00f0ff,
-            size: 0.35,
-            transparent: true,
-            opacity: 0.85,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-        });
-
-        const particles = new THREE.Points(particleGeo, pMaterial);
-        scene.add(particles);
-
-        // Center Sculptural Torus Knot Mesh
-        const complexGeometry = new THREE.TorusKnotGeometry(14, 3.5, 200, 32, 3, 5);
-        const meshMaterial = new THREE.MeshStandardMaterial({
-            color: 0xff00ff,
-            wireframe: true,
-            roughness: 0.1,
-            metalness: 0.9,
-            emissive: 0xff00ff,
-            emissiveIntensity: 0.45,
-        });
-
-        const complexMesh = new THREE.Mesh(complexGeometry, meshMaterial);
-        complexMesh.position.set(0, 0, -10);
-        scene.add(complexMesh);
-
-        // Lighting Ecosystem
-        const dirLight1 = new THREE.DirectionalLight(0xffffff, 2);
-        dirLight1.position.set(1, 1, 1).normalize();
-        scene.add(dirLight1);
-
-        const pointLight = new THREE.PointLight(0x00f0ff, 3, 100);
-        pointLight.position.set(0, 0, 10);
-        scene.add(pointLight);
-
+        renderer.setPixelRatio(2);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
         rendererRef.current = renderer;
-        sceneRef.current = scene;
-        cameraRef.current = camera;
-        particlesRef.current = particles;
-        meshRef.current = complexMesh;
 
-        renderer.render(scene, camera);
+        const scene = new THREE.Scene();
+        sceneRef.current = scene;
+
+        const camera = new THREE.PerspectiveCamera(45, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 100);
+        camera.position.set(0, 0, 8);
+        cameraRef.current = camera;
+
+        // Custom Liquid Chrome Geometries
+        const liquidRibbonGeo = new THREE.TorusKnotGeometry(2.5, 0.6, 200, 35, 3, 5);
+        const centralRingGeo = new THREE.TorusGeometry(1.2, 0.12, 32, 100);
+
+        // Uniforms Mapping
+        const customUniforms = {
+            uTime: { value: 0 },
+            uFrequency: { value: 1.5 },
+            uColorBase: { value: new THREE.Color('#080d1a') },
+            uColorHighlight: { value: new THREE.Color('#c2d6ff') },
+            uColorGlow: { value: new THREE.Color('#00f2fe') }
+        };
+        customUniformsRef.current = customUniforms;
+
+        const secondaryUniforms = {
+            uTime: { value: 0 },
+            uFrequency: { value: 2.2 },
+            uColorBase: { value: new THREE.Color('#05030a') },
+            uColorHighlight: { value: new THREE.Color('#9d4edd') },
+            uColorGlow: { value: new THREE.Color('#00f2fe') }
+        };
+        secondaryUniformsRef.current = secondaryUniforms;
+
+        // Custom Shader Materials
+        const liquidMaterial = new THREE.ShaderMaterial({
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            uniforms: customUniforms,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+
+        const secondaryLiquidMaterial = new THREE.ShaderMaterial({
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            uniforms: secondaryUniforms,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+
+        // Assemble Meshes
+        const liquidRibbonMesh = new THREE.Mesh(liquidRibbonGeo, liquidMaterial);
+        scene.add(liquidRibbonMesh);
+        ribbonMeshRef.current = liquidRibbonMesh;
+
+        const centerRingMesh = new THREE.Mesh(centralRingGeo, secondaryLiquidMaterial);
+        centerRingMesh.position.set(0, 0, 1.5);
+        scene.add(centerRingMesh);
+        centerRingMeshRef.current = centerRingMesh;
+
+        // Volumetric Stage Lights Setup
+        const ambientLight = new THREE.AmbientLight('#020205', 0.5);
+        scene.add(ambientLight);
+
+        const pointLightCyan = new THREE.PointLight('#00f2fe', 3, 15);
+        pointLightCyan.position.set(-4, 3, 2);
+        scene.add(pointLightCyan);
+
+        const pointLightPurple = new THREE.PointLight('#7b2cbf', 4, 15);
+        pointLightPurple.position.set(4, -3, 2);
+        scene.add(pointLightPurple);
 
         return () => {
             renderer.dispose();
-            particleGeo.dispose();
-            pMaterial.dispose();
-            complexGeometry.dispose();
-            meshMaterial.dispose();
+            liquidRibbonGeo.dispose();
+            centralRingGeo.dispose();
+            liquidMaterial.dispose();
+            secondaryLiquidMaterial.dispose();
         };
     }, []);
 
-    // Frame-locked update execution
+    // Deterministic WebGL Render Cycle (Executed on every frame change)
     useEffect(() => {
         const renderer = rendererRef.current;
         const scene = sceneRef.current;
         const camera = cameraRef.current;
-        const particles = particlesRef.current;
-        const complexMesh = meshRef.current;
+        const ribbon = ribbonMeshRef.current;
+        const ring = centerRingMeshRef.current;
+        const customUniforms = customUniformsRef.current;
+        const secondaryUniforms = secondaryUniformsRef.current;
 
-        if (!renderer || !scene || !camera) return;
+        if (!renderer || !scene || !camera || !ribbon || !ring || !customUniforms || !secondaryUniforms) return;
 
-        // Broadcast camera drift
-        const cameraAngleX = (frame / 450) * Math.PI * 2 * 1;
-        const cameraAngleY = (frame / 450) * Math.PI * 2 * 2;
-        camera.position.x = Math.sin(cameraAngleX) * 2.5;
-        camera.position.y = Math.cos(cameraAngleY) * 1.8;
-        camera.lookAt(scene.position);
+        // Compute flawless seamless loop coordinates (20 seconds = 1200 frames total loop window)
+        const totalFrames = 1200;
+        const loopTime = (frame % totalFrames) / fps;
 
-        // Torus knot kinetic rotations
-        if (complexMesh) {
-            complexMesh.rotation.x = (frame / 450) * Math.PI * 2 * 2;
-            complexMesh.rotation.y = (frame / 450) * Math.PI * 2 * 3;
-            complexMesh.rotation.z = Math.sin((frame / 450) * Math.PI * 2) * 0.5;
-        }
+        // Drive custom shaders deterministically
+        customUniforms.uTime.value = loopTime;
+        secondaryUniforms.uTime.value = loopTime * 1.3;
 
-        // Particle fluid matrix computations
-        if (particles) {
-            const positions = particles.geometry.attributes.position.array as Float32Array;
-            const initialPositions = STATIC_PARTICLES.positions;
-            const phases = STATIC_PARTICLES.phases;
-            const waveAngle = (frame / 450) * Math.PI * 2 * 3;
+        // Mesh rotation mathematics matching original behavior exactly
+        ribbon.rotation.x = loopTime * 0.12;
+        ribbon.rotation.y = loopTime * 0.15;
+        ribbon.rotation.z = Math.sin(loopTime * 0.05) * 0.2;
 
-            let index = 0;
-            for (let i = 0; i < PARTICLE_COUNT; i++) {
-                const initialX = initialPositions[index];
-                const initialY = initialPositions[index + 1];
-                const initialZ = initialPositions[index + 2];
+        ring.rotation.x = Math.cos(loopTime * 0.2) * 0.3;
+        ring.rotation.y = Math.sin(loopTime * 0.2) * 0.3;
+        ring.rotation.z = -loopTime * 0.4;
 
-                let z = ((initialZ + 60 + (frame * 0.16)) % 120) - 60;
-                positions[index + 2] = z;
-
-                positions[index] = initialX + Math.sin(waveAngle + phases[i]) * 1.5;
-                positions[index + 1] = initialY + Math.cos(waveAngle + phases[i]) * 1.5;
-
-                index += 3;
-            }
-            particles.geometry.attributes.position.needsUpdate = true;
-            particles.rotation.z = (frame / 450) * Math.PI * 2;
-        }
+        // Camera Drifting Path Coordinates loop mathematically
+        const targetCamX = Math.sin(loopTime * 0.3) * 0.3;
+        const targetCamY = Math.cos(loopTime * 0.3) * 0.2;
+        camera.position.x += (targetCamX - camera.position.x) * 0.05;
+        camera.position.y += (targetCamY - camera.position.y) * 0.05;
+        camera.lookAt(0, 0, 0);
 
         renderer.render(scene, camera);
-    }, [frame]);
+    }, [frame, fps]);
 
-    // UI Animations (Deterministic timeline interpolation)
-    const leftAnim = () => {
-        let opacity = 0;
-        let scale = 0.8;
-        let translateY = 60;
+    // UI Element Animation & Styling Calculations (Deterministic & Symmetrical Loops)
+    const leftScale = interpolate(
+        Math.sin((frame / 60) * Math.PI),
+        [-1, 1],
+        [1.0, 1.02]
+    );
 
-        if (frame < 10) {
-            opacity = 0;
-            scale = 0.8;
-            translateY = 60;
-        } else if (frame < 50) {
-            const t = (frame - 10) / 40;
-            const ease = Easing.out(Easing.quad)(t);
-            opacity = ease;
-            scale = 0.8 + ease * 0.2;
-            translateY = 60 - ease * 60;
-        } else if (frame < 410) {
-            opacity = 1;
-            const floatProgress = (frame - 50) / 360;
-            const floatY = Math.sin(floatProgress * Math.PI * 4) * 6;
-            translateY = floatY;
-            scale = 1.0 + Math.sin(floatProgress * Math.PI * 4) * 0.01;
-        } else {
-            const t = (frame - 410) / 40;
-            const ease = Easing.in(Easing.quad)(t);
-            opacity = 1 - ease;
-            scale = 1.0 - ease * 0.2;
-            translateY = ease * 60;
-        }
+    const rightScale = interpolate(
+        Math.sin((frame / 60) * Math.PI + Math.PI),
+        [-1, 1],
+        [1.0, 1.02]
+    );
 
-        return { opacity, scale, translateY };
-    };
+    const centerScale = interpolate(
+        Math.sin((frame / 120) * Math.PI),
+        [-1, 1],
+        [0.98, 1.03]
+    );
 
-    const rightAnim = () => {
-        let opacity = 0;
-        let scale = 0.8;
-        let translateY = 60;
+    // Light Sweeps Opacity (Simulating original stagger timeline loop)
+    const sweepOpacityLeft = interpolate(
+        (frame + 0) % 240,
+        [0, 45, 90, 135, 240],
+        [0, 0.6, 0, 0, 0],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+    );
 
-        if (frame < 20) {
-            opacity = 0;
-            scale = 0.8;
-            translateY = 60;
-        } else if (frame < 60) {
-            const t = (frame - 20) / 40;
-            const ease = Easing.out(Easing.quad)(t);
-            opacity = ease;
-            scale = 0.8 + ease * 0.2;
-            translateY = 60 - ease * 60;
-        } else if (frame < 400) {
-            opacity = 1;
-            const floatProgress = (frame - 60) / 340;
-            const floatY = Math.cos(floatProgress * Math.PI * 4) * 6;
-            translateY = floatY;
-            scale = 1.0 + Math.cos(floatProgress * Math.PI * 4) * 0.01;
-        } else {
-            const t = (frame - 400) / 40;
-            const ease = Easing.in(Easing.quad)(t);
-            opacity = 1 - ease;
-            scale = 1.0 - ease * 0.2;
-            translateY = ease * 60;
-        }
+    const sweepOpacityRight = interpolate(
+        (frame + 96) % 240,
+        [0, 45, 90, 135, 240],
+        [0, 0.6, 0, 0, 0],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+    );
 
-        return { opacity, scale, translateY };
-    };
+    // Diagonal Shine movement
+    const shinePosLeft = interpolate(
+        (frame + 0) % 240,
+        [0, 90, 240],
+        [-100, 200, 200],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+    );
 
-    const subscribeAnim = () => {
-        let opacity = 0;
-        let scale = 0;
+    const shinePosRight = interpolate(
+        (frame + 96) % 240,
+        [0, 90, 240],
+        [-100, 200, 200],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+    );
 
-        if (frame < 25) {
-            opacity = 0;
-            scale = 0;
-        } else if (frame < 70) {
-            const t = (frame - 25) / 45;
-            const ease = Easing.out(Easing.back(1.5))(t);
-            opacity = t;
-            scale = ease;
-        } else if (frame < 390) {
-            opacity = 1;
-            const pulseProgress = (frame - 70) / 320;
-            scale = 1 + Math.sin(pulseProgress * Math.PI * 6) * 0.04;
-        } else if (frame < 435) {
-            const t = (frame - 390) / 45;
-            const ease = Easing.in(Easing.quad)(t);
-            opacity = 1 - t;
-            scale = 1 - ease;
-        } else {
-            opacity = 0;
-            scale = 0;
-        }
-
-        return { opacity, scale };
-    };
-
-    const sweepProgress = (frame % 150) / 150;
-    const sweepTranslate = interpolate(sweepProgress, [0, 1], [-150, 150]);
-
-    const { opacity: leftOpacity, scale: leftScale, translateY: leftY } = leftAnim();
-    const { opacity: rightOpacity, scale: rightScale, translateY: rightY } = rightAnim();
-    const { opacity: subOpacity, scale: subScale } = subscribeAnim();
-
-    const ring1Rotation = (frame / 450) * 360;
-    const ring2Rotation = -(frame / 450) * 360 * 2;
-
-    // Outer Layout Styles
+    // Inline Style Declarations
     const containerStyle: React.CSSProperties = {
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
@@ -287,8 +278,18 @@ const PremiumCinematicEndscreen: React.FC = () => {
         left: '50%',
         transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
+        backgroundColor: '#030307',
         overflow: 'hidden',
-        background: 'radial-gradient(circle at 50% 50%, #0a0616 0%, #020105 100%)',
+        boxShadow: '0 0 100px rgba(0, 0, 0, 0.8)'
+    };
+
+    const canvasStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 1
     };
 
     const vignetteStyle: React.CSSProperties = {
@@ -297,9 +298,9 @@ const PremiumCinematicEndscreen: React.FC = () => {
         left: 0,
         width: '100%',
         height: '100%',
-        background: 'radial-gradient(circle at 50% 50%, transparent 30%, rgba(2, 1, 5, 0.85) 100%)',
-        zIndex: 5,
+        background: 'radial-gradient(circle at center, transparent 30%, rgba(0, 0, 0, 0.4) 70%, rgba(2, 2, 6, 0.95) 100%)',
         pointerEvents: 'none',
+        zIndex: 2
     };
 
     const uiLayerStyle: React.CSSProperties = {
@@ -308,129 +309,125 @@ const PremiumCinematicEndscreen: React.FC = () => {
         left: 0,
         width: '100%',
         height: '100%',
-        zIndex: 10,
-        pointerEvents: 'auto',
-        boxSizing: 'border-box',
-        padding: '90px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
+        zIndex: 3,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(12, 1fr)',
+        gridTemplateRows: 'repeat(12, 1fr)',
+        padding: 90,
+        pointerEvents: 'none'
     };
 
-    const basePlaceholderStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: '620px',
-        height: '348px',
-        backgroundColor: 'rgba(10, 10, 18, 0.45)',
+    const videoBaseStyle: React.CSSProperties = {
+        pointerEvents: 'auto',
+        borderRadius: 24,
+        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
         backdropFilter: 'blur(25px) saturate(180%)',
         WebkitBackdropFilter: 'blur(25px) saturate(180%)',
-        border: '3px solid rgba(0, 240, 255, 0.4)',
-        borderRadius: '24px',
-        boxShadow: '0 0 50px rgba(0, 0, 0, 0.8), inset 0 0 30px rgba(255, 255, 255, 0.05), 0 0 30px rgba(0, 240, 255, 0.4)',
-        overflow: 'hidden',
-    };
-
-    const sweepDivStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: '-50%',
-        left: '-50%',
-        width: '200%',
-        height: '200%',
-        background: 'linear-gradient(45deg, transparent 45%, rgba(255, 255, 255, 0.1) 50%, transparent 55%)',
-        transform: `translate(${sweepTranslate}%, ${sweepTranslate}%) rotate(45deg)`,
-    };
-
-    const subscribeWrapperStyle: React.CSSProperties = {
-        position: 'absolute',
-        left: '50%',
-        top: '540px',
-        transform: 'translate(-50%, -50%)',
-        width: '280px',
-        height: '280px',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-    };
-
-    const subscribeCircleStyle: React.CSSProperties = {
-        width: '190px',
-        height: '190px',
-        backgroundColor: 'rgba(10, 10, 18, 0.45)',
-        backdropFilter: 'blur(30px)',
-        WebkitBackdropFilter: 'blur(30px)',
-        border: '4px solid #00f0ff',
-        borderRadius: '50%',
-        boxShadow: '0 0 60px rgba(0, 0, 0, 0.9), 0 0 40px #00f0ff, inset 0 0 25px rgba(255, 255, 255, 0.1)',
+        border: '2px solid rgba(0, 242, 254, 0.15)',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 40px rgba(0, 242, 254, 0.05)',
         position: 'relative',
-        zIndex: 5,
-        transform: `scale(${subScale})`,
-        opacity: subOpacity,
+        overflow: 'hidden'
+    };
+
+    const videoLeftStyle: React.CSSProperties = {
+        ...videoBaseStyle,
+        gridColumn: '1 / 5',
+        gridRow: '4 / 10',
+        width: 530,
+        height: 298,
+        alignSelf: 'center',
+        transform: `scale(${leftScale}) translateY(-2px)`,
+    };
+
+    const videoRightStyle: React.CSSProperties = {
+        ...videoBaseStyle,
+        gridColumn: '9 / 13',
+        gridRow: '4 / 10',
+        width: 530,
+        height: 298,
+        alignSelf: 'center',
+        justifySelf: 'end',
+        transform: `scale(${rightScale}) translateY(-2px)`,
+    };
+
+    const subscribeContainerStyle: React.CSSProperties = {
+        gridColumn: '5 / 9',
+        gridRow: '4 / 10',
+        placeSelf: 'center',
+        width: 240,
+        height: 240,
+        position: 'relative',
+        pointerEvents: 'auto',
+        transform: `scale(${centerScale})`
+    };
+
+    const subscribeCoreStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: 20,
+        left: 20,
+        width: 200,
+        height: 200,
+        borderRadius: '50%',
+        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        border: '2px solid rgba(157, 78, 221, 0.25)',
+        boxShadow: '0 0 50px rgba(157, 78, 221, 0.15), inset 0 0 30px rgba(0, 242, 254, 0.05)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    };
+
+    const lightSweepStyle: React.CSSProperties = {
+        position: 'absolute',
+        width: '100%',
+        height: '100%',
+        top: 0,
+        left: 0,
+        background: 'linear-gradient(to bottom, transparent, rgba(0, 242, 254, 0.03), transparent)',
+        pointerEvents: 'none'
     };
 
     return (
         <div style={containerStyle}>
-            <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' }} />
-            
+            <canvas ref={canvasRef} style={canvasStyle} />
             <div style={vignetteStyle} />
-
             <div style={uiLayerStyle}>
-                <div
-                    id="video-left"
-                    style={{
-                        ...basePlaceholderStyle,
-                        left: '110px',
-                        top: '366px',
-                        opacity: leftOpacity,
-                        transform: `scale(${leftScale}) translateY(${leftY}px)`,
-                    }}
-                >
-                    <div style={sweepDivStyle} />
+                
+                <div style={videoLeftStyle} id="card-left">
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: `${shinePosLeft}%`,
+                        width: '50%',
+                        height: '100%',
+                        background: 'linear-gradient(90deg, transparent, rgba(0, 242, 254, 0.2), transparent)',
+                        transform: 'skewX(-25deg)'
+                    }} />
+                    <div style={{ ...lightSweepStyle, opacity: sweepOpacityLeft }} />
                 </div>
 
-                <div style={subscribeWrapperStyle}>
-                    <svg style={{ position: 'absolute', width: 250, height: 250, filter: 'drop-shadow(0 0 8px #ff00ff)', transform: `rotate(${ring1Rotation}deg)` }}>
-                        <circle
-                            cx="125"
-                            cy="125"
-                            r="120"
-                            fill="transparent"
-                            stroke="#ff00ff"
-                            strokeWidth="2"
-                            strokeDasharray="10 15"
-                        />
-                    </svg>
-
-                    <svg style={{ position: 'absolute', width: 275, height: 275, filter: 'drop-shadow(0 0 12px #00f0ff)', transform: `rotate(${ring2Rotation}deg)` }}>
-                        <circle
-                            cx="137.5"
-                            cy="137.5"
-                            r="132"
-                            fill="transparent"
-                            stroke="#00f0ff"
-                            strokeWidth="1"
-                            strokeDasharray="40 180"
-                        />
-                    </svg>
-
-                    <div style={subscribeCircleStyle} />
+                <div style={subscribeContainerStyle} id="card-center">
+                    <div style={subscribeCoreStyle} />
                 </div>
 
-                <div
-                    id="video-right"
-                    style={{
-                        ...basePlaceholderStyle,
-                        right: '110px',
-                        top: '366px',
-                        opacity: rightOpacity,
-                        transform: `scale(${rightScale}) translateY(${rightY}px)`,
-                    }}
-                >
-                    <div style={sweepDivStyle} />
+                <div style={videoRightStyle} id="card-right">
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: `${shinePosRight}%`,
+                        width: '50%',
+                        height: '100%',
+                        background: 'linear-gradient(90deg, transparent, rgba(0, 242, 254, 0.2), transparent)',
+                        transform: 'skewX(-25deg)'
+                    }} />
+                    <div style={{ ...lightSweepStyle, opacity: sweepOpacityRight }} />
                 </div>
+
             </div>
         </div>
     );
 };
 
-export default PremiumCinematicEndscreen;
+export default PremiumLiquidChromeEndscreen;
 // END_OF_FILE
