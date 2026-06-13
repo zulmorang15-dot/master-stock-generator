@@ -395,6 +395,37 @@ async function callAIWithFallback(prompt, options = {}) {
         return result;
       }
       throw new Error("OpenRouter returned invalid response");
+    } else if (preferModel === 'tsx-default') {
+      log("Memulai pencarian model untuk konversi TSX (Gemini Syntx -> Claude Syntx)...", "info");
+      // 1. Coba Syntx Gemini
+      try {
+        log("📡 [1/2] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
+        const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
+        if (isValid(result, "Syntx Gemini")) {
+          log("✅ Sukses menggunakan Syntx Gemini untuk TSX!", "success");
+          return result;
+        }
+        log("⚠️ Syntx Gemini: respons tidak valid, lanjut fallback...", "warning");
+      } catch (err) {
+        log(`⚠️ Syntx.ai Gemini gagal: ${err.message?.substring(0, 150)}`, "warning");
+        errors.push({ provider: "syntx-gemini", error: err.message });
+      }
+
+      // 2. Coba Syntx Claude
+      try {
+        log("📡 [2/2] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
+        const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
+        if (isValid(result, "Syntx Claude")) {
+          log("✅ Sukses menggunakan Syntx Claude untuk TSX!", "success");
+          return result;
+        }
+        log("⚠️ Syntx Claude: respons tidak valid, lanjut fallback...", "warning");
+      } catch (err) {
+        log(`⚠️ Syntx.ai Claude gagal: ${err.message?.substring(0, 150)}`, "warning");
+        errors.push({ provider: "syntx-claude", error: err.message });
+      }
+
+      log("⚠️ Kedua model Syntx (Gemini & Claude) gagal, lanjut ke standard auto-fallback...", "warning");
     }
   }
 
@@ -1184,7 +1215,7 @@ app.post("/api/convert-html-to-tsx-gemini", async (req, res) => {
       .replace(/{{DURATION_FRAMES}}/g, String(durationFrames))
       .replace(/{{HTML_CONTENT}}/g, item.htmlPreview || "");
 
-    const aiResponse = await callAIWithFallback(conversionPrompt);
+    const aiResponse = await callAIWithFallback(conversionPrompt, { preferModel: 'tsx-default' });
 
     let tsxCode = aiResponse.trim();
     if (tsxCode.includes("```typescript") || tsxCode.includes("```tsx")) {
@@ -1225,7 +1256,7 @@ app.post("/api/convert-html-to-tsx", async (req, res) => {
       .replace(/{{DURATION_FRAMES}}/g, String(durationFrames))
       .replace(/{{HTML_CONTENT}}/g, item.htmlPreview || "");
 
-    const aiResponse = await callAIWithFallback(conversionPrompt);
+    const aiResponse = await callAIWithFallback(conversionPrompt, { preferModel: 'tsx-default' });
 
     let tsxCode = aiResponse.trim();
     if (tsxCode.startsWith("```typescript") || tsxCode.startsWith("```tsx")) {
@@ -2390,7 +2421,7 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
       try {
         tsxResponse = await runAbortable(
           callAIWithFallback(conversionPrompt, { 
-            preferModel: item.aiModel || 'auto',
+            preferModel: (!item.aiModel || item.aiModel === 'auto') ? 'tsx-default' : item.aiModel,
             validator: tsxValidator,
             taskId: itemId
           }),

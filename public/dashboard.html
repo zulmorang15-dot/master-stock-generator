@@ -1328,6 +1328,15 @@
       <button class="btn-batch-download" id="btnBatchDownload" onclick="triggerBatchDownload()" style="background: linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; padding:6px 12px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer;">📥 Batch Download (MOV)</button>
       <button class="btn-batch-del" id="btnBatchDelete" onclick="triggerBatchDelete()">🗑 Batch Hapus</button>
     </div>
+    <!-- ═══════════ BATCH STATUS BANNER ═══════════ -->
+    <div id="batchStatusBanner" style="display:none; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:12px 16px; margin-bottom:16px; justify-content:space-between; align-items:center;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="spin" style="font-size:16px; color:var(--amber);">⏳</span>
+        <span id="batchStatusText" style="font-size:13px; font-weight:600; color:#fff;">Batch Processing...</span>
+      </div>
+      <button class="btn-refresh" onclick="stopBatch()" style="border-color:var(--red); color:var(--red); padding:4px 12px; font-size:12px; font-weight:700; margin:0;">🛑 Stop Batch</button>
+    </div>
+
     <div id="resultsContainer">
       <div class="empty-state">
         <div class="empty-icon">🎞</div>
@@ -2584,77 +2593,116 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     }
   }
 
-  async function triggerBatchSEO() {
-    const ids = [...batchSelected];
-    if (ids.length === 0) return;
-    if (!confirm(`Generate Judul & Keywords untuk ${ids.length} item?`)) return;
-    
-    const btn = document.getElementById('btnBatchSeo');
-    btn.disabled = true;
-    btn.textContent = '⏳ Memproses...';
-    
+  // ─── STATEFUL CLIENT-SIDE BATCH SYSTEM ───
+  let batchActive = false;
+  let batchIds = [];
+  let batchCurrentIndex = 0;
+  let batchType = ''; // 'seo' or 'tsx'
+  let batchModel = 'auto';
+
+  function saveBatchState() {
+    localStorage.setItem('batch_active', batchActive ? 'true' : 'false');
+    localStorage.setItem('batch_ids', JSON.stringify(batchIds));
+    localStorage.setItem('batch_current_index', String(batchCurrentIndex));
+    localStorage.setItem('batch_type', batchType);
+    localStorage.setItem('batch_model', batchModel);
+  }
+
+  function loadBatchState() {
+    batchActive = localStorage.getItem('batch_active') === 'true';
     try {
-      for (const id of ids) {
-        const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
-        activeSeoGenerations[id] = true;
-        loadResults();
-        
-        try {
-          const resp = await fetch(`/api/regenerate-seo/${id}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ aiModel })
-          });
-          const data = await resp.json();
-          if (data.error) throw new Error(data.error);
-          showToast(`✅ SEO untuk ${id} berhasil!`, 'success');
-        } catch (err) {
-          showToast(`❌ SEO untuk ${id} gagal: ${err.message}`, 'error');
-        } finally {
-          activeSeoGenerations[id] = false;
-          loadResults();
-        }
-        
-        startTaskLogStream(id);
-        await new Promise(r => setTimeout(r, 500));
-      }
-      clearBatchSelection();
-    } catch(err) {
-      showToast('❌ Batch SEO gagal: ' + err.message, 'error');
-    } finally {
-      btn.textContent = '✨ Gen Judul Terpilih';
-      updateBatchBar();
+      batchIds = JSON.parse(localStorage.getItem('batch_ids') || '[]');
+    } catch(e) {
+      batchIds = [];
+    }
+    batchCurrentIndex = Number(localStorage.getItem('batch_current_index') || '0');
+    batchType = localStorage.getItem('batch_type') || '';
+    batchModel = localStorage.getItem('batch_model') || 'auto';
+  }
+
+  function clearBatchState() {
+    batchActive = false;
+    batchIds = [];
+    batchCurrentIndex = 0;
+    batchType = '';
+    saveBatchState();
+  }
+
+  window.stopBatch = function() {
+    clearBatchState();
+    updateBatchStatusUI();
+    showToast('🛑 Batch dihentikan oleh user!', 'warning');
+    // Enable buttons back
+    const btnSeo = document.getElementById('btnBatchSeo');
+    if (btnSeo) { btnSeo.disabled = false; btnSeo.textContent = '✨ Gen Judul Terpilih'; }
+    const btnTsx = document.getElementById('btnBatchTsx');
+    if (btnTsx) { btnTsx.disabled = false; btnTsx.textContent = '⚙️ Gen TSX & Preview Terpilih'; }
+    updateBatchBar();
+  }
+
+  function updateBatchStatusUI() {
+    const banner = document.getElementById('batchStatusBanner');
+    const textEl = document.getElementById('batchStatusText');
+    if (!banner || !textEl) return;
+
+    if (batchActive && batchIds.length > 0 && batchCurrentIndex < batchIds.length) {
+      banner.style.display = 'flex';
+      const typeText = batchType === 'seo' ? 'Gen Judul & Keywords (SEO)' : 'Gen TSX & Preview';
+      textEl.textContent = `Batch Aktif: ${typeText} (${batchCurrentIndex + 1}/${batchIds.length} item)`;
+    } else {
+      banner.style.display = 'none';
     }
   }
 
-  async function triggerBatchTsx() {
-    const ids = [...batchSelected];
-    if (ids.length === 0) return;
-    if (!confirm(`Generate TSX & Preview untuk ${ids.length} item?`)) return;
-    
-    const btn = document.getElementById('btnBatchTsx');
-    btn.disabled = true;
-    btn.textContent = '⏳ Memproses...';
-    
+  async function runNextBatchItem() {
+    loadBatchState();
+    if (!batchActive || batchCurrentIndex >= batchIds.length) {
+      if (batchActive) {
+        showToast('✅ Semua item batch selesai diproses!', 'success');
+        clearBatchState();
+      }
+      updateBatchStatusUI();
+      // Re-enable batch buttons
+      const btnSeo = document.getElementById('btnBatchSeo');
+      if (btnSeo) { btnSeo.disabled = false; btnSeo.textContent = '✨ Gen Judul Terpilih'; }
+      const btnTsx = document.getElementById('btnBatchTsx');
+      if (btnTsx) { btnTsx.disabled = false; btnTsx.textContent = '⚙️ Gen TSX & Preview Terpilih'; }
+      return;
+    }
+
+    updateBatchStatusUI();
+    const id = batchIds[batchCurrentIndex];
+
     try {
-      const resp = await fetch('/api/saved-items');
-      const items = await resp.json();
-      
-      for (const id of ids) {
+      if (batchType === 'seo') {
+        activeSeoGenerations[id] = true;
+        loadResults();
+
+        const resp = await fetch(`/api/regenerate-seo/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aiModel: batchModel })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        showToast(`✅ SEO untuk ${id} sukses!`, 'success');
+        
+        activeSeoGenerations[id] = false;
+        loadResults();
+        startTaskLogStream(id);
+      } else if (batchType === 'tsx') {
+        const resp = await fetch('/api/saved-items');
+        const items = await resp.json();
         const item = items.find(i => i.id === id);
-        if (!item) continue;
-        
-        const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
-        const status = item.statusConvertTsx || 'waiting';
-        
-        try {
+        if (item) {
+          const status = item.statusConvertTsx || 'waiting';
           let url, body;
           if (status === 'waiting') {
             url = `/api/start-task/${id}`;
-            body = JSON.stringify({ aiModel });
+            body = JSON.stringify({ aiModel: batchModel });
           } else {
             url = `/api/retry-task/${id}`;
-            body = JSON.stringify({ aiModel });
+            body = JSON.stringify({ aiModel: batchModel });
           }
           
           const startResp = await fetch(url, {
@@ -2666,20 +2714,63 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
           if (startData.error) throw new Error(startData.error);
           
           startTaskLogStream(id);
-        } catch (err) {
-          showToast(`❌ TSX untuk ${id} gagal: ${err.message}`, 'error');
         }
-        await new Promise(r => setTimeout(r, 300));
       }
-      showToast(`🚀 Batch TSX & Preview berhasil diantrekan!`, 'success');
-      loadResults();
-      clearBatchSelection();
-    } catch(err) {
-      showToast('❌ Batch gagal: ' + err.message, 'error');
-    } finally {
-      btn.textContent = '⚙️ Gen TSX & Preview Terpilih';
-      updateBatchBar();
+    } catch (err) {
+      showToast(`❌ Item ${id} gagal: ${err.message}`, 'error');
+      if (batchType === 'seo') {
+        activeSeoGenerations[id] = false;
+        loadResults();
+      }
     }
+
+    // Move to next item
+    batchCurrentIndex++;
+    saveBatchState();
+    updateBatchStatusUI();
+    
+    // Process next with a small delay
+    setTimeout(runNextBatchItem, 1000);
+  }
+
+  async function triggerBatchSEO() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Generate Judul & Keywords untuk ${ids.length} item?`)) return;
+    
+    const btn = document.getElementById('btnBatchSeo');
+    btn.disabled = true;
+    btn.textContent = '⏳ Batch Running...';
+    
+    batchActive = true;
+    batchIds = ids;
+    batchCurrentIndex = 0;
+    batchType = 'seo';
+    batchModel = 'auto';
+    
+    saveBatchState();
+    clearBatchSelection();
+    runNextBatchItem();
+  }
+
+  async function triggerBatchTsx() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Generate TSX & Preview untuk ${ids.length} item?`)) return;
+    
+    const btn = document.getElementById('btnBatchTsx');
+    btn.disabled = true;
+    btn.textContent = '⏳ Batch Running...';
+    
+    batchActive = true;
+    batchIds = ids;
+    batchCurrentIndex = 0;
+    batchType = 'tsx';
+    batchModel = 'auto';
+    
+    saveBatchState();
+    clearBatchSelection();
+    runNextBatchItem();
   }
 
   async function triggerBatch4K() {
@@ -3865,6 +3956,19 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     } else {
       // Load boilerplate by default if empty
       loadCompilerTemplate(false);
+    }
+
+    // Resume active batch if any
+    loadBatchState();
+    if (batchActive && batchIds.length > 0 && batchCurrentIndex < batchIds.length) {
+      showToast('🔄 Melanjutkan pemrosesan batch...', 'info');
+      const btnSeo = document.getElementById('btnBatchSeo');
+      if (btnSeo) { btnSeo.disabled = true; btnSeo.textContent = '⏳ Batch Running...'; }
+      const btnTsx = document.getElementById('btnBatchTsx');
+      if (btnTsx) { btnTsx.disabled = true; btnTsx.textContent = '⏳ Batch Running...'; }
+      runNextBatchItem();
+    } else {
+      clearBatchState();
     }
   }
 
