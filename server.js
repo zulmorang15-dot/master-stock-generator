@@ -1382,6 +1382,11 @@ app.post("/api/save-item", (req, res) => {
 
     const index = items.findIndex(i => i.id === item.id);
     if (index !== -1) {
+      // Track if user manually changed video config fields
+      const videoConfigFields = ['loop', 'transparent', 'animationDuration', 'fps'];
+      if (videoConfigFields.some(f => item[f] !== undefined)) {
+        item._userSetVideoConfig = true;
+      }
       items[index] = { ...items[index], ...item };
     } else {
       items.push(item);
@@ -2298,23 +2303,28 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
       analysisText = analysisText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
       const config = JSON.parse(analysisText);
 
-      if (config.loop !== undefined) {
-        item.loop = config.loop === true || config.loop === 'true';
-      }
-      if (config.transparent !== undefined) {
-        item.transparent = config.transparent === true || config.transparent === 'true';
-      }
-      if (config.duration !== undefined) {
-        const parsedDur = Number(config.duration);
-        if ([5, 8, 10, 12, 15, 20, 30].includes(parsedDur)) {
-          item.animationDuration = parsedDur;
+      // Only apply AI values if user hasn't manually configured video settings
+      if (!item._userSetVideoConfig) {
+        if (config.loop !== undefined) {
+          item.loop = config.loop === true || config.loop === 'true';
         }
-      }
-      if (config.fps !== undefined) {
-        const parsedFps = Number(config.fps);
-        if ([30, 60].includes(parsedFps)) {
-          item.fps = parsedFps;
+        if (config.transparent !== undefined) {
+          item.transparent = config.transparent === true || config.transparent === 'true';
         }
+        if (config.duration !== undefined) {
+          const parsedDur = Number(config.duration);
+          if ([5, 8, 10, 12, 15, 20, 30].includes(parsedDur)) {
+            item.animationDuration = parsedDur;
+          }
+        }
+        if (config.fps !== undefined) {
+          const parsedFps = Number(config.fps);
+          if ([30, 60].includes(parsedFps)) {
+            item.fps = parsedFps;
+          }
+        }
+      } else {
+        addTaskLog(itemId, "Menggunakan konfigurasi video yang diatur manual oleh user.", "info");
       }
 
       // Recalculate durationInFrames
@@ -3561,6 +3571,8 @@ app.post("/api/start-task/:id", (req, res) => {
   // Update status ke queued, simpan aiModel jika ada
   item.statusConvertTsx = 'queued';
   if (aiModel) item.aiModel = aiModel;
+  // For fresh start, clear user override flag so AI analysis runs
+  delete item._userSetVideoConfig;
   if (req.body.loop !== undefined) item.loop = !!req.body.loop;
   if (req.body.transparent !== undefined) item.transparent = !!req.body.transparent;
   const targetFps = Number(fps) || item.fps || 30;
