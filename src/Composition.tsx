@@ -1,374 +1,408 @@
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
-import React, { useRef, useEffect } from 'react';
+import React, { useMemo } from 'react';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const COLORS_BASE = [
-  'rgba(0, 234, 255, ',
-  'rgba(255, 0, 212, ',
-  'rgba(120, 80, 255, ',
-  'rgba(255, 255, 255, ',
-  'rgba(40, 60, 120, ',
+const PARTICLES = [
+  { left: 5, duration: 150, delay: 12, scale: 1.2, color: '#ff6b6b' },
+  { left: 12, duration: 200, delay: 45, scale: 0.8, color: '#ffb86c' },
+  { left: 20, duration: 120, delay: 80, scale: 1.5, color: '#2ff3e0' },
+  { left: 28, duration: 300, delay: 110, scale: 0.6, color: '#ff6b6b' },
+  { left: 35, duration: 150, delay: 5, scale: 1.1, color: '#ffb86c' },
+  { left: 42, duration: 200, delay: 190, scale: 1.4, color: '#2ff3e0' },
+  { left: 50, duration: 100, delay: 30, scale: 0.9, color: '#2ff3e0' },
+  { left: 58, duration: 300, delay: 250, scale: 1.6, color: '#ff6b6b' },
+  { left: 65, duration: 150, delay: 95, scale: 0.7, color: '#ffb86c' },
+  { left: 72, duration: 120, delay: 15, scale: 1.3, color: '#2ff3e0' },
+  { left: 80, duration: 200, delay: 135, scale: 1.0, color: '#ff6b6b' },
+  { left: 88, duration: 150, delay: 60, scale: 1.8, color: '#ffb86c' },
+  { left: 95, duration: 100, delay: 75, scale: 0.5, color: '#2ff3e0' },
+  { left: 8, duration: 300, delay: 150, scale: 1.3, color: '#ff6b6b' },
+  { left: 18, duration: 150, delay: 40, scale: 0.9, color: '#ffb86c' },
+  { left: 25, duration: 200, delay: 115, scale: 1.1, color: '#2ff3e0' },
+  { left: 33, duration: 120, delay: 55, scale: 1.7, color: '#ff6b6b' },
+  { left: 47, duration: 100, delay: 90, scale: 0.8, color: '#ffb86c' },
+  { left: 55, duration: 150, delay: 130, scale: 1.2, color: '#2ff3e0' },
+  { left: 62, duration: 300, delay: 20, scale: 1.5, color: '#ff6b6b' },
+  { left: 70, duration: 200, delay: 85, scale: 0.6, color: '#ffb86c' },
+  { left: 78, duration: 120, delay: 140, scale: 1.4, color: '#2ff3e0' },
+  { left: 85, duration: 150, delay: 200, scale: 1.0, color: '#ff6b6b' },
+  { left: 92, duration: 100, delay: 10, scale: 0.7, color: '#ffb86c' },
+  { left: 15, duration: 300, delay: 50, scale: 1.2, color: '#2ff3e0' },
+  { left: 40, duration: 200, delay: 175, scale: 1.6, color: '#ff6b6b' },
+  { left: 68, duration: 150, delay: 110, scale: 0.9, color: '#ffb86c' },
+  { left: 83, duration: 120, delay: 65, scale: 1.3, color: '#2ff3e0' }
 ];
 
-const NUM_LINES = 160;
-const NUM_GLITCH_BLOCKS = 80;
-const NUM_WIDE_BANDS = 30;
-
-function seededRandom(seed: number): number {
-  const x = Math.sin(seed + 1) * 43758.5453123;
-  return x - Math.floor(x);
-}
-
-const STATIC_LINES: {
-  yFrac: number;
-  xFrac: number;
-  wFrac: number;
-  thickness: number;
-  colorIdx: number;
-  alpha: number;
-  speed: number;
-}[] = Array.from({ length: NUM_LINES }, (_, i) => ({
-  yFrac: seededRandom(i * 7 + 0),
-  xFrac: seededRandom(i * 7 + 1),
-  wFrac: 40 / 1920 + seededRandom(i * 7 + 2) * (400 / 1920),
-  thickness: 2 + seededRandom(i * 7 + 3) * 7,
-  colorIdx: Math.floor(seededRandom(i * 7 + 4) * COLORS_BASE.length),
-  alpha: 0.25 + seededRandom(i * 7 + 5) * 0.65,
-  speed: (seededRandom(i * 7 + 6) - 0.5) * 5,
-}));
-
-const GLITCH_BLOCKS: {
-  yFrac: number;
-  hFrac: number;
-  xFrac: number;
-  wFrac: number;
-  colorIdx: number;
-  alpha: number;
-  triggerFrac: number;
-}[] = Array.from({ length: NUM_GLITCH_BLOCKS }, (_, i) => ({
-  yFrac: seededRandom(i * 9 + 100),
-  hFrac: (4 + seededRandom(i * 9 + 101) * 50) / 1080,
-  xFrac: seededRandom(i * 9 + 102),
-  wFrac: (80 + seededRandom(i * 9 + 103) * 550) / 1920,
-  colorIdx: Math.floor(seededRandom(i * 9 + 104) * COLORS_BASE.length),
-  alpha: 0.2 + seededRandom(i * 9 + 105) * 0.4,
-  triggerFrac: seededRandom(i * 9 + 106),
-}));
-
-const WIDE_BANDS: {
-  yFrac: number;
-  hFrac: number;
-  alpha: number;
-  triggerFrac: number;
-}[] = Array.from({ length: NUM_WIDE_BANDS }, (_, i) => ({
-  yFrac: seededRandom(i * 5 + 200),
-  hFrac: (10 + seededRandom(i * 5 + 201) * 60) / 1080,
-  alpha: 0.05 + seededRandom(i * 5 + 202) * 0.12,
-  triggerFrac: seededRandom(i * 5 + 203),
-}));
-
-const GlitchTheEnd: React.FC = () => {
+const AuroraGlassEndscreen: React.FC = () => {
+  const { width, height } = useVideoConfig();
   const frame = useCurrentFrame();
-  const { width, height, fps } = useVideoConfig();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  const TOTAL_FRAMES = fps * 10;
-  const localFrame = frame % TOTAL_FRAMES;
-  const cycleProgress = localFrame / TOTAL_FRAMES;
+  // Aurora Float Animations
+  // a1 - 300 frame cycle
+  const a1Tx = interpolate(frame % 300, [0, 150, 300], [0, ORIGINAL_WIDTH * 0.45 * 0.08, 0], { easing: Easing.inOut(Easing.quad) });
+  const a1Ty = interpolate(frame % 300, [0, 150, 300], [0, ORIGINAL_WIDTH * 0.45 * 0.12, 0], { easing: Easing.inOut(Easing.quad) });
+  const a1Scale = interpolate(frame % 300, [0, 150, 300], [1, 1.15, 1], { easing: Easing.inOut(Easing.quad) });
 
-  // ---- textShake: 3s cycle mapped to steps(15) ----
-  const shakeFrames = fps * 3;
-  const shakeLocal = localFrame % shakeFrames;
-  const shakeProgress = shakeLocal / shakeFrames;
+  // a2 - 600 frame cycle
+  const a2Tx = interpolate(frame % 600, [0, 300, 600], [0, -ORIGINAL_WIDTH * 0.40 * 0.10, 0], { easing: Easing.inOut(Easing.quad) });
+  const a2Ty = interpolate(frame % 600, [0, 300, 600], [0, -ORIGINAL_WIDTH * 0.40 * 0.08, 0], { easing: Easing.inOut(Easing.quad) });
+  const a2Scale = interpolate(frame % 600, [0, 300, 600], [1, 1.2, 1], { easing: Easing.inOut(Easing.quad) });
 
-  const shakeKeyframesX = [0, 0.10, 0.20, 0.30, 0.45, 0.55, 0.70, 0.85, 1.0];
-  const shakeValuesX =   [0,  -4,    4,   -2,    5,   -5,    2,   -4,    0];
-  const shakeKeyframesY = [0, 0.10, 0.20, 0.30, 0.45, 0.55, 0.70, 0.85, 1.0];
-  const shakeValuesY =   [0,   2,   -2,    0,    2,   -2,    3,   -3,    0];
+  // a3 - 300 frame cycle
+  const a3Tx = interpolate(frame % 300, [0, 150, 300], [0, -ORIGINAL_WIDTH * 0.30 * 0.06, 0], { easing: Easing.inOut(Easing.quad) });
+  const a3Ty = interpolate(frame % 300, [0, 150, 300], [0, ORIGINAL_WIDTH * 0.30 * 0.10, 0], { easing: Easing.inOut(Easing.quad) });
+  const a3Scale = interpolate(frame % 300, [0, 150, 300], [0.9, 1.1, 0.9], { easing: Easing.inOut(Easing.quad) });
 
-  const shakeX = interpolate(shakeProgress, shakeKeyframesX, shakeValuesX, { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const shakeY = interpolate(shakeProgress, shakeKeyframesY, shakeValuesY, { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Grid Floor Scroll Animation (75 frames cycle)
+  const gridY = interpolate(frame % 75, [0, 75], [0, 50], { easing: Easing.linear });
 
-  // ---- glitchBefore: 2.4s cycle, alternate-reverse → we use modulo on full cycle ----
-  const beforeFrames = fps * 2.4;
-  const beforeLocal = localFrame % beforeFrames;
-  const beforeProgress = beforeLocal / beforeFrames;
+  // Central Glass Panel Animation (seamless loop with fade/scale in at start, fade/scale out at end)
+  const panelOpacity = interpolate(frame, [0, 30, 570, 600], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const panelScale = interpolate(frame, [0, 30, 570, 600], [0.85 * 0.92, 0.92, 0.92, 0.85 * 0.92], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-  const beforeKf = [0, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 1.0];
-  const beforeTX = interpolate(beforeProgress, beforeKf, [0, -12, 9, -14, 8, -10, 12, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const beforeTY = interpolate(beforeProgress, beforeKf, [0, -4, 2, 0, -4, 4, 0, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const beforeClipTop = interpolate(beforeProgress, beforeKf, [0, 20, 60, 10, 40, 80, 30, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const beforeClipBottom = interpolate(beforeProgress, beforeKf, [0, 50, 10, 70, 30, 5, 45, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Panel sweep animation (150 frames cycle)
+  const sweepPos = interpolate(frame % 150, [0, 90, 150], [200, -100, -100], { easing: Easing.inOut(Easing.quad) });
 
-  // ---- glitchAfter: 2s cycle ----
-  const afterFrames = fps * 2.0;
-  const afterLocal = localFrame % afterFrames;
-  const afterProgress = afterLocal / afterFrames;
+  // Avatar spin/glow animation (300 frames cycle)
+  const hue = interpolate(frame % 300, [0, 300], [0, 360], { easing: Easing.linear });
 
-  const afterKf = [0, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 1.0];
-  const afterTX = interpolate(afterProgress, afterKf, [0, 12, -9, 14, -8, 10, -12, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const afterTY = interpolate(afterProgress, afterKf, [0, 4, -2, 0, 4, -4, 0, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const afterClipTop = interpolate(afterProgress, afterKf, [0, 55, 15, 70, 25, 5, 45, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const afterClipBottom = interpolate(afterProgress, afterKf, [0, 15, 60, 8, 50, 80, 30, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Avatar Ring Out Animation (60 frames cycle)
+  const ringScale = interpolate(frame % 60, [0, 60], [1, 1.5], { easing: Easing.out(Easing.quad) });
+  const ringOpacity = interpolate(frame % 60, [0, 60], [0.9, 0], { easing: Easing.out(Easing.quad) });
 
-  // ---- flicker: 9s cycle ----
-  const flickerFrames = fps * 9;
-  const flickerLocal = localFrame % flickerFrames;
-  const flickerProgress = flickerLocal / flickerFrames;
+  // Subscribe Button Pulse Animation (60 frames cycle)
+  const btnScale = interpolate(frame % 60, [0, 30, 60], [1, 1.05, 1], { easing: Easing.inOut(Easing.quad) });
+  const btnGlowRadius = interpolate(frame % 60, [0, 30, 60], [18, 32, 18], { easing: Easing.inOut(Easing.quad) });
+  const btnGlowAlpha = interpolate(frame % 60, [0, 30, 60], [0.5, 0.9, 0.5], { easing: Easing.inOut(Easing.quad) });
 
-  const flickerKf = [0, 0.02, 0.03, 0.04, 0.05, 0.06, 0.48, 0.49, 0.50, 0.78, 0.79, 0.80, 1.0];
-  const flickerVals = [0, 0.06, 0, 0.14, 0.03, 0, 0, 0.2, 0, 0, 0.12, 0, 0];
-  const flickerOpacity = interpolate(flickerProgress, flickerKf, flickerVals, { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Thumbnail slots entry/exit animations to match panel
+  // Left slot (fade/translate with 9-frame delay)
+  const leftSlotOpacity = interpolate(frame, [0, 9, 69, 540, 600], [0, 0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const leftSlotY = interpolate(frame, [0, 9, 69, 540, 600], [30, 30, 0, 0, 30], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.quad) });
 
-  // ---- scanlines offset: 8s cycle ----
-  const scanFrames = fps * 8;
-  const scanLocal = localFrame % scanFrames;
-  const scanOffset = interpolate(scanLocal, [0, scanFrames], [0, 100], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  // Right slot (fade/translate with 15-frame delay)
+  const rightSlotOpacity = interpolate(frame, [0, 15, 75, 540, 600], [0, 0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const rightSlotY = interpolate(frame, [0, 15, 75, 540, 600], [30, 30, 0, 0, 30], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.quad) });
 
-  // ---- Canvas drawing ----
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  // Slot shimmer animation (120 frames cycle)
+  const shimmerOpacity = interpolate(frame % 120, [0, 60, 120], [0.4, 0.9, 0.4], { easing: Easing.inOut(Easing.quad) });
 
-    const W = ORIGINAL_WIDTH;
-    const H = ORIGINAL_HEIGHT;
-    canvas.width = W;
-    canvas.height = H;
+  // Particle Renderer
+  const renderedParticles = useMemo(() => {
+    return PARTICLES.map((p, i) => {
+      const progress = ((frame + p.delay) % p.duration) / p.duration;
+      const y = progress * -1200;
+      const scale = interpolate(progress, [0, 0.1, 1], [0, p.scale, p.scale * 0.5], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+      const opacity = interpolate(progress, [0, 0.1, 0.9, 1], [0, 1, 0.8, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#05060a';
-    ctx.fillRect(0, 0, W, H);
+      const dotStyle: React.CSSProperties = {
+        position: 'absolute',
+        width: '4px',
+        height: '4px',
+        borderRadius: '50%',
+        background: '#fff',
+        left: `${p.left}%`,
+        bottom: '-10px',
+        opacity: opacity,
+        transform: `translateY(${y}px) scale(${scale})`,
+        boxShadow: `0 0 8px ${p.color}`,
+        pointerEvents: 'none',
+      };
 
-    // Draw moving glitch lines
-    for (let i = 0; i < STATIC_LINES.length; i++) {
-      const line = STATIC_LINES[i];
-      const lineY = line.yFrac * H;
-      const lineW = line.wFrac * W;
+      return <div key={i} style={dotStyle} />;
+    });
+  }, [frame]);
 
-      // Simulate x movement deterministically from frame
-      const totalDistPerFrame = line.speed + Math.sin(localFrame * 0.05 + lineY) * 2;
-      let lineX = (line.xFrac * W + totalDistPerFrame * localFrame) % (W + lineW);
-      if (lineX < -lineW) lineX = W + (lineX % (W + lineW));
-      // wrap
-      lineX = ((lineX % (W + lineW)) + (W + lineW)) % (W + lineW) - lineW;
+  const outerStyle: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#02080a',
+    position: 'relative',
+    overflow: 'hidden',
+  };
 
-      const a = line.alpha * (0.55 + 0.45 * Math.abs(Math.sin(localFrame * 0.1 + lineY)));
-      ctx.fillStyle = COLORS_BASE[line.colorIdx] + a + ')';
-      ctx.fillRect(lineX, lineY, lineW, line.thickness);
-    }
+  const stageStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    background: `
+      radial-gradient(ellipse at 30% 20%, rgba(47,243,224,0.12), transparent 50%),
+      radial-gradient(ellipse at 80% 90%, rgba(255,107,107,0.14), transparent 55%),
+      linear-gradient(160deg, #04141a 0%, #071f23 50%, #0a0d1a 100%)
+    `,
+    boxShadow: '0 0 80px rgba(47,243,224,0.15)',
+  };
 
-    // Draw glitch blocks (deterministic: show based on cycleProgress vs triggerFrac)
-    const blockWindowSize = 0.18;
-    for (let i = 0; i < GLITCH_BLOCKS.length; i++) {
-      const blk = GLITCH_BLOCKS[i];
-      const triggerStart = blk.triggerFrac;
-      const triggerEnd = (triggerStart + blockWindowSize) % 1.0;
-      let show = false;
-      if (triggerEnd > triggerStart) {
-        show = cycleProgress >= triggerStart && cycleProgress < triggerEnd;
-      } else {
-        show = cycleProgress >= triggerStart || cycleProgress < triggerEnd;
-      }
-      if (show) {
-        const by = blk.yFrac * H;
-        const bh = blk.hFrac * H;
-        const bx = blk.xFrac * W;
-        const bw = blk.wFrac * W;
-        ctx.fillStyle = COLORS_BASE[blk.colorIdx] + blk.alpha + ')';
-        ctx.fillRect(bx, by, bw, bh);
-      }
-    }
+  const auroraA1Style: React.CSSProperties = {
+    position: 'absolute',
+    borderRadius: '50%',
+    filter: 'blur(70px)',
+    opacity: 0.55,
+    mixBlendMode: 'screen',
+    width: '45%',
+    aspectRatio: '1',
+    background: '#2ff3e0',
+    top: '-10%',
+    left: '5%',
+    transform: `translate(${a1Tx}px, ${a1Ty}px) scale(${a1Scale})`,
+  };
 
-    // Draw wide white bands (deterministic)
-    const bandWindowSize = 0.08;
-    for (let i = 0; i < WIDE_BANDS.length; i++) {
-      const band = WIDE_BANDS[i];
-      const triggerStart = band.triggerFrac;
-      const triggerEnd = (triggerStart + bandWindowSize) % 1.0;
-      let show = false;
-      if (triggerEnd > triggerStart) {
-        show = cycleProgress >= triggerStart && cycleProgress < triggerEnd;
-      } else {
-        show = cycleProgress >= triggerStart || cycleProgress < triggerEnd;
-      }
-      if (show) {
-        const by = band.yFrac * H;
-        const bh = band.hFrac * H;
-        ctx.fillStyle = 'rgba(255,255,255,' + band.alpha + ')';
-        ctx.fillRect(0, by, W, bh);
-      }
-    }
-  }, [localFrame, cycleProgress]);
+  const auroraA2Style: React.CSSProperties = {
+    position: 'absolute',
+    borderRadius: '50%',
+    filter: 'blur(70px)',
+    opacity: 0.55,
+    mixBlendMode: 'screen',
+    width: '40%',
+    aspectRatio: '1',
+    background: '#ff6b6b',
+    bottom: '-15%',
+    right: '8%',
+    transform: `translate(${a2Tx}px, ${a2Ty}px) scale(${a2Scale})`,
+  };
+
+  const auroraA3Style: React.CSSProperties = {
+    position: 'absolute',
+    borderRadius: '50%',
+    filter: 'blur(70px)',
+    opacity: 0.55,
+    mixBlendMode: 'screen',
+    width: '30%',
+    aspectRatio: '1',
+    background: '#ffb86c',
+    top: '40%',
+    left: '40%',
+    transform: `translate(${a3Tx}px, ${a3Ty}px) scale(${a3Scale})`,
+  };
+
+  const gridStyle: React.CSSProperties = {
+    position: 'absolute',
+    bottom: 0,
+    left: '50%',
+    transform: 'translateX(-50%) perspective(400px) rotateX(62deg)',
+    width: '200%',
+    height: '55%',
+    backgroundImage: `
+      linear-gradient(rgba(47,243,224,0.35) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(47,243,224,0.25) 1px, transparent 1px)
+    `,
+    backgroundSize: '50px 50px',
+    backgroundPosition: `center ${gridY}px`,
+    transformOrigin: 'bottom center',
+    WebkitMaskImage: 'linear-gradient(transparent, #000 70%)',
+    maskImage: 'linear-gradient(transparent, #000 70%)',
+  };
+
+  const panelStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${panelScale})`,
+    width: '58%',
+    padding: '4% 5%',
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.18)',
+    borderRadius: '22px',
+    backdropFilter: 'blur(14px)',
+    WebkitBackdropFilter: 'blur(14px)',
+    boxShadow: '0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.25)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5%',
+    opacity: panelOpacity,
+  };
+
+  const sweepStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    borderRadius: '22px',
+    background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.18) 48%, transparent 60%)',
+    backgroundSize: '250% 100%',
+    backgroundPosition: `${sweepPos}% 0%`,
+    pointerEvents: 'none',
+  };
+
+  const avatarStyle: React.CSSProperties = {
+    flexShrink: 0,
+    width: '28%',
+    aspectRatio: '1',
+    borderRadius: '50%',
+    background: 'conic-gradient(from 0deg, #2ff3e0, #ffb86c, #ff6b6b, #2ff3e0)',
+    padding: '4px',
+    position: 'relative',
+    filter: `hue-rotate(${hue}deg)`,
+    boxShadow: '0 0 30px rgba(47,243,224,0.5), 0 0 50px rgba(255,107,107,0.3)',
+  };
+
+  const avatarAfterStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: '4px',
+    borderRadius: '50%',
+    background: 'radial-gradient(circle at 35% 30%, #0d2a2e, #061417)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+    fontSize: '36px',
+    textShadow: '0 0 12px #2ff3e0',
+  };
+
+  const ringStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: '-10px',
+    borderRadius: '50%',
+    border: '2px solid rgba(47,243,224,0.7)',
+    transform: `scale(${ringScale})`,
+    opacity: ringOpacity,
+  };
+
+  const infoStyle: React.CSSProperties = {
+    flex: 1,
+    position: 'relative',
+    zIndex: 2,
+  };
+
+  const h1Style: React.CSSProperties = {
+    color: '#fff',
+    fontSize: '38px',
+    fontWeight: 800,
+    letterSpacing: '1px',
+    lineHeight: 1.1,
+    marginBottom: '3%',
+    textShadow: '0 0 18px rgba(47,243,224,0.4)',
+    fontFamily: "'Segoe UI', 'Arial', sans-serif",
+  };
+
+  const subBtnStyle: React.CSSProperties = {
+    display: 'inline-block',
+    padding: '3% 8%',
+    background: 'linear-gradient(135deg, #ff6b6b, #ffb86c)',
+    color: '#1a0a0a',
+    fontWeight: 800,
+    letterSpacing: '2px',
+    fontSize: '20px',
+    borderRadius: '40px',
+    boxShadow: `0 0 ${btnGlowRadius}px rgba(255,107,107,${btnGlowAlpha})`,
+    position: 'relative',
+    transform: `scale(${btnScale})`,
+    fontFamily: "'Segoe UI', 'Arial', sans-serif",
+  };
+
+  const leftSlotStyle: React.CSSProperties = {
+    position: 'absolute',
+    bottom: '6%',
+    width: '26%',
+    aspectRatio: '16/9',
+    borderRadius: '12px',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    backdropFilter: 'blur(6px)',
+    overflow: 'hidden',
+    opacity: leftSlotOpacity,
+    transform: `translateY(${leftSlotY}px)`,
+    left: '5%',
+  };
+
+  const rightSlotStyle: React.CSSProperties = {
+    position: 'absolute',
+    bottom: '6%',
+    width: '26%',
+    aspectRatio: '16/9',
+    borderRadius: '12px',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    backdropFilter: 'blur(6px)',
+    overflow: 'hidden',
+    opacity: rightSlotOpacity,
+    transform: `translateY(${rightSlotY}px)`,
+    right: '5%',
+  };
+
+  const shimmerStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    background: 'linear-gradient(135deg, rgba(47,243,224,0.18), rgba(255,107,107,0.18))',
+    opacity: shimmerOpacity,
+  };
+
+  const playStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '22%',
+    aspectRatio: '1',
+    borderRadius: '50%',
+    background: 'rgba(255,255,255,0.85)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#0a2a2e',
+    fontSize: '16px',
+    boxShadow: '0 0 14px rgba(255,255,255,0.6)',
+  };
+
+  const vignetteStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)',
+  };
 
   return (
-    <div
-      style={{
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        background: '#05060a',
-      }}
-    >
-      {/* Canvas layer */}
-      <canvas
-        ref={canvasRef}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          zIndex: 1,
-        }}
-      />
+    <div style={outerStyle}>
+      <div style={stageStyle}>
+        <div style={auroraA1Style} />
+        <div style={auroraA2Style} />
+        <div style={auroraA3Style} />
 
-      {/* Text wrap */}
-      <div
-        style={{
-          position: 'absolute',
-          zIndex: 3,
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
-      >
-        {/* Main glitch text container */}
-        <div
-          style={{
-            position: 'relative',
-            fontSize: 120,
-            fontWeight: 800,
-            letterSpacing: '0.12em',
-            color: '#f5f5ff',
-            textTransform: 'uppercase',
-            fontFamily: 'Arial, sans-serif',
-            textShadow: '0 0 4px rgba(255,255,255,0.4), 0 0 12px rgba(0,234,255,0.3)',
-            transform: `translate(${shakeX}px, ${shakeY}px)`,
-          }}
-        >
-          {/* Before layer - cyan */}
-          <span
-            style={{
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              overflow: 'hidden',
-              color: '#00eaff',
-              textShadow: '0 0 10px rgba(0,234,255,0.6)',
-              zIndex: -1,
-              fontWeight: 800,
-              letterSpacing: '0.12em',
-              fontFamily: 'Arial, sans-serif',
-              textTransform: 'uppercase',
-              fontSize: 120,
-              transform: `translate(${beforeTX}px, ${beforeTY}px)`,
-              clipPath: `inset(${beforeClipTop}% 0 ${beforeClipBottom}% 0)`,
-              display: 'block',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            THE END
-          </span>
+        <div style={gridStyle} />
 
-          {/* After layer - magenta */}
-          <span
-            style={{
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              overflow: 'hidden',
-              color: '#ff00d4',
-              textShadow: '0 0 10px rgba(255,0,212,0.6)',
-              zIndex: -2,
-              fontWeight: 800,
-              letterSpacing: '0.12em',
-              fontFamily: 'Arial, sans-serif',
-              textTransform: 'uppercase',
-              fontSize: 120,
-              transform: `translate(${afterTX}px, ${afterTY}px)`,
-              clipPath: `inset(${afterClipTop}% 0 ${afterClipBottom}% 0)`,
-              display: 'block',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            THE END
-          </span>
-
-          {/* Main text */}
-          THE END
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+          {renderedParticles}
         </div>
+
+        {/* Center glass panel */}
+        <div style={panelStyle}>
+          <div style={sweepStyle} />
+          <div style={avatarStyle}>
+            <span style={ringStyle} />
+            <div style={avatarAfterStyle}>▶</div>
+          </div>
+          <div style={infoStyle}>
+            <h1 style={h1Style}>
+              Suka Video Ini?
+              <br />
+              <span style={{ color: '#2ff3e0' }}>Yuk Subscribe!</span>
+            </h1>
+            <span style={subBtnStyle}>SUBSCRIBE</span>
+          </div>
+        </div>
+
+        {/* Bottom thumbnail slots */}
+        <div style={leftSlotStyle}>
+          <div style={shimmerStyle} />
+          <div style={playStyle}>▶</div>
+        </div>
+        <div style={rightSlotStyle}>
+          <div style={shimmerStyle} />
+          <div style={playStyle}>▶</div>
+        </div>
+
+        <div style={vignetteStyle} />
       </div>
-
-      {/* Scanlines */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 4,
-          pointerEvents: 'none',
-          background: 'linear-gradient(rgba(0,0,0,0) 50%, rgba(0,0,0,0.35) 50%)',
-          backgroundSize: '100% 4px',
-          backgroundPosition: `0 ${scanOffset}px`,
-          opacity: 0.5,
-        }}
-      />
-
-      {/* Vignette */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 5,
-          pointerEvents: 'none',
-          background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,0.7) 100%)',
-        }}
-      />
-
-      {/* Flicker */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 6,
-          background: '#fff',
-          mixBlendMode: 'overlay',
-          opacity: flickerOpacity,
-          pointerEvents: 'none',
-        }}
-      />
     </div>
   );
 };
 
-export default GlitchTheEnd;
+export default AuroraGlassEndscreen;
 // END_OF_FILE
