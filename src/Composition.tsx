@@ -1,500 +1,335 @@
 import React, { useRef, useEffect } from 'react';
-import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
-import * as THREE from 'three';
+import { useVideoConfig, useCurrentFrame } from 'remotion';
 
-const ORIGINAL_WIDTH = 1920;
-const ORIGINAL_HEIGHT = 1080;
+// Strict 4K Dimensions
+const ORIGINAL_WIDTH = 3840;
+const ORIGINAL_HEIGHT = 2160;
 
-// Pre-calculated deterministic values for Three.js particles (outside component to prevent Math.random during render)
-const WAVE_COUNT = 3000;
-const waveData = Array.from({ length: WAVE_COUNT }, () => {
-    const x = (Math.random() - 0.5) * 200;
-    const z = (Math.random() - 0.5) * 200;
-    const phase = Math.random() * Math.PI * 2;
-    return { x, z, phase };
-});
+const W = ORIGINAL_WIDTH;
+const H = ORIGINAL_HEIGHT;
 
-const DUST_COUNT = 300;
-const dustData = Array.from({ length: DUST_COUNT }, () => {
-    const x = (Math.random() - 0.5) * 150;
-    const y = (Math.random() - 0.5) * 100;
-    const z = (Math.random() - 0.5) * 150;
-    return { x, y, z };
-});
+// System Configuration
+const COLUMNS = 140; 
+const COL_WIDTH = Math.floor(W / COLUMNS); // ~27px
 
-const FuturisticEsportsEndScreen: React.FC = () => {
+// Premium Luminous Color Palette
+const COLORS = [
+    { r: 255, g: 215, b: 0 },   // Luminous Gold
+    { r: 75, g: 0, b: 130 },    // Deep Amethyst Purple
+    { r: 255, g: 165, b: 0 },   // Amber Core Highlight
+    { r: 180, g: 100, b: 240 }  // Violet Highlight
+];
+
+// Seeded random helper to ensure deterministic generation
+let seed = 987654321;
+function deterministicRandom() {
+    const x = Math.sin(seed++) * 10000;
+    return x - Math.floor(x);
+}
+
+interface Fragment {
+    offset: number;
+    h: number;
+    alpha: number;
+    isHead: boolean;
+    bits: boolean[];
+    hexCount: number;
+}
+
+interface StreamConfig {
+    x: number;
+    width: number;
+    cycles: number;
+    maxAlpha: number;
+    glow: number;
+    baseY: number;
+    color: { r: number; g: number; b: number };
+    type: number;
+    fragments: Fragment[];
+}
+
+// Pre-calculate all stream details statically outside the render tree to prevent frame-tearing
+const STREAMS: StreamConfig[] = [];
+
+function createStreamConfig(colIndex: number, depthLayer: number): StreamConfig {
+    let width = 0;
+    let cycles = 0;
+    let maxAlpha = 0;
+    let glow = 0;
+
+    if (depthLayer === 0) {
+        width = COL_WIDTH * 0.25; // 6.75px
+        cycles = 1;               // 1 full screen drop per 10s
+        maxAlpha = 0.2;          // Very faint
+        glow = 1;
+    } else if (depthLayer === 1) {
+        width = COL_WIDTH * 0.5;  // 13.5px
+        cycles = 2;               // 2 drops per 10s
+        maxAlpha = 0.5;           // Medium
+        glow = 10;
+    } else {
+        width = COL_WIDTH * 0.8;  // ~21px
+        cycles = Math.floor(deterministicRandom() * 2) + 3; // 3 or 4 drops per 10s
+        maxAlpha = 1.0;           // Bright
+        glow = 40;                // Intense radiant glow
+    }
+
+    const baseY = deterministicRandom(); 
+    const color = COLORS[Math.floor(deterministicRandom() * COLORS.length)];
+    
+    let x = colIndex * COL_WIDTH + (COL_WIDTH - width) / 2;
+    const type = Math.floor(deterministicRandom() * 4);
+
+    const fragments: Fragment[] = [];
+    const numFrags = Math.floor(deterministicRandom() * 18) + 10; // 10 to 28 fragments per stream
+    let currentOffset = 0;
+
+    for (let i = 0; i < numFrags; i++) {
+        const h = deterministicRandom() * 240 + 60; // Height of this block (60px to 300px)
+        const gap = deterministicRandom() * 50 + 20; // Gap before next block
+        
+        // Opacity decays the further up the tail it goes
+        const alpha = maxAlpha * Math.pow(1 - (i / numFrags), 1.8); 
+        
+        // Pre-calculate randomized parameters
+        const bitPattern: boolean[] = [];
+        if (type === 2) {
+            for (let b = 0; b < 30; b++) {
+                bitPattern.push(deterministicRandom() > 0.35); 
+            }
+        }
+        
+        let hexCount = 0;
+        if (type === 3) {
+            hexCount = Math.floor(h / (width * 0.9)) + 1; // Fit hexagons along height
+        }
+
+        fragments.push({ 
+            offset: currentOffset, 
+            h, 
+            alpha, 
+            isHead: i === 0,
+            bits: bitPattern,
+            hexCount
+        });
+        
+        currentOffset += h + gap;
+    }
+
+    return {
+        x,
+        width,
+        cycles,
+        maxAlpha,
+        glow,
+        baseY,
+        color,
+        type,
+        fragments
+    };
+}
+
+// Generate streams across columns, stratified by depth layers
+for (let c = 0; c < COLUMNS; c++) {
+    // Every column gets a slow background stream
+    STREAMS.push(createStreamConfig(c, 0));
+    
+    // 45% chance for a midground stream
+    if (deterministicRandom() > 0.55) {
+        STREAMS.push(createStreamConfig(c, 1));
+    }
+    
+    // 25% chance for an intense, fast foreground stream
+    if (deterministicRandom() > 0.75) {
+        STREAMS.push(createStreamConfig(c, 2));
+    }
+}
+
+// Hexagon utility
+function drawHex(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) {
+    ctx.beginPath();
+    ctx.moveTo(x + width * 0.5, y);
+    ctx.lineTo(x + width, y + height * 0.25);
+    ctx.lineTo(x + width, y + height * 0.75);
+    ctx.lineTo(x + width * 0.5, y + height);
+    ctx.lineTo(x, y + height * 0.75);
+    ctx.lineTo(x, y + height * 0.25);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function renderAt(ctx: CanvasRenderingContext2D, s: StreamConfig, x: number, y: number) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    for (let f of s.fragments) {
+        let yDraw = -f.offset; 
+        
+        // Set color and dynamic opacity
+        ctx.fillStyle = `rgba(${s.color.r}, ${s.color.g}, ${s.color.b}, ${f.alpha})`;
+        
+        // Apply radiant glow effect, strongest on the head
+        if (s.glow > 0) {
+            ctx.shadowBlur = f.isHead ? s.glow : s.glow * 0.5;
+            ctx.shadowColor = `rgb(${s.color.r}, ${s.color.g}, ${s.color.b})`;
+            // Add a small offset to the shadow for extra depth
+            ctx.shadowOffsetX = f.isHead ? 2 : 1;
+            ctx.shadowOffsetY = f.isHead ? 2 : 1;
+        } else {
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+        }
+
+        // Render Geometric Abstract Data based on Type
+        if (s.type === 0) {
+            // TYPE 0: Solid Cryptographic Blocks
+            ctx.fillRect(0, yDraw - f.h, s.width, f.h);
+        } 
+        else if (s.type === 1) {
+            // TYPE 1: Horizontal Barcode Dashes
+            let dashHeight = 5;
+            let space = 7;
+            for (let dy = 0; dy < f.h; dy += dashHeight + space) {
+                let actualH = Math.min(dashHeight, f.h - dy);
+                ctx.fillRect(0, yDraw - dy - actualH, s.width, actualH);
+            }
+        } 
+        else if (s.type === 2) {
+            // TYPE 2: Dual-lane Micro-Grid Packets
+            let laneW = (s.width / 2) - 3;
+            if (laneW > 3) {
+                let cellH = laneW;
+                let space = 4;
+                let bitIndex = 0;
+                for (let dy = 0; dy < f.h; dy += cellH + space) {
+                    let actualH = Math.min(cellH, f.h - dy);
+                    // Left Lane
+                    if (f.bits[bitIndex % f.bits.length]) {
+                        ctx.fillRect(0, yDraw - dy - actualH, laneW, actualH);
+                    }
+                    // Right Lane
+                    if (f.bits[(bitIndex + 1) % f.bits.length]) {
+                        ctx.fillRect(laneW + 6, yDraw - dy - actualH, laneW, actualH);
+                    }
+                    bitIndex += 2;
+                }
+            } else {
+                ctx.fillRect(0, yDraw - f.h, s.width, f.h);
+            }
+        }
+        else if (s.type === 3) {
+            // TYPE 3: Hexagonal Core Packets
+            let hexW = s.width;
+            let hexH = hexW * 0.866; // Standard hexagon aspect ratio
+            let space = hexH * 0.2;
+            let yOffset = 0;
+            for (let i = 0; i < f.hexCount; i++) {
+                let drawY = yDraw - yOffset - hexH;
+                if (drawY + hexH > yDraw - f.h) {
+                    drawHex(ctx, 0, drawY, hexW, hexH);
+                }
+                yOffset += hexH + space;
+            }
+        }
+    }
+    ctx.restore();
+}
+
+function drawStream(ctx: CanvasRenderingContext2D, s: StreamConfig, t: number) {
+    // Calculate the true normalized Y based on loop progress and speed multiplier
+    let yNorm = (s.baseY + t * s.cycles) % 1.0;
+    let yBase = yNorm * H;
+
+    // Draw multiple vertical copies for the seamless wrapping
+    renderAt(ctx, s, s.x, yBase - H);
+    renderAt(ctx, s, s.x, yBase);
+    renderAt(ctx, s, s.x, yBase + H);
+    renderAt(ctx, s, s.x, yBase + (H * 2));
+}
+
+export const CyberDataStream: React.FC = () => {
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const { width, height, fps } = useVideoConfig();
     const frame = useCurrentFrame();
 
-    // Canvas references for WebGL
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-    const sceneRef = useRef<THREE.Scene | null>(null);
-    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-    const gridHelperRef = useRef<THREE.GridHelper | null>(null);
-    const waveMeshRef = useRef<THREE.Points | null>(null);
-    const backgroundCoreRef = useRef<THREE.Mesh | null>(null);
-    const outerCoreRef = useRef<THREE.Mesh | null>(null);
-    const dustSystemRef = useRef<THREE.Points | null>(null);
-
-    // Scaling Factor
+    // Responsive adaptation wrapper styling
     const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    // Initial Three.js setup
     useEffect(() => {
-        if (!canvasRef.current) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-        const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x010308, 0.003);
-        sceneRef.current = scene;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) return;
 
-        const camera = new THREE.PerspectiveCamera(60, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 1000);
-        camera.position.set(0, 15, 60);
-        cameraRef.current = camera;
+        // Loop cycles seamlessly every 10 seconds (based on fps)
+        const loopDurationInFrames = fps * 10;
+        const t = (frame % loopDurationInFrames) / loopDurationInFrames;
 
-        const renderer = new THREE.WebGLRenderer({
-            canvas: canvasRef.current,
-            alpha: true,
-            antialias: true,
-        });
-        renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-        renderer.setPixelRatio(1);
-        rendererRef.current = renderer;
+        // Reset composite mode to draw background
+        ctx.globalCompositeOperation = 'source-over';
 
-        // A. Cyber Grid Floor
-        const gridHelper = new THREE.GridHelper(400, 100, 0x00ffff, 0x002266);
-        gridHelper.position.y = -15;
-        if (Array.isArray(gridHelper.material)) {
-            gridHelper.material.forEach((m) => {
-                m.transparent = true;
-                m.opacity = 0.4;
-                m.blending = THREE.AdditiveBlending;
-            });
-        } else {
-            gridHelper.material.transparent = true;
-            gridHelper.material.opacity = 0.4;
-            gridHelper.material.blending = THREE.AdditiveBlending;
-        }
-        scene.add(gridHelper);
-        gridHelperRef.current = gridHelper;
+        // Draw deep cinematic gradient background with purple tint
+        const bgGrad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W);
+        bgGrad.addColorStop(0, '#1A102A'); // Lighter purple center
+        bgGrad.addColorStop(1, '#050308'); // Dark, purple-black edges
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, W, H);
 
-        // B. Holographic Energy Wave Particles
-        const waveGeometry = new THREE.BufferGeometry();
-        const wavePositions = new Float32Array(WAVE_COUNT * 3);
-        const wavePhases = new Float32Array(WAVE_COUNT);
-
-        for (let i = 0; i < WAVE_COUNT; i++) {
-            wavePositions[i * 3] = waveData[i].x;
-            wavePositions[i * 3 + 1] = 0;
-            wavePositions[i * 3 + 2] = waveData[i].z;
-            wavePhases[i] = waveData[i].phase;
-        }
-
-        waveGeometry.setAttribute('position', new THREE.BufferAttribute(wavePositions, 3));
-        waveGeometry.setAttribute('phase', new THREE.BufferAttribute(wavePhases, 1));
-
-        const particleMat = new THREE.PointsMaterial({
-            color: 0x00aaff,
-            size: 0.6,
-            transparent: true,
-            opacity: 0.8,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-        });
-        const waveMesh = new THREE.Points(waveGeometry, particleMat);
-        waveMesh.position.y = -10;
-        scene.add(waveMesh);
-        waveMeshRef.current = waveMesh;
-
-        // C. Emissive Spheres
-        const coreGeo = new THREE.SphereGeometry(8, 32, 32);
-        const coreMat = new THREE.MeshBasicMaterial({
-            color: 0x0055ff,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.15,
-            blending: THREE.AdditiveBlending,
-        });
-        const backgroundCore = new THREE.Mesh(coreGeo, coreMat);
-        scene.add(backgroundCore);
-        backgroundCoreRef.current = backgroundCore;
-
-        const outerCoreGeo = new THREE.IcosahedronGeometry(14, 1);
-        const outerCoreMat = new THREE.MeshBasicMaterial({
-            color: 0x00ffff,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.1,
-            blending: THREE.AdditiveBlending,
-        });
-        const outerCore = new THREE.Mesh(outerCoreGeo, outerCoreMat);
-        scene.add(outerCore);
-        outerCoreRef.current = outerCore;
-
-        // D. Floating Dust
-        const dustGeo = new THREE.BufferGeometry();
-        const dustPositions = new Float32Array(DUST_COUNT * 3);
-        for (let i = 0; i < DUST_COUNT; i++) {
-            dustPositions[i * 3] = dustData[i].x;
-            dustPositions[i * 3 + 1] = dustData[i].y;
-            dustPositions[i * 3 + 2] = dustData[i].z;
-        }
-        dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-        const dustMat = new THREE.PointsMaterial({
-            color: 0x00ffff,
-            size: 0.8,
-            transparent: true,
-            opacity: 0.6,
-            blending: THREE.AdditiveBlending,
-        });
-        const dustSystem = new THREE.Points(dustGeo, dustMat);
-        scene.add(dustSystem);
-        dustSystemRef.current = dustSystem;
-
-        return () => {
-            renderer.dispose();
-            coreGeo.dispose();
-            coreMat.dispose();
-            outerCoreGeo.dispose();
-            outerCoreMat.dispose();
-            waveGeometry.dispose();
-            particleMat.dispose();
-            dustGeo.dispose();
-            dustMat.dispose();
-            gridHelper.dispose();
-        };
-    }, []);
-
-    // Frame-locked deterministic updates for Three.js (no requestAnimationFrame)
-    useEffect(() => {
-        const renderer = rendererRef.current;
-        const scene = sceneRef.current;
-        const camera = cameraRef.current;
-        const backgroundCore = backgroundCoreRef.current;
-        const outerCore = outerCoreRef.current;
-        const waveMesh = waveMeshRef.current;
-        const gridHelper = gridHelperRef.current;
-        const dustSystem = dustSystemRef.current;
-
-        if (!renderer || !scene || !camera) return;
-
-        const elapsedTime = frame / fps;
-
-        // Rotate Core Elements
-        if (backgroundCore) {
-            backgroundCore.rotation.y = elapsedTime * 0.2;
-            backgroundCore.rotation.x = elapsedTime * 0.1;
-        }
-        if (outerCore) {
-            outerCore.rotation.y = -elapsedTime * 0.15;
-            outerCore.rotation.z = elapsedTime * 0.1;
-        }
-
-        // Animate Wave Heights
-        if (waveMesh) {
-            const positions = waveMesh.geometry.attributes.position.array as Float32Array;
-            for (let i = 0; i < WAVE_COUNT; i++) {
-                const x = waveData[i].x;
-                const z = waveData[i].z;
-                const phase = waveData[i].phase;
-                positions[i * 3 + 1] =
-                    Math.sin((x + elapsedTime * 10) * 0.05 + phase) * 4 +
-                    Math.cos((z + elapsedTime * 5) * 0.05 + phase) * 4;
+        // Add visual micro-grid dot overlay to the background
+        ctx.fillStyle = "rgba(50, 20, 80, 0.1)";
+        for (let dx = 0; dx < W; dx += 64) {
+            for (let dy = 0; dy < H; dy += 64) {
+                ctx.fillRect(dx, dy, 2, 2);
             }
-            waveMesh.geometry.attributes.position.needsUpdate = true;
         }
 
-        // Move Grid Floor Loop
-        if (gridHelper) {
-            gridHelper.position.z = (elapsedTime * 5) % 20;
+        // Set composite mode to Screen for beautiful dynamic neon bloom layering
+        ctx.globalCompositeOperation = 'screen';
+
+        // Render all pre-computed streams
+        for (let i = 0; i < STREAMS.length; i++) {
+            drawStream(ctx, STREAMS[i], t);
         }
-
-        // Rotate Dust Particles slowly (perfect 20s seamless wrap)
-        if (dustSystem) {
-            dustSystem.rotation.y = (elapsedTime / 20) * Math.PI * 2;
-        }
-
-        // Camera Drift / Symmetrical looping float
-        const cameraAngle = (elapsedTime / 20) * Math.PI * 2;
-        camera.position.x = Math.sin(cameraAngle * 2) * 2.5; 
-        camera.position.y = 15 + Math.cos(cameraAngle * 2) * 1.5; 
-        camera.rotation.z = Math.sin(cameraAngle) * 0.01;
-        camera.rotation.x = -0.15 + Math.cos(cameraAngle) * 0.02;
-
-        renderer.render(scene, camera);
     }, [frame, fps]);
 
-    // UI Animations driven completely by useCurrentFrame()
-
-    // Breathing loop for HUD
-    const breatheCycle = (frame / 120) * Math.PI * 2; // 2 seconds loop (120 frames at 60fps)
-    const hudScale = interpolate(Math.sin(breatheCycle), [-1, 1], [0.95, 1.15]);
-    const hudOpacity = interpolate(Math.sin(breatheCycle), [-1, 1], [0.3, 0.6]);
-
-    // Placeholders smooth float (Symmetrical loop)
-    const leftFloatY = Math.sin((frame / 240) * Math.PI * 2) * 8; 
-    const rightFloatY = Math.cos((frame / 240) * Math.PI * 2) * 8;
-
-    // Scanlines TranslateY looping over 4s (240 frames)
-    const scanFrameLeft = frame % 240;
-    const scanYLeft = interpolate(scanFrameLeft, [0, 240], [-100, 100]);
-
-    const scanFrameRight = (frame + 120) % 240; // Offset by 2 seconds
-    const scanYRight = interpolate(scanFrameRight, [0, 240], [-100, 100]);
-
-    // Sweeps Loop over 6s (360 frames)
-    // 0% to 20% maps to -100% to 200%, remainder stays at 200%
-    const sweepFrameLeft = frame % 360;
-    const sweepXLeft = interpolate(sweepFrameLeft, [0, 72, 360], [-100, 200, 200]);
-
-    const sweepFrameRight = (frame + 180) % 360; // Offset by 3 seconds
-    const sweepXRight = interpolate(sweepFrameRight, [0, 72, 360], [-100, 200, 200]);
-
-    // Hologram Ring Rotations
-    const ringOuterRotation = interpolate(frame % 720, [0, 720], [0, 360]); // 12s
-    const ringInnerRotation = interpolate(frame % 480, [0, 480], [360, 0]); // 8s reverse
-    const ringDashedRotation = interpolate(frame % 1200, [0, 1200], [0, 360]); // 20s
-
-    // Center Core Scale Loop
-    const centerCoreScale = interpolate(Math.sin((frame / 120) * Math.PI * 2), [-1, 1], [0.98, 1.02]);
-
-    // Shared Styles
-    const cornerStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: '40px',
-        height: '40px',
-        borderColor: '#00ffff',
-        borderStyle: 'solid',
-        borderWidth: 0,
-        boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)',
-        zIndex: 3,
+    const containerStyle: React.CSSProperties = {
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#050308',
+        position: 'relative',
+        overflow: 'hidden',
     };
 
-    const crosshairStyle: React.CSSProperties = {
+    const wrapperStyle: React.CSSProperties = {
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
         position: 'absolute',
-        width: '20px',
-        height: '20px',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
     };
 
     return (
-        <div
-            id="endscreen-container"
-            style={{
-                position: 'absolute',
-                width: ORIGINAL_WIDTH,
-                height: ORIGINAL_HEIGHT,
-                top: '50%',
-                left: '50%',
-                transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-                transformOrigin: 'center center',
-                overflow: 'hidden',
-                backgroundColor: '#010308',
-                background: 'radial-gradient(circle at center, #020b1f 0%, #010308 100%)',
-            }}
-        >
-            <canvas ref={canvasRef} id="webgl-canvas" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
-
-            <div id="ui-layer" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 2, pointerEvents: 'none' }}>
-                
-                {/* HUD Lines */}
-                <div style={{ position: 'absolute', top: '150px', left: 0, width: '100%', height: '1px', backgroundColor: '#00ffff', opacity: 0.2, boxShadow: '0 0 10px #00ffff' }}></div>
-                <div style={{ position: 'absolute', bottom: '150px', left: 0, width: '100%', height: '1px', backgroundColor: '#00ffff', opacity: 0.2, boxShadow: '0 0 10px #00ffff' }}></div>
-
-                {/* HUD Crosshairs */}
-                <div style={{ ...crosshairStyle, top: '140px', left: '140px', transform: `scale(${hudScale})`, opacity: hudOpacity }}>
-                    <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '2px', backgroundColor: '#0055ff', transform: 'translateY(-50%)' }}></div>
-                    <div style={{ position: 'absolute', top: 0, left: '50%', width: '2px', height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }}></div>
-                </div>
-                <div style={{ ...crosshairStyle, top: '140px', right: '140px', transform: `scale(${hudScale})`, opacity: hudOpacity }}>
-                    <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '2px', backgroundColor: '#0055ff', transform: 'translateY(-50%)' }}></div>
-                    <div style={{ position: 'absolute', top: 0, left: '50%', width: '2px', height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }}></div>
-                </div>
-                <div style={{ ...crosshairStyle, bottom: '140px', left: '140px', transform: `scale(${hudScale})`, opacity: hudOpacity }}>
-                    <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '2px', backgroundColor: '#0055ff', transform: 'translateY(-50%)' }}></div>
-                    <div style={{ position: 'absolute', top: 0, left: '50%', width: '2px', height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }}></div>
-                </div>
-                <div style={{ ...crosshairStyle, bottom: '140px', right: '140px', transform: `scale(${hudScale})`, opacity: hudOpacity }}>
-                    <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '2px', backgroundColor: '#0055ff', transform: 'translateY(-50%)' }}></div>
-                    <div style={{ position: 'absolute', top: 0, left: '50%', width: '2px', height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }}></div>
-                </div>
-
-                {/* Left Placeholder */}
-                <div 
-                    className="placeholder left"
+        <div style={containerStyle}>
+            <div style={wrapperStyle}>
+                <canvas
+                    ref={canvasRef}
+                    width={ORIGINAL_WIDTH}
+                    height={ORIGINAL_HEIGHT}
                     style={{
-                        position: 'absolute',
-                        width: '580px',
-                        height: '326px',
-                        top: '377px',
-                        left: '140px',
-                        background: 'rgba(0, 15, 30, 0.4)',
-                        border: '2px solid rgba(0, 255, 255, 0.3)',
-                        boxShadow: '0 0 30px rgba(0, 255, 255, 0.1), inset 0 0 40px rgba(0, 85, 255, 0.2)',
-                        backdropFilter: 'blur(8px)',
-                        overflow: 'hidden',
-                        transform: `translateY(${leftFloatY}px)`,
+                        width: '100%',
+                        height: '100%',
+                        display: 'block',
                     }}
-                >
-                    <div style={{ ...cornerStyle, top: '-2px', left: '-2px', borderTopWidth: '4px', borderLeftWidth: '4px' }}></div>
-                    <div style={{ ...cornerStyle, top: '-2px', right: '-2px', borderTopWidth: '4px', borderRightWidth: '4px' }}></div>
-                    <div style={{ ...cornerStyle, bottom: '-2px', left: '-2px', borderBottomWidth: '4px', borderLeftWidth: '4px' }}></div>
-                    <div style={{ ...cornerStyle, bottom: '-2px', right: '-2px', borderBottomWidth: '4px', borderRightWidth: '4px' }}></div>
-                    <div 
-                        className="scanline"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
-                            transform: `translateY(${scanYLeft}%)`,
-                        }}
-                    ></div>
-                    <div 
-                        className="sweep"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '50%',
-                            height: '100%',
-                            background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.3) 50%, rgba(0, 255, 255, 0) 100%)',
-                            transform: `translateX(${sweepXLeft}%) skewX(-25deg)`,
-                        }}
-                    ></div>
-                </div>
-
-                {/* Right Placeholder */}
-                <div 
-                    className="placeholder right"
-                    style={{
-                        position: 'absolute',
-                        width: '580px',
-                        height: '326px',
-                        top: '377px',
-                        right: '140px',
-                        background: 'rgba(0, 15, 30, 0.4)',
-                        border: '2px solid rgba(0, 255, 255, 0.3)',
-                        boxShadow: '0 0 30px rgba(0, 255, 255, 0.1), inset 0 0 40px rgba(0, 85, 255, 0.2)',
-                        backdropFilter: 'blur(8px)',
-                        overflow: 'hidden',
-                        transform: `translateY(${rightFloatY}px)`,
-                    }}
-                >
-                    <div style={{ ...cornerStyle, top: '-2px', left: '-2px', borderTopWidth: '4px', borderLeftWidth: '4px' }}></div>
-                    <div style={{ ...cornerStyle, top: '-2px', right: '-2px', borderTopWidth: '4px', borderRightWidth: '4px' }}></div>
-                    <div style={{ ...cornerStyle, bottom: '-2px', left: '-2px', borderBottomWidth: '4px', borderLeftWidth: '4px' }}></div>
-                    <div style={{ ...cornerStyle, bottom: '-2px', right: '-2px', borderBottomWidth: '4px', borderRightWidth: '4px' }}></div>
-                    <div 
-                        className="scanline"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
-                            transform: `translateY(${scanYRight}%)`,
-                        }}
-                    ></div>
-                    <div 
-                        className="sweep"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '50%',
-                            height: '100%',
-                            background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.3) 50%, rgba(0, 255, 255, 0) 100%)',
-                            transform: `translateX(${sweepXRight}%) skewX(-25deg)`,
-                        }}
-                    ></div>
-                </div>
-
-                {/* Center Subscribe Area */}
-                <div 
-                    className="subscribe-center"
-                    style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: '340px',
-                        height: '340px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                    }}
-                >
-                    {/* Ring Outer */}
-                    <div 
-                        className="hologram-ring ring-outer"
-                        style={{
-                            position: 'absolute',
-                            borderRadius: '50%',
-                            width: '340px',
-                            height: '340px',
-                            borderTop: '4px solid #00ffff',
-                            borderBottom: '4px solid #0055ff',
-                            borderLeft: '4px solid transparent',
-                            borderRight: '4px solid transparent',
-                            boxShadow: '0 0 40px rgba(0, 255, 255, 0.3)',
-                            transform: `rotate(${ringOuterRotation}deg)`,
-                        }}
-                    ></div>
-
-                    {/* Ring Dashed */}
-                    <div 
-                        className="hologram-ring ring-dashed"
-                        style={{
-                            position: 'absolute',
-                            borderRadius: '50%',
-                            width: '310px',
-                            height: '310px',
-                            border: '2px dashed rgba(0, 255, 255, 0.5)',
-                            transform: `rotate(${ringDashedRotation}deg)`,
-                        }}
-                    ></div>
-
-                    {/* Ring Inner */}
-                    <div 
-                        className="hologram-ring ring-inner"
-                        style={{
-                            position: 'absolute',
-                            borderRadius: '50%',
-                            width: '280px',
-                            height: '280px',
-                            borderLeft: '3px solid #0055ff',
-                            borderRight: '3px solid #00ffff',
-                            borderTop: '3px solid transparent',
-                            borderBottom: '3px solid transparent',
-                            transform: `rotate(${ringInnerRotation}deg)`,
-                        }}
-                    ></div>
-
-                    {/* Core */}
-                    <div 
-                        className="subscribe-core"
-                        style={{
-                            width: '220px',
-                            height: '220px',
-                            borderRadius: '50%',
-                            background: 'rgba(0, 20, 40, 0.6)',
-                            border: '4px solid #00ffff',
-                            boxShadow: '0 0 50px rgba(0, 255, 255, 0.5), inset 0 0 40px rgba(0, 85, 255, 0.5)',
-                            backdropFilter: 'blur(12px)',
-                            position: 'relative',
-                            zIndex: 10,
-                            transform: `scale(${centerCoreScale})`,
-                        }}
-                    ></div>
-                </div>
-
+                />
             </div>
         </div>
     );
 };
 
-export default FuturisticEsportsEndScreen;
+export default CyberDataStream;
 // END_OF_FILE
