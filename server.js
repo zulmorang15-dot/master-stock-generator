@@ -2054,30 +2054,37 @@ function sanitizeKeywordsAndTitle(seoData) {
       kw = kw.trim();
       if (!kw) continue;
       
-      let cleanKw = kw.toLowerCase();
+      // Split multi-word keywords into single words (by whitespace)
+      const subWords = kw.split(/\s+/);
+      for (let subKw of subWords) {
+        subKw = subKw.trim();
+        if (!subKw) continue;
+        
+        let cleanKw = subKw.toLowerCase();
 
-      // Replace brands
-      for (const [brand, replacement] of Object.entries(brandsMap)) {
-        if (cleanKw === brand || cleanKw.includes(brand)) {
-          cleanKw = cleanKw.replace(new RegExp(brand, 'g'), replacement);
+        // Replace brands
+        for (const [brand, replacement] of Object.entries(brandsMap)) {
+          if (cleanKw === brand || cleanKw.includes(brand)) {
+            cleanKw = cleanKw.replace(new RegExp(brand, 'g'), replacement);
+          }
         }
-      }
 
-      // Check if keyword contains prohibited tech words
-      let isProhibited = false;
-      for (const tech of prohibitedTech) {
-        if (cleanKw === tech || cleanKw.includes(tech)) {
-          isProhibited = true;
-          break;
+        // Check if keyword contains prohibited tech words
+        let isProhibited = false;
+        for (const tech of prohibitedTech) {
+          if (cleanKw === tech || cleanKw.includes(tech)) {
+            isProhibited = true;
+            break;
+          }
         }
-      }
 
-      if (isProhibited) continue;
+        if (isProhibited) continue;
 
-      cleanKw = cleanKw.trim();
-      if (!seen.has(cleanKw)) {
-        seen.add(cleanKw);
-        cleanKeywords.push(kw);
+        cleanKw = cleanKw.trim();
+        if (!seen.has(cleanKw)) {
+          seen.add(cleanKw);
+          cleanKeywords.push(subKw);
+        }
       }
     }
 
@@ -2109,7 +2116,7 @@ DILARANG menggunakan karakter double quote (") di dalam nilai string. Gunakan si
 Struktur objek wajib persis seperti ini:
 {
   "judul": "Rekomendasi judul video SEO bahasa Inggris (maksimal 12 kata). DILARANG menggunakan kata teknis pemrograman seperti CSS, keyframes, requestAnimationFrame, HTML, canvas, SVG, easing, DLL. DILARANG menggunakan nama brand (Apple, Nike, Android, Google, Microsoft, dll). Gunakan istilah komersial video seperti: smooth animation, fluid movement, modern UI UX elements overlay, app interface template, abstract particles, seamless loop, data visualization, animated infographics, interactive design concept.",
-  "keywords": "35-50 kata kunci bahasa Inggris dipisah koma. DILARANG menggunakan istilah teknis pemrograman (CSS transition, keyframes, requestAnimationFrame, SVG, canvas, loop) dan DILARANG menggunakan nama brand (Apple, Nike, Android, Google, Microsoft, dll). WAJIB menerjemahkan ke istilah komersial video stock dan disusun berdasarkan Teknik 3 Pilar dengan 7-10 keyword pertama adalah yang paling krusial. Pilar 1 (What/Isi: mouse click, subscribe button, loading bar, progress indicator, dll), Pilar 2 (Visual/Style: minimalist, flat design, modern UI, isolated, 4k. Jika video transparan, keyword 'alpha channel' and 'transparent background' WAJIB ditaruh di 10 keyword pertama), Pilar 3 (Kegunaan/Context: website promo, social media asset, app presentation, marketing material).",
+  "keywords": "35-50 kata kunci bahasa Inggris dipisah koma. SETIAP KEYWORD WAJIB TERDIRI DARI SATU KATA SAJA (single word). DILARANG keras menggunakan kata majemuk / frase multi-kata (seperti 'mouse click', 'subscribe button', 'alpha channel', 'transparent background', 'social media', 'gradient background'). Pecah frase multi-kata menjadi kata-kata tunggal yang terpisah (misalnya: tulis 'mouse', 'click', 'subscribe', 'button', 'alpha', 'channel', 'transparent', 'background', 'social', 'media'). DILARANG menggunakan istilah teknis pemrograman (CSS transition, keyframes, requestAnimationFrame, SVG, canvas, loop) dan DILARANG menggunakan nama brand (Apple, Nike, Android, Google, Microsoft, dll). WAJIB menerjemahkan ke istilah komersial video stock dan disusun berdasarkan Teknik 3 Pilar dengan 7-10 keyword pertama adalah yang paling krusial. Pilar 1 (What/Isi: click, button, loading, bar, progress, indicator, dll), Pilar 2 (Visual/Style: minimalist, flat, modern, UI, isolated, 4k. Jika video transparan, keyword 'alpha', 'channel', 'transparent', 'background' WAJIB ditaruh di 10 keyword pertama), Pilar 3 (Kegunaan/Context: website, promo, social, media, asset, application, presentation, marketing).",
   "deskripsi": "Deskripsi detail visual bahasa Inggris untuk Adobe Stock (minimal 15 kata). Terjemahkan istilah kode ke visual: jangan sebut keyframes/easing/canvas, tapi gunakan smooth animation, fluid movement, dll.",
   "kategori": "Kategori Adobe Stock (Technology/Abstract/Business)"
 }`,
