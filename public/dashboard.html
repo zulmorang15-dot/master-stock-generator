@@ -3042,6 +3042,34 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       </select>
     `;
 
+
+    // Per-item video config selectors (auto-filled by AI analysis, editable by user)
+    const videoConfigRow = `
+      <div style="display:flex; align-items:center; gap:4px; padding: 2px 6px; margin-bottom:4px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 6px;">
+        <select id="loop_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="saveField('${item.id}', 'loop', this.value === 'true')" title="Loop Video">
+          <option value="true" ${item.loop !== false ? 'selected' : ''}>🔄 Loop</option>
+          <option value="false" ${item.loop === false ? 'selected' : ''}>➡ No-Loop</option>
+        </select>
+        <select id="transparent_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="saveField('${item.id}', 'transparent', this.value === 'true')" title="Background Transparency">
+          <option value="false" ${item.transparent !== true ? 'selected' : ''}>🎨 Solid</option>
+          <option value="true" ${item.transparent === true ? 'selected' : ''}>🏁 Trans</option>
+        </select>
+        <select id="duration_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="updateRowDuration('${item.id}', Number(this.value))" title="Durasi Video">
+          <option value="5" ${item.animationDuration === 5 ? 'selected' : ''}>5s</option>
+          <option value="8" ${item.animationDuration === 8 ? 'selected' : ''}>8s</option>
+          <option value="10" ${item.animationDuration === 10 || !item.animationDuration ? 'selected' : ''}>10s</option>
+          <option value="12" ${item.animationDuration === 12 ? 'selected' : ''}>12s</option>
+          <option value="15" ${item.animationDuration === 15 ? 'selected' : ''}>15s</option>
+          <option value="20" ${item.animationDuration === 20 ? 'selected' : ''}>20s</option>
+          <option value="30" ${item.animationDuration === 30 ? 'selected' : ''}>30s</option>
+        </select>
+        <select id="fps_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="updateRowFps('${item.id}', Number(this.value))" title="FPS Video">
+          <option value="30" ${item.fps === 30 || !item.fps ? 'selected' : ''}>30 FPS</option>
+          <option value="60" ${item.fps === 60 ? 'selected' : ''}>60 FPS</option>
+        </select>
+      </div>
+    `;
+
     // Button 1: TSX & Preview (FIRST — must be done before SEO)
     const hasPreview = !!item.previewUrl;
     const hasJudul = !!(item.judul && item.judul.trim());
@@ -3089,6 +3117,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     return `
       <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
         ${aiSelect}
+        ${videoConfigRow}
         ${btnTsxPreview}
         ${btnJudul}
         ${btn4k}
@@ -3564,7 +3593,21 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 
 
   // ═══════════════════════════════════════════
-  // HTML COMPILER HELPERS
+    window.updateRowDuration = function(id, durationSec) {
+    const fpsSelect = document.getElementById(`fps_${id}`);
+    const fps = fpsSelect ? Number(fpsSelect.value) : 30;
+    saveField(id, 'animationDuration', durationSec);
+    saveField(id, 'durationInFrames', durationSec * fps);
+  }
+
+  window.updateRowFps = function(id, fps) {
+    const durSelect = document.getElementById(`duration_${id}`);
+    const durationSec = durSelect ? Number(durSelect.value) : 10;
+    saveField(id, 'fps', fps);
+    saveField(id, 'durationInFrames', durationSec * fps);
+  }
+
+// HTML COMPILER HELPERS
   // ═══════════════════════════════════════════
   const BOILERPLATE_TEMPLATE = `<!DOCTYPE html>
 <html lang="id">
@@ -3713,6 +3756,88 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     if (savedCompilerCode) {
       const editor = document.getElementById('compilerHtmlCode');
       if (editor) {
+        editor.value = savedCompilerCode;
+        runHtmlCompiler();
+      }
+    } else {
+      // Load boilerplate by default if empty
+      loadCompilerTemplate(false);
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════
+  loadResults();
+  loadPrompts();
+  restoreState();
+  // Auto-refresh every 30s
+  setInterval(loadResults, 30000);
+</script>
+
+<!-- Modal Preview Besar -->
+<div id="videoModal" class="modal">
+  <span class="close-modal" onclick="closeVideoModal()">&times;</span>
+  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; border:3px solid var(--cyan); box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); background:#000;"></video>
+</div>
+
+</body>
+</html>f (editor) {
+        editor.value = savedCompilerCode;
+        runHtmlCompiler();
+      }
+    } else {
+      // Load boilerplate by default if empty
+      loadCompilerTemplate(false);
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════
+  loadResults();
+  loadPrompts();
+  restoreState();
+  // Auto-refresh every 30s
+  setInterval(loadResults, 30000);
+</script>
+
+<!-- Modal Preview Besar -->
+<div id="videoModal" class="modal">
+  <span class="close-modal" onclick="closeVideoModal()">&times;</span>
+  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; border:3px solid var(--cyan); box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); background:#000;"></video>
+</div>
+
+</body>
+</html>onst editor = document.getElementById('compilerHtmlCode');
+      if (editor) {
+        editor.value = savedCompilerCode;
+        runHtmlCompiler();
+      }
+    } else {
+      // Load boilerplate by default if empty
+      loadCompilerTemplate(false);
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // INIT
+  // ═══════════════════════════════════════════
+  loadResults();
+  loadPrompts();
+  restoreState();
+  // Auto-refresh every 30s
+  setInterval(loadResults, 30000);
+</script>
+
+<!-- Modal Preview Besar -->
+<div id="videoModal" class="modal">
+  <span class="close-modal" onclick="closeVideoModal()">&times;</span>
+  <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; border:3px solid var(--cyan); box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); background:#000;"></video>
+</div>
+
+</body>
+</html>f (editor) {
         editor.value = savedCompilerCode;
         runHtmlCompiler();
       }
