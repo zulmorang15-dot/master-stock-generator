@@ -3,557 +3,252 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
-const R = 34;
-const w = R * 2;
-const h = Math.sqrt(3) * R;
-const hSpacing = w * 0.75;
 
-interface Hex {
-  x: number;
-  y: number;
-  base: number;
-  phase: number;
-  spd: number;
+const PARTICLE_COUNT = 180;
+const SEED = 8888;
+
+// Deterministic Pseudo-Random Generator
+function seededRandom(seed: number) {
+  let s = seed;
+  return function() {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
 }
 
-const STATIC_HEXES: Hex[] = (() => {
-  const list: Hex[] = [];
-  const cols = Math.ceil(ORIGINAL_WIDTH / hSpacing) + 2;
-  const rows = Math.ceil(ORIGINAL_HEIGHT / h) + 2;
+const rand = seededRandom(SEED);
 
-  let seed = 12345;
-  function random() {
-    const x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
-  }
+// Pre-calculate deterministic, perfectly looping particle values
+const STATIC_PARTICLES = Array.from({ length: PARTICLE_COUNT }).map(() => {
+  const size = rand() * 3 + 0.5; // Size between 0.5 and 3.5
 
-  for (let col = -1; col < cols; col++) {
-    for (let row = -1; row < rows; row++) {
-      const x = col * hSpacing;
-      const y = row * h + (col % 2 !== 0 ? h / 2 : 0);
-      const dx = (x - ORIGINAL_WIDTH * 0.5) / (ORIGINAL_WIDTH * 0.5);
-      const dy = (y - ORIGINAL_HEIGHT * 0.4) / (ORIGINAL_HEIGHT * 0.5);
-      const dist = Math.min(1, Math.sqrt(dx * dx + dy * dy));
-      const base = 0.10 + (1 - dist) * 0.30;
-      const phase = random() * Math.PI * 2;
-      const spd = 0.4 + random() * 1.2;
-      list.push({ x, y, base, phase, spd });
-    }
-  }
-  return list;
-})();
+  // Symmetrical loop: vertical displacement must be a multiple of the height wrap span
+  const verticalLoops = Math.floor(rand() * 4) + 1; // 1 to 4 full screen loops
+  const speedY = -(verticalLoops * 1180) / 300; 
 
-const EndScreenPro: React.FC = () => {
+  // Symmetrical loop: horizontal displacement must be a multiple of the width wrap span
+  const horizontalLoops = Math.floor(rand() * 5) - 2; // -2 to 2 full screen loops
+  const speedX = (horizontalLoops * 2020) / 300;
+
+  const baseOpacity = rand() * 0.8 + 0.2; 
+  const flickerCycles = Math.floor(rand() * 12) + 3; // 3 to 14 full cycles per 10s
+  const hue = rand() * 15 + 30; // Golden-orange hue range (30 to 45)
+
+  return {
+    xSeed: rand() * 1920,
+    ySeed: rand() * 1080,
+    size,
+    speedY,
+    speedX,
+    baseOpacity,
+    flickerCycles,
+    hue,
+  };
+});
+
+const GoldenEndScreen: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const { width, height } = useVideoConfig();
   const frame = useCurrentFrame();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
+  // --- Animation Math: Glow Pulse (2.5 seconds per cycle = 75 frames) ---
+  const glowLocalFrame = frame % 75;
+  const pulseProgress = interpolate(
+    glowLocalFrame,
+    [0, 37.5, 75],
+    [0, 1, 0],
+    {
+      easing: Easing.inOut(Easing.quad),
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    }
+  );
+
+  const shadowRadius = interpolate(pulseProgress, [0, 1], [20, 45]);
+  const insetRadius = interpolate(pulseProgress, [0, 1], [20, 35]);
+  const insetOpacity = interpolate(pulseProgress, [0, 1], [0.3, 0.5]);
+
+  const glowR = Math.round(interpolate(pulseProgress, [0, 1], [255, 255]));
+  const glowG = Math.round(interpolate(pulseProgress, [0, 1], [149, 203]));
+  const glowB = Math.round(interpolate(pulseProgress, [0, 1], [0, 82]));
+  const glowColor = `rgb(${glowR}, ${glowG}, ${glowB})`;
+
+  const borderR = Math.round(interpolate(pulseProgress, [0, 1], [255, 255]));
+  const borderG = Math.round(interpolate(pulseProgress, [0, 1], [178, 215]));
+  const borderB = Math.round(interpolate(pulseProgress, [0, 1], [46, 110]));
+  const computedBorderColor = `rgb(${borderR}, ${borderG}, ${borderB})`;
+
+  const glowBoxShadow = `0 0 ${shadowRadius}px ${glowColor}, inset 0 0 ${insetRadius}px rgba(255,149,0,${insetOpacity})`;
+
+  // --- Animation Math: Subscribe Button Pulse (2 seconds per cycle = 60 frames) ---
+  const btnLocalFrame = frame % 60;
+  const btnProgress = interpolate(
+    btnLocalFrame,
+    [0, 30, 60],
+    [0, 1, 0],
+    {
+      easing: Easing.inOut(Easing.quad),
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    }
+  );
+
+  const btnScale = interpolate(btnProgress, [0, 1], [1, 1.06]);
+  const btnShadowRadius = interpolate(btnProgress, [0, 1], [30, 45]);
+  const btnShadowG = Math.round(interpolate(btnProgress, [0, 1], [149, 180]));
+  const btnShadowB = Math.round(interpolate(btnProgress, [0, 1], [0, 46]));
+  const btnShadowAlpha = interpolate(btnProgress, [0, 1], [0.7, 1.0]);
+  const btnBoxShadow = `0 0 ${btnShadowRadius}px rgba(255, ${btnShadowG}, ${btnShadowB}, ${btnShadowAlpha})`;
+
+  // --- Animation Math: Ring Rotation (Seamless 10-second loop, 2 full rotations) ---
+  const ringRotation = interpolate(frame, [0, 300], [0, 720]);
+
+  // --- Canvas Rendering Effect ---
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-    const t = frame * 0.02;
+    // Draw Dark Brown/Black background
+    ctx.fillStyle = '#0a0500';
+    ctx.fillRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
 
-    STATIC_HEXES.forEach(hx => {
-      const flick = 0.5 + 0.5 * Math.sin(t * hx.spd + hx.phase);
-      const alpha = hx.base * 0.4 + hx.base * flick;
+    // Draw Ambient Center-Top Radial Glow
+    const cx = ORIGINAL_WIDTH * 0.55;
+    const cy = ORIGINAL_HEIGHT * 0.1;
+    const r = ORIGINAL_WIDTH * 0.6;
+    const ambientGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    ambientGrad.addColorStop(0, 'rgba(255,170,40,0.35)');
+    ambientGrad.addColorStop(0.3, 'rgba(180,90,10,0.15)');
+    ambientGrad.addColorStop(1, 'rgba(10,5,0,0)');
+    ctx.fillStyle = ambientGrad;
+    ctx.fillRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
 
+    // Draw Particles
+    ctx.globalCompositeOperation = 'lighter';
+
+    STATIC_PARTICLES.forEach((p) => {
+      // Calculate wrapped position deterministically
+      let x = (p.xSeed + p.speedX * frame) % 2020;
+      if (x < -50) x += 2020;
+      let y = (p.ySeed + p.speedY * frame) % 1180;
+      if (y < -50) y += 1180;
+
+      // Symmetrical flicker using sine wave
+      const opacityOffset = Math.sin((frame * p.flickerCycles * 2 * Math.PI) / 300) * 0.25;
+      let opacity = p.baseOpacity + opacityOffset;
+      if (opacity < 0.1) opacity = 0.1;
+      if (opacity > 1.0) opacity = 1.0;
+
+      // Particle outer glow
+      const glowSize = p.size * 4;
+      const particleGrad = ctx.createRadialGradient(x, y, 0, x, y, glowSize);
+      particleGrad.addColorStop(0, `hsla(${p.hue}, 100%, 65%, ${opacity})`);
+      particleGrad.addColorStop(1, `hsla(${p.hue}, 100%, 50%, 0)`);
+      ctx.fillStyle = particleGrad;
       ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const a = (Math.PI / 180) * (60 * i);
-        const px = hx.x + R * Math.cos(a);
-        const py = hx.y + R * Math.sin(a);
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fillStyle = `rgba(90, 165, 225, ${alpha})`;
+      ctx.arc(x, y, glowSize, 0, Math.PI * 2);
       ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = `rgba(150, 210, 255, ${alpha * 0.6})`;
-      ctx.stroke();
+
+      // Particle core
+      ctx.fillStyle = `hsla(${p.hue + 10}, 100%, 80%, ${opacity})`;
+      ctx.beginPath();
+      ctx.arc(x, y, p.size, 0, Math.PI * 2);
+      ctx.fill();
     });
+
+    ctx.globalCompositeOperation = 'source-over';
   }, [frame]);
 
-  const floatACycle = 150;
-  const localFrameA = frame % floatACycle;
-  const txA = interpolate(localFrameA, [0, 75, 150], [0, 15, 0], { easing: Easing.inOut(Easing.quad) });
-  const tyA = interpolate(localFrameA, [0, 75, 150], [0, 15, 0], { easing: Easing.inOut(Easing.quad) });
-  const rotA = interpolate(localFrameA, [0, 75, 150], [0, 8, 0], { easing: Easing.inOut(Easing.quad) });
-
-  const floatBCycle = 225;
-  const localFrameB = (225 - (frame % floatBCycle)) % floatBCycle;
-  const txB = interpolate(localFrameB, [0, 112.5, 225], [0, 15, 0], { easing: Easing.inOut(Easing.quad) });
-  const tyB = interpolate(localFrameB, [0, 112.5, 225], [0, 15, 0], { easing: Easing.inOut(Easing.quad) });
-  const rotB = interpolate(localFrameB, [0, 112.5, 225], [0, 8, 0], { easing: Easing.inOut(Easing.quad) });
-
-  const blinkCycle = 45;
-  const getBlinkOpacity = (index: number) => {
-    const delay = index * 6;
-    const localFrame = (frame - delay + 450) % blinkCycle;
-    return interpolate(localFrame, [0, 22.5, 45], [1, 0.2, 1], { easing: Easing.inOut(Easing.quad) });
+  // --- Absolute Position Styling ---
+  const wrapperStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    backgroundColor: '#0a0500',
+    fontFamily: 'Arial, sans-serif',
   };
 
-  const titleInProgress = interpolate(frame, [0, 30], [0, 1], { extrapolateRight: "clamp", easing: Easing.bezier(0.2, 1.4, 0.4, 1) });
-  const inOpacity = interpolate(titleInProgress, [0, 1], [0, 1]);
-  const inY = interpolate(titleInProgress, [0, 1], [-60, 0]);
-  const inScale = interpolate(titleInProgress, [0, 1], [0.6, 1]);
-  const inRot = interpolate(titleInProgress, [0, 1], [-4, 0]);
-
-  const wiggleLocalFrame = frame % 150;
-  const wiggleY = interpolate(wiggleLocalFrame, [0, 37.5, 112.5, 150], [0, -6, -4, 0], { easing: Easing.inOut(Easing.quad) });
-  const wiggleRot = interpolate(wiggleLocalFrame, [0, 37.5, 112.5, 150], [0, -1, 1, 0], { easing: Easing.inOut(Easing.quad) });
-
-  const text = "THANKS FOR WATCHING";
-  const chars = Array.from(text);
-
-  const popProgressL = interpolate(frame, [9, 39], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) });
-  const scaleL = interpolate(popProgressL, [0, 1], [0.7, 1]);
-  const translateYL = interpolate(popProgressL, [0, 1], [40, 0]);
-  const opacityL = interpolate(popProgressL, [0, 1], [0, 1]);
-
-  const popProgressR = interpolate(frame, [15, 45], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) });
-  const scaleR = interpolate(popProgressR, [0, 1], [0.7, 1]);
-  const translateYR = interpolate(popProgressR, [0, 1], [40, 0]);
-  const opacityR = interpolate(popProgressR, [0, 1], [0, 1]);
-
-  const getGlowStyle = (progress: number, shadowRad: number) => {
-    const r = Math.round(255 - 6 * progress);
-    const g = Math.round(255 - 123 * progress);
-    const b = Math.round(255 - 181 * progress);
-    const a = 0.25 + 0.55 * progress;
-    return {
-      boxShadow: `0 0 ${shadowRad}px rgba(${r}, ${g}, ${b}, ${a})`,
-      borderColor: `rgb(${r}, ${g}, ${b})`
-    };
+  const canvasStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 0,
   };
 
-  const pL = interpolate(frame % 75, [0, 37.5, 75], [0, 1, 0]);
-  const radL = interpolate(frame % 75, [0, 37.5, 75], [20, 45, 20]);
-  const glowStyleL = getGlowStyle(pL, radL);
-
-  const pR = interpolate((frame - 18 + 450) % 75, [0, 37.5, 75], [0, 1, 0]);
-  const radR = interpolate((frame - 18 + 450) % 75, [0, 37.5, 75], [20, 45, 20]);
-  const glowStyleR = getGlowStyle(pR, radR);
-
-  const shineX = interpolate(frame % 90, [0, 54, 90], [-100, 200, 200]);
-
-  const spinRot = interpolate(frame % 450, [0, 450], [0, 360]);
-  const revSpinRot = interpolate(frame % 450, [0, 450], [360, 0]);
-
-  const pPulse = interpolate(frame % 75, [0, 37.5, 75], [0, 1, 0]);
-  const pulseShadow = interpolate(frame % 75, [0, 37.5, 75], [25, 55, 25]);
-  const rP = Math.round(255 - 6 * pPulse);
-  const gP = Math.round(255 - 123 * pPulse);
-  const bP = Math.round(255 - 181 * pPulse);
-  const aP = 0.3 + 0.6 * pPulse;
-  const circlePulseStyle = {
-    boxShadow: `0 0 ${pulseShadow}px rgba(${rP}, ${gP}, ${bP}, ${aP})`,
+  const overlayStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 2,
+    pointerEvents: 'none',
   };
 
-  const popL = interpolate(frame, [18, 48], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) });
-  const opL = interpolate(popL, [0, 1], [0, 1]);
-  const txButtonL = interpolate(popL, [0, 1], [-80, 0]);
+  const circleFrameStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: '8%',
+    top: '38%',
+    width: '130px',
+    height: '130px',
+    borderRadius: '50%',
+    border: `3px solid ${computedBorderColor}`,
+    boxShadow: glowBoxShadow,
+    transform: `rotate(${ringRotation}deg)`,
+  };
 
-  const popR = interpolate(frame, [24, 54], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.quad) });
-  const opR = interpolate(popR, [0, 1], [0, 1]);
-  const txButtonR = interpolate(popR, [0, 1], [80, 0]);
+  const subscribeBtnStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: '7%',
+    top: '70%',
+    background: 'linear-gradient(90deg, #ff7b00, #ffb22e)',
+    color: '#fff',
+    padding: '12px 30px',
+    borderRadius: '30px',
+    fontSize: '18px',
+    fontWeight: 'bold',
+    letterSpacing: '2px',
+    textTransform: 'uppercase',
+    boxShadow: btnBoxShadow,
+    transform: `scale(${btnScale})`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
 
-  const jellyFrameL = (frame - 48 + 450) % 75;
-  const scaleXL = interpolate(jellyFrameL, [0, 22.5, 45, 75], [1, 1.12, 0.95, 1], { easing: Easing.inOut(Easing.quad) });
-  const scaleYL = interpolate(jellyFrameL, [0, 22.5, 45, 75], [1, 0.88, 1.05, 1], { easing: Easing.inOut(Easing.quad) });
-
-  const jellyFrameR = (frame - 54 + 450) % 75;
-  const scaleXR = interpolate(jellyFrameR, [0, 22.5, 45, 75], [1, 1.12, 0.95, 1], { easing: Easing.inOut(Easing.quad) });
-  const scaleYR = interpolate(jellyFrameR, [0, 22.5, 45, 75], [1, 0.88, 1.05, 1], { easing: Easing.inOut(Easing.quad) });
-
-  const subFrame = frame % 45;
-  const subScale = interpolate(subFrame, [0, 18, 31.5, 45], [1, 1.14, 0.97, 1], { easing: Easing.inOut(Easing.quad) });
-  const subY = interpolate(subFrame, [0, 18, 31.5, 45], [0, -6, 0, 0], { easing: Easing.inOut(Easing.quad) });
-
-  const cursorFrame = frame % 60;
-  const cursorY = interpolate(cursorFrame, [0, 30, 60], [0, -12, 0], { easing: Easing.inOut(Easing.quad) });
-  const cursorScale = interpolate(cursorFrame, [0, 30, 60], [1, 0.85, 1], { easing: Easing.inOut(Easing.quad) });
-
-  const progWidth = interpolate(frame, [0, 450], [0, 100]);
+  const videoFrameStyle: React.CSSProperties = {
+    position: 'absolute',
+    right: '8%',
+    top: '30%',
+    width: '42%',
+    height: '45%',
+    border: `3px solid ${computedBorderColor}`,
+    borderRadius: '6px',
+    boxShadow: glowBoxShadow,
+  };
 
   return (
-    <div
-      style={{
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        background: 'radial-gradient(circle at 50% 38%, #1a5f9e 0%, #0d3f6e 55%, #07294a 100%)',
-        fontFamily: "'Arial Black', Arial, sans-serif",
-      }}
-    >
-      <canvas
-        ref={canvasRef}
-        width={ORIGINAL_WIDTH}
-        height={ORIGINAL_HEIGHT}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 1,
-        }}
-      />
-
-      {/* Top Left Blob (Float A) */}
-      <div
-        style={{
-          position: 'absolute',
-          zIndex: 2,
-          top: -110,
-          left: -110,
-          transform: `translate(${txA}px, ${tyA}px) rotate(${rotA}deg)`,
-        }}
-      >
-        <div
-          style={{
-            width: 240,
-            height: 240,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 35%, #ff9248, #f3722c)',
-            boxShadow: '0 0 60px rgba(243,114,44,0.7)',
-          }}
-        />
+    <div style={wrapperStyle}>
+      <canvas ref={canvasRef} width={ORIGINAL_WIDTH} height={ORIGINAL_HEIGHT} style={canvasStyle} />
+      <div style={overlayStyle}>
+        <div style={circleFrameStyle} />
+        <div style={subscribeBtnStyle}>Subscribe</div>
+        <div style={videoFrameStyle} />
       </div>
-
-      {/* Top Right Blob (Float B) */}
-      <div
-        style={{
-          position: 'absolute',
-          zIndex: 2,
-          top: -90,
-          right: -90,
-          transform: `translate(${txB}px, ${tyB}px) rotate(${rotB}deg)`,
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            top: -30,
-            right: -30,
-            width: 300,
-            height: 300,
-            border: '16px solid #f9844a',
-            borderRadius: '50%',
-            opacity: 0.9,
-          }}
-        />
-        <div
-          style={{
-            width: 240,
-            height: 240,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 35%, #3b94d4, #1f6bb0)',
-          }}
-        />
-      </div>
-
-      {/* Bottom Left Blob (Float B) */}
-      <div
-        style={{
-          position: 'absolute',
-          zIndex: 2,
-          bottom: -110,
-          left: -110,
-          transform: `translate(${txB}px, ${tyB}px) rotate(${rotB}deg)`,
-        }}
-      >
-        <div
-          style={{
-            width: 240,
-            height: 240,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 35%, #3b94d4, #1f6bb0)',
-          }}
-        />
-      </div>
-
-      {/* Bottom Right Blob (Float A) */}
-      <div
-        style={{
-          position: 'absolute',
-          zIndex: 2,
-          bottom: -110,
-          right: -110,
-          transform: `translate(${txA}px, ${tyA}px) rotate(${rotA}deg)`,
-        }}
-      >
-        <div
-          style={{
-            width: 240,
-            height: 240,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 35%, #ff9248, #f3722c)',
-            boxShadow: '0 0 60px rgba(243,114,44,0.7)',
-          }}
-        />
-      </div>
-
-      {/* Deco D1 */}
-      <div style={{ position: 'absolute', zIndex: 4, display: 'flex', gap: 6, top: 60, left: '38%' }}>
-        <span style={{ width: 5, height: 24, background: '#f3722c', transform: 'skewX(-20deg)', opacity: getBlinkOpacity(0) }} />
-        <span style={{ width: 5, height: 24, background: '#f3722c', transform: 'skewX(-20deg)', opacity: getBlinkOpacity(1) }} />
-        <span style={{ width: 5, height: 24, background: '#f3722c', transform: 'skewX(-20deg)', opacity: getBlinkOpacity(2) }} />
-      </div>
-
-      {/* Deco D2 */}
-      <div style={{ position: 'absolute', zIndex: 4, display: 'flex', gap: 6, bottom: 80, right: '36%' }}>
-        <span style={{ width: 5, height: 24, background: '#f3722c', transform: 'skewX(-20deg)', opacity: getBlinkOpacity(0) }} />
-        <span style={{ width: 5, height: 24, background: '#f3722c', transform: 'skewX(-20deg)', opacity: getBlinkOpacity(1) }} />
-        <span style={{ width: 5, height: 24, background: '#f3722c', transform: 'skewX(-20deg)', opacity: getBlinkOpacity(2) }} />
-      </div>
-
-      {/* Title */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '6%',
-          width: '100%',
-          textAlign: 'center',
-          zIndex: 6,
-          fontSize: '104px',
-          fontWeight: 900,
-          fontStyle: 'italic',
-          color: '#fff',
-          letterSpacing: '2px',
-          textTransform: 'uppercase',
-          textShadow: '4px 4px 0 #f3722c, -1px -1px 0 #277fc4, 0 0 30px rgba(255,255,255,0.4)',
-          WebkitTextStroke: '1px #0b3a66',
-          opacity: inOpacity,
-          transform: `translateY(${inY + wiggleY}px) scale(${inScale}) rotate(${inRot + wiggleRot}deg)`,
-        }}
-      >
-        {chars.map((ch, i) => {
-          const bounceCycle = 75;
-          const charDelay = i * 2.1;
-          const charLocalFrame = (frame - charDelay + 450) % bounceCycle;
-          const charY = interpolate(
-            charLocalFrame,
-            [0, bounceCycle * 0.5, bounceCycle],
-            [0, -10, 0],
-            { easing: Easing.inOut(Easing.quad) }
-          );
-
-          return (
-            <span
-              key={i}
-              style={{
-                display: 'inline-block',
-                transform: `translateY(${charY}px)`,
-              }}
-            >
-              {ch === ' ' ? '\u00A0' : ch}
-            </span>
-          );
-        })}
-      </div>
-
-      {/* Content */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '32%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: '88%',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          zIndex: 6,
-        }}
-      >
-        {/* Video Frame Left */}
-        <div
-          style={{
-            width: '33%',
-            height: 270,
-            border: '4px dashed #fff',
-            borderRadius: 12,
-            background: 'rgba(255,255,255,0.07)',
-            position: 'relative',
-            overflow: 'hidden',
-            opacity: opacityL,
-            transform: `translateY(${translateYL}px) scale(${scaleL})`,
-            ...glowStyleL,
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%)',
-              transform: `translateX(${shineX}%)`,
-            }}
-          />
-        </div>
-
-        {/* Center Circle */}
-        <div
-          style={{
-            width: 216,
-            height: 216,
-            border: '4px dashed #fff',
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.08)',
-            position: 'relative',
-            transform: `rotate(${spinRot}deg)`,
-            ...circlePulseStyle,
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 58,
-              color: '#f9844a',
-              textShadow: '0 0 15px #f9844a',
-              transform: `rotate(${revSpinRot}deg)`,
-            }}
-          >
-            ▶
-          </div>
-        </div>
-
-        {/* Video Frame Right */}
-        <div
-          style={{
-            width: '33%',
-            height: 270,
-            border: '4px dashed #fff',
-            borderRadius: 12,
-            background: 'rgba(255,255,255,0.07)',
-            position: 'relative',
-            overflow: 'hidden',
-            opacity: opacityR,
-            transform: `translateY(${translateYR}px) scale(${scaleR})`,
-            ...glowStyleR,
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%)',
-              transform: `translateX(${shineX}%)`,
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Watch Next Button */}
-      <div
-        style={{
-          position: 'absolute',
-          zIndex: 7,
-          color: '#fff',
-          fontWeight: 900,
-          fontStyle: 'italic',
-          fontSize: 29,
-          textTransform: 'uppercase',
-          padding: '10px 26px',
-          borderRadius: '8px 22px 8px 22px',
-          background: 'linear-gradient(90deg, #f3722c, #f9844a)',
-          boxShadow: '0 0 25px rgba(243,114,44,0.6)',
-          bottom: '13%',
-          left: '5%',
-          opacity: opL,
-          transform: `skewX(-8deg) translateX(${txButtonL}px) scale(${scaleXL}, ${scaleYL})`,
-        }}
-      >
-        <span style={{ display: 'inline-block', transform: 'skewX(8deg)' }}>Watch Next</span>
-      </div>
-
-      {/* Recommended Button */}
-      <div
-        style={{
-          position: 'absolute',
-          zIndex: 7,
-          color: '#fff',
-          fontWeight: 900,
-          fontStyle: 'italic',
-          fontSize: 29,
-          textTransform: 'uppercase',
-          padding: '10px 26px',
-          borderRadius: '8px 22px 8px 22px',
-          background: 'linear-gradient(90deg, #f3722c, #f9844a)',
-          boxShadow: '0 0 25px rgba(243,114,44,0.6)',
-          bottom: '13%',
-          right: '5%',
-          opacity: opR,
-          transform: `skewX(-8deg) translateX(${txButtonR}px) scale(${scaleXR}, ${scaleYR})`,
-        }}
-      >
-        <span style={{ display: 'inline-block', transform: 'skewX(8deg)' }}>Recommended</span>
-      </div>
-
-      {/* Subscribe Text */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '4%',
-          left: '50%',
-          zIndex: 7,
-          color: '#fff',
-          fontSize: 61,
-          fontWeight: 900,
-          fontStyle: 'italic',
-          letterSpacing: '3px',
-          textTransform: 'uppercase',
-          textShadow: '3px 3px 0 #f3722c, 0 0 25px rgba(243,114,44,0.8)',
-          transform: `translateX(-50%) skewX(-8deg) scale(${subScale}) translateY(${subY}px)`,
-        }}
-      >
-        Subscribe
-      </div>
-
-      {/* Cursor Hand */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '9%',
-          left: '50%',
-          zIndex: 8,
-          fontSize: 46,
-          color: '#fff',
-          transform: `translateX(40%) translateY(${cursorY}px) scale(${cursorScale})`,
-          filter: 'drop-shadow(0 0 8px #f9844a)',
-        }}
-      >
-        👆
-      </div>
-
-      {/* Progress Bar */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          height: 5,
-          background: '#f9844a',
-          boxShadow: '0 0 12px #f9844a',
-          zIndex: 10,
-          width: `${progWidth}%`,
-        }}
-      />
     </div>
   );
 };
 
-export default EndScreenPro;
+export default GoldenEndScreen;
 // END_OF_FILE
