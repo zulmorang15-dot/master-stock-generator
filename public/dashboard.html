@@ -1709,9 +1709,16 @@
 
     data.forEach((item, idx) => {
       const tr = document.createElement('tr');
-      tr.style.borderBottom = '1px solid<button class="btn-refresh" onclick="sendToGenerator('${escapedNiche}', '${escapedExplanation}', '${item.keywords.replace(/'/g, "\\'")}')" style="width: 100%; padding: 6px 10px; font-size: 11px; border-color: var(--cyan); color: var(--cyan); background: transparent;">
-              🚀 Kirim Ide
-            </button>700; color: #fff;">${escHtml(item.niche)}</td>
+      tr.style.borderBottom = '1px solid var(--border)';
+      tr.style.verticalAlign = 'top';
+
+      const escapedNiche = item.niche.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const escapedExplanation = item.explanation.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const escapedKeywords = item.keywords.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+      tr.innerHTML = `
+        <td style="padding: 14px 12px; color: var(--text-dim); font-weight: 600;">${idx + 1}</td>
+        <td style="padding: 14px 12px; font-weight: 700; color: #fff;">${escHtml(item.niche)}</td>
         <td style="padding: 14px 12px; color: var(--text-mid); line-height: 1.5;">${escHtml(item.explanation)}</td>
         <td style="padding: 14px 12px; color: var(--cyan); font-weight: 600;">${escHtml(item.country)}</td>
         <td style="padding: 14px 12px;">
@@ -1728,8 +1735,8 @@
             <button class="btn-refresh" onclick="searchFromTrend('${escapedNiche}')" style="width: 100%; padding: 6px 10px; font-size: 11px; border-color: var(--purple); color: var(--purple);">
               🔍 Cari Aset
             </button>
-            <button class="btn-refresh" disabled style="width: 100%; padding: 6px 10px; font-size: 11px; border-color: var(--border); color: var(--text-dim); background: transparent; cursor: not-allowed; opacity: 0.5;" title="Gunakan tombol Kirim ke Chat AI di Adobe Stock Explorer untuk membuat HTML">
-              ❌ Kirim Ide
+            <button class="btn-refresh" onclick="sendToGenerator('${escapedNiche}', '${escapedExplanation}', '${escapedKeywords}')" style="width: 100%; padding: 6px 10px; font-size: 11px; border-color: var(--cyan); color: var(--cyan); background: transparent;">
+              🚀 Kirim Ide
             </button>
           </div>
         </td>
