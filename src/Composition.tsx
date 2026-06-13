@@ -1,498 +1,543 @@
 import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } from 'remotion';
 
-// Pre-calculated static random elements outside render loop to avoid Math.random() crashes and guarantee determinism.
-const DUST_PARTICLES = Array.from({ length: 100 }).map((_, i) => {
-    const x = (i * 19.3) % 1920;
-    const y = (i * 11.7) % 1080;
-    const size = (i % 3) + 1.5;
-    const speed = 0.4 + (i % 5) * 0.15;
-    const opacity = 0.3 + (i % 4) * 0.15;
-    return { x, y, size, speed, opacity };
-});
+const ORIGINAL_WIDTH = 1920;
+const ORIGINAL_HEIGHT = 1080;
 
-const WAVE_PARTICLES = Array.from({ length: 140 }).map((_, i) => {
-    const angle = (i * Math.PI * 2) / 140;
-    const radius = 100 + (i % 5) * 60;
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    const phase = i * 0.2;
-    return { x, z, phase };
-});
+// Pre-calculated static particle data (deterministic, outside component)
+const PARTICLE_COUNT = 120;
+const STATIC_PARTICLES: { x: number; y: number; size: number; speed: number; color: string; opacity: number }[] = [];
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  const seed1 = (i * 1.7321 + 13.37) % 1;
+  const seed2 = (i * 3.1415 + 7.77) % 1;
+  const seed3 = (i * 2.6180 + 4.44) % 1;
+  const seed4 = (i * 0.9999 + 1.11) % 1;
+  const seed5 = (i * 5.4321 + 2.22) % 1;
+  STATIC_PARTICLES.push({
+    x: seed1 * 1920,
+    y: seed2 * 1080,
+    size: 1 + seed3 * 3,
+    speed: 0.3 + seed4 * 1.2,
+    color: seed5 > 0.5 ? '#00ffff' : '#ff00ff',
+    opacity: 0.3 + seed3 * 0.7,
+  });
+}
 
-const EsportsEndScreen = () => {
-    const { width, height, fps } = useVideoConfig();
-    const frame = useCurrentFrame();
+// Pre-calculated background ring data
+const RING_DATA: { rotX: number; rotY: number; scale: number; posZ: number; color: string }[] = [];
+for (let i = 0; i < 5; i++) {
+  const s1 = (i * 2.3456 + 1.1) % 1;
+  const s2 = (i * 1.2345 + 2.2) % 1;
+  RING_DATA.push({
+    rotX: s1 * Math.PI,
+    rotY: s2 * Math.PI,
+    scale: 1 + i * 0.5,
+    posZ: -50 - i * 20,
+    color: i % 2 === 0 ? '#00ffff' : '#ff00ff',
+  });
+}
 
-    const ORIGINAL_WIDTH = 1920;
-    const ORIGINAL_HEIGHT = 1080;
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+// Pre-calculated grid line data
+const GRID_LINES_H: number[] = [];
+const GRID_LINES_V: number[] = [];
+for (let i = 0; i <= 54; i++) GRID_LINES_H.push(i * 20);
+for (let i = 0; i <= 96; i++) GRID_LINES_V.push(i * 20);
 
-    // Deterministic animation properties
-    // 1. Scanline & Sweep translations (5-second cycle for sweep, 4-second cycle for scanline)
-    // Height is 326px, width is 580px
-    const scanlineY1 = interpolate(frame % 240, [0, 240], [-326, 326]);
-    const scanlineY2 = interpolate((frame + 120) % 240, [0, 240], [-326, 326]);
+// Streak configs
+const STREAK_CONFIGS = [
+  { top: 250, width: 600, color: 'cyan', cycleDuration: 1.5, delay: 0 },
+  { top: 850, width: 800, color: 'magenta', cycleDuration: 2.0, delay: 1.2 },
+  { top: 450, width: 500, color: 'cyan', cycleDuration: 1.2, delay: 0.5 },
+];
 
-    const sweepX1 = interpolate(frame % 300, [0, 60, 300], [-300, 700, 700]);
-    const sweepX2 = interpolate((frame + 180) % 300, [0, 60, 300], [-300, 700, 700]);
+// Core target ring pulses - 3 staggered rings
+const TARGET_RING_COUNT = 3;
 
-    // 2. Camera Drift
-    const driftX = interpolate(frame % 600, [0, 300, 600], [0, 12, 0], { easing: Easing.inOut(Easing.quad) });
-    const driftY = interpolate(frame % 600, [0, 300, 600], [0, 8, 0], { easing: Easing.inOut(Easing.quad) });
-    const driftRot = interpolate(frame % 600, [0, 300, 600], [0, 0.5, 0], { easing: Easing.inOut(Easing.quad) });
+const CyberpunkEsportsEndscreen = () => {
+  const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    // 3. Grid movement (offset)
-    const gridOffset = interpolate(frame % 120, [0, 120], [0, 80]);
+  const totalFrames = 900; // 15s @ 60fps
+  const loopFrame = frame % totalFrames;
+  const time = loopFrame / fps; // seconds within loop
 
-    // 4. Core Animations
-    const coreRotateY = interpolate(frame % 1200, [0, 1200], [0, 360]);
-    const coreRotateX = interpolate(frame % 1200, [0, 1200], [0, 180]);
-    const outerCoreRotateY = interpolate(frame % 1200, [0, 1200], [360, 0]);
-    const outerCoreRotateZ = interpolate(frame % 1200, [0, 1200], [0, 360]);
+  // ---- OUTER RING rotation (8s cycle) ----
+  const outerRingCycle = fps * 8;
+  const outerRingLocalFrame = loopFrame % outerRingCycle;
+  const outerRingRotation = interpolate(outerRingLocalFrame, [0, outerRingCycle], [0, 360], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-    // 5. Hologram Ring Rotations
-    const ringOuterRot = interpolate(frame % 600, [0, 600], [0, 360]);
-    const ringInnerRot = interpolate(frame % 300, [0, 300], [360, 0]);
-    const ringDashedRot = interpolate(frame % 1200, [0, 1200], [0, 360]);
+  // ---- INNER RING rotation (12s cycle, counter-clockwise) ----
+  const innerRingCycle = fps * 12;
+  const innerRingLocalFrame = loopFrame % innerRingCycle;
+  const innerRingRotation = interpolate(innerRingLocalFrame, [0, innerRingCycle], [0, -360], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-    // 6. Crosshair Pulse
-    const crosshairScale = interpolate(frame % 120, [0, 60, 120], [1, 1.15, 1], { easing: Easing.inOut(Easing.quad) });
-    const crosshairOpacity = interpolate(frame % 120, [0, 60, 120], [0.3, 0.7, 0.3], { easing: Easing.inOut(Easing.quad) });
+  // ---- CORE GLOW pulse (2s ease-in-out alternate) ----
+  const corePulseCycle = fps * 2;
+  const corePulseLocal = loopFrame % corePulseCycle;
+  const corePulseT = corePulseLocal / corePulseCycle;
+  // alternate: 0->1->0 symmetrical
+  const corePulsePhase = corePulseT < 0.5
+    ? interpolate(corePulseLocal, [0, corePulseCycle * 0.5], [0, 1], { easing: Easing.inOut(Easing.sin) })
+    : interpolate(corePulseLocal, [corePulseCycle * 0.5, corePulseCycle], [1, 0], { easing: Easing.inOut(Easing.sin) });
 
-    return (
+  const coreScale = interpolate(corePulsePhase, [0, 1], [0.9, 1.1]);
+  const coreOpacity = interpolate(corePulsePhase, [0, 1], [0.8, 1.0]);
+  const coreBrightness = interpolate(corePulsePhase, [0, 1], [1, 1.5]);
+
+  // ---- SCANLINE animation (4s linear cycle) ----
+  const scanlineCycle = fps * 4;
+  const scanline1Local = loopFrame % scanlineCycle;
+  const scanlineY1 = interpolate(scanline1Local, [0, scanlineCycle], [-100, 400], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+
+  // offset second scanline by half cycle
+  const scanline2Local = (loopFrame + Math.floor(scanlineCycle * 0.5)) % scanlineCycle;
+  const scanlineY2 = interpolate(scanline2Local, [0, scanlineCycle], [-100, 400], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+
+  // ---- PLACEHOLDER box shadow pulse ----
+  const boxShadowCycle = fps * 2.5;
+  const boxShadowLocal = loopFrame % boxShadowCycle;
+  const boxShadowPhase = boxShadowLocal < boxShadowCycle * 0.5
+    ? interpolate(boxShadowLocal, [0, boxShadowCycle * 0.5], [0, 1], { easing: Easing.inOut(Easing.quad) })
+    : interpolate(boxShadowLocal, [boxShadowCycle * 0.5, boxShadowCycle], [1, 0], { easing: Easing.inOut(Easing.quad) });
+
+  const shadowAlpha1 = interpolate(boxShadowPhase, [0, 1], [0.4, 0.8]);
+  const shadowAlpha2 = interpolate(boxShadowPhase, [0, 1], [0.2, 0.4]);
+  const placeholderBoxShadow = `0 0 40px rgba(0,255,255,${shadowAlpha1}), inset 0 0 50px rgba(0,255,255,${shadowAlpha2})`;
+
+  // ---- BACKGROUND ring group rotation ----
+  const bgRingGroupRotZ = (loopFrame / fps) * 0.1; // rad/s
+  const bgRingGroupRotY = (loopFrame / fps) * 0.05;
+
+  // ---- CAMERA parallax (simulated as background shift) ----
+  const camX = Math.sin(time * 0.3) * 10;
+  const camY = Math.cos(time * 0.4) * 5;
+
+  // ---- GRID forward movement (perspective illusion via backgroundPosition) ----
+  const gridSpeed = 15;
+  const gridCellSize = 20;
+  const gridOffsetY = (time * gridSpeed * 0.5) % gridCellSize;
+
+  // ---- POINT LIGHT intensity pulses (CSS glow simulation) ----
+  const cyanLightIntensity = 5 + Math.sin(time * 3) * 2;
+  const magentaLightIntensity = 5 + Math.cos(time * 2.5) * 2;
+  const cyanGlowAlpha = interpolate(cyanLightIntensity, [3, 7], [0.3, 0.8]);
+  const magentaGlowAlpha = interpolate(magentaLightIntensity, [3, 7], [0.3, 0.8]);
+
+  return (
+    <div
+      style={{
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+        background: 'radial-gradient(circle at center, #020412 0%, #000000 100%)',
+      }}
+    >
+      {/* ===== WEBGL LAYER REPLACEMENT: CSS 3D Scene ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 1,
+          overflow: 'hidden',
+          background: 'radial-gradient(ellipse at center, #01020a 0%, #000000 100%)',
+        }}
+      >
+        {/* Fog overlay */}
         <div
-            style={{
-                backgroundColor: '#010308',
-                width: ORIGINAL_WIDTH,
-                height: ORIGINAL_HEIGHT,
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-                transformOrigin: 'center center',
-                overflow: 'hidden',
-            }}
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, width: '100%', height: '100%',
+            background: 'radial-gradient(ellipse at center, transparent 20%, rgba(1,2,10,0.6) 100%)',
+            zIndex: 50,
+          }}
+        />
+
+        {/* Cyan ambient glow */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '30%', left: '-15%',
+            width: '60%', height: '60%',
+            borderRadius: '50%',
+            background: `radial-gradient(circle at center, rgba(0,255,255,${cyanGlowAlpha * 0.15}) 0%, transparent 70%)`,
+            zIndex: 2,
+          }}
+        />
+        {/* Magenta ambient glow */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '10%', left: '60%',
+            width: '60%', height: '60%',
+            borderRadius: '50%',
+            background: `radial-gradient(circle at center, rgba(255,0,255,${magentaGlowAlpha * 0.15}) 0%, transparent 70%)`,
+            zIndex: 2,
+          }}
+        />
+
+        {/* ===== HOLOGRAPHIC GRID FLOOR (CSS perspective simulation) ===== */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: '-10%',
+            width: '120%',
+            height: '65%',
+            zIndex: 3,
+            transform: 'perspective(800px) rotateX(65deg)',
+            transformOrigin: 'bottom center',
+          }}
         >
-            {/* 3D BACKGROUND SIMULATION */}
-            <div
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    zIndex: 1,
-                    background: 'radial-gradient(circle at center, #020b1f 0%, #010308 100%)',
-                    transform: `scale(1.1) translate(${driftX}px, ${driftY}px) rotate(${driftRot}deg)`,
-                    transformOrigin: 'center center',
-                }}
-            >
-                {/* Perspective grid floor */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        width: '100%',
-                        height: '100%',
-                        perspective: '600px',
-                        perspectiveOrigin: '50% 40%',
-                    }}
-                >
-                    {/* The grid mesh */}
-                    <div
-                        style={{
-                            position: 'absolute',
-                            width: '200%',
-                            height: '200%',
-                            left: '-50%',
-                            top: '-30%',
-                            backgroundImage: `
-                                linear-gradient(to right, rgba(0, 255, 255, 0.12) 1px, transparent 1px),
-                                linear-gradient(to bottom, rgba(0, 255, 255, 0.12) 1px, transparent 1px)
-                            `,
-                            backgroundSize: '80px 80px',
-                            transform: `rotateX(75deg) translateY(${gridOffset}px)`,
-                            transformOrigin: 'center center',
-                            maskImage: 'radial-gradient(ellipse at 50% 40%, black 15%, transparent 65%)',
-                            WebkitMaskImage: 'radial-gradient(ellipse at 50% 40%, black 15%, transparent 65%)',
-                        }}
-                    />
-
-                    {/* Particle wave mesh */}
-                    <div
-                        style={{
-                            position: 'absolute',
-                            width: '100%',
-                            height: '100%',
-                            transform: 'rotateX(75deg) translateZ(-60px)',
-                            transformStyle: 'preserve-3d',
-                            perspectiveOrigin: '50% 50%',
-                        }}
-                    >
-                        {WAVE_PARTICLES.map((p, idx) => {
-                            const t = (frame % 1200) / 1200 * Math.PI * 2;
-                            const waveHeight = Math.sin(p.phase + t * 4) * 25 + Math.cos(p.phase + t * 2) * 15;
-                            return (
-                                <div
-                                    key={`wave-${idx}`}
-                                    style={{
-                                        position: 'absolute',
-                                        left: `calc(50% + ${p.x}px)`,
-                                        top: `calc(50% + ${p.z}px)`,
-                                        width: '5px',
-                                        height: '5px',
-                                        borderRadius: '50%',
-                                        backgroundColor: '#00aaff',
-                                        opacity: 0.6,
-                                        boxShadow: '0 0 10px #00aaff, 0 0 20px #0055ff',
-                                        transform: `translate3d(0, 0, ${waveHeight}px)`,
-                                    }}
-                                />
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* Emissive Sphere Cores (Simulated behind the main UI) */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: '300px',
-                        height: '300px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        perspective: '1000px',
-                    }}
-                >
-                    {/* Background Core Wireframe Sphere */}
-                    <div
-                        style={{
-                            position: 'absolute',
-                            width: '150px',
-                            height: '150px',
-                            transform: `rotateY(${coreRotateY}deg) rotateX(${coreRotateX}deg)`,
-                            transformStyle: 'preserve-3d',
-                        }}
-                    >
-                        <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ overflow: 'visible', position: 'absolute' }}>
-                            <circle cx="50" cy="50" r="48" fill="none" stroke="#0055ff" strokeWidth="1" strokeDasharray="3 3" opacity="0.3" />
-                            <ellipse cx="50" cy="50" rx="48" ry="16" fill="none" stroke="#0055ff" strokeWidth="1" opacity="0.3" />
-                            <ellipse cx="50" cy="50" rx="16" ry="48" fill="none" stroke="#0055ff" strokeWidth="1" opacity="0.3" />
-                        </svg>
-                    </div>
-
-                    {/* Outer Core Icosahedron Wireframe */}
-                    <div
-                        style={{
-                            position: 'absolute',
-                            width: '230px',
-                            height: '230px',
-                            transform: `rotateY(${outerCoreRotateY}deg) rotateZ(${outerCoreRotateZ}deg)`,
-                            transformStyle: 'preserve-3d',
-                        }}
-                    >
-                        <svg width="100%" height="100%" viewBox="0 0 100 100" style={{ overflow: 'visible', position: 'absolute' }}>
-                            <polygon points="50,2 93,27 93,73 50,98 7,73 7,27" fill="none" stroke="#00ffff" strokeWidth="1" opacity="0.2" />
-                            <line x1="50" y1="2" x2="50" y2="98" stroke="#00ffff" strokeWidth="1" opacity="0.15" />
-                            <line x1="7" y1="27" x2="93" y2="73" stroke="#00ffff" strokeWidth="1" opacity="0.15" />
-                            <line x1="7" y1="73" x2="93" y2="27" stroke="#00ffff" strokeWidth="1" opacity="0.15" />
-                        </svg>
-                    </div>
-                </div>
-
-                {/* Floating Emissive Dust Particles */}
-                <div style={{ position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }}>
-                    {DUST_PARTICLES.map((dust, idx) => {
-                        const dynamicY = ((dust.y - (frame * dust.speed)) % 1080 + 1080) % 1080;
-                        return (
-                            <div
-                                key={`dust-${idx}`}
-                                style={{
-                                    position: 'absolute',
-                                    left: dust.x,
-                                    top: dynamicY,
-                                    width: dust.size,
-                                    height: dust.size,
-                                    borderRadius: '50%',
-                                    backgroundColor: '#00ffff',
-                                    opacity: dust.opacity,
-                                    boxShadow: '0 0 8px #00ffff',
-                                }}
-                            />
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* UI OVERLAY LAYER */}
-            <div
-                id="ui-layer"
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    zIndex: 2,
-                    pointerEvents: 'none',
-                }}
-            >
-                {/* HUD Lines */}
-                <div className="hud-line" style={{ position: 'absolute', top: '150px', left: 0, width: '100%', height: '1px', opacity: 0.2, background: '#00ffff', boxShadow: '0 0 10px #00ffff' }} />
-                <div className="hud-line" style={{ position: 'absolute', bottom: '150px', left: 0, width: '100%', height: '1px', opacity: 0.2, background: '#00ffff', boxShadow: '0 0 10px #00ffff' }} />
-
-                {/* HUD Crosshairs */}
-                {/* Top-Left Crosshair */}
-                <div
-                    className="hud-crosshair"
-                    style={{
-                        position: 'absolute',
-                        width: '20px',
-                        height: '20px',
-                        top: '140px',
-                        left: '140px',
-                        transform: `scale(${crosshairScale})`,
-                        opacity: crosshairOpacity,
-                    }}
-                >
-                    <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '2px', backgroundColor: '#0055ff', transform: 'translateY(-50%)' }} />
-                    <div style={{ position: 'absolute', top: 0, left: '50%', width: '2px', height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }} />
-                </div>
-
-                {/* Top-Right Crosshair */}
-                <div
-                    className="hud-crosshair"
-                    style={{
-                        position: 'absolute',
-                        width: '20px',
-                        height: '20px',
-                        top: '140px',
-                        right: '140px',
-                        transform: `scale(${crosshairScale})`,
-                        opacity: crosshairOpacity,
-                    }}
-                >
-                    <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '2px', backgroundColor: '#0055ff', transform: 'translateY(-50%)' }} />
-                    <div style={{ position: 'absolute', top: 0, left: '50%', width: '2px', height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }} />
-                </div>
-
-                {/* Bottom-Left Crosshair */}
-                <div
-                    className="hud-crosshair"
-                    style={{
-                        position: 'absolute',
-                        width: '20px',
-                        height: '20px',
-                        bottom: '140px',
-                        left: '140px',
-                        transform: `scale(${crosshairScale})`,
-                        opacity: crosshairOpacity,
-                    }}
-                >
-                    <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '2px', backgroundColor: '#0055ff', transform: 'translateY(-50%)' }} />
-                    <div style={{ position: 'absolute', top: 0, left: '50%', width: '2px', height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }} />
-                </div>
-
-                {/* Bottom-Right Crosshair */}
-                <div
-                    className="hud-crosshair"
-                    style={{
-                        position: 'absolute',
-                        width: '20px',
-                        height: '20px',
-                        bottom: '140px',
-                        right: '140px',
-                        transform: `scale(${crosshairScale})`,
-                        opacity: crosshairOpacity,
-                    }}
-                >
-                    <div style={{ position: 'absolute', top: '50%', left: 0, width: '100%', height: '2px', backgroundColor: '#0055ff', transform: 'translateY(-50%)' }} />
-                    <div style={{ position: 'absolute', top: 0, left: '50%', width: '2px', height: '100%', backgroundColor: '#0055ff', transform: 'translateX(-50%)' }} />
-                </div>
-
-                {/* LEFT PLACEHOLDER */}
-                <div
-                    className="placeholder left"
-                    style={{
-                        position: 'absolute',
-                        width: '580px',
-                        height: '326px',
-                        top: '377px',
-                        left: '140px',
-                        backgroundColor: 'rgba(0, 15, 30, 0.4)',
-                        border: '2px solid rgba(0, 255, 255, 0.3)',
-                        boxShadow: '0 0 30px rgba(0, 255, 255, 0.1), inset 0 0 40px rgba(0, 85, 255, 0.2)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        overflow: 'hidden',
-                    }}
-                >
-                    {/* Holographic Corners */}
-                    <div className="corner tl" style={{ position: 'absolute', width: '40px', height: '40px', borderColor: '#00ffff', borderStyle: 'solid', borderWidth: 0, borderTopWidth: '4px', borderLeftWidth: '4px', top: '-2px', left: '-2px', boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)', zIndex: 3 }} />
-                    <div className="corner tr" style={{ position: 'absolute', width: '40px', height: '40px', borderColor: '#00ffff', borderStyle: 'solid', borderWidth: 0, borderTopWidth: '4px', borderRightWidth: '4px', top: '-2px', right: '-2px', boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)', zIndex: 3 }} />
-                    <div className="corner bl" style={{ position: 'absolute', width: '40px', height: '40px', borderColor: '#00ffff', borderStyle: 'solid', borderWidth: 0, borderBottomWidth: '4px', borderLeftWidth: '4px', bottom: '-2px', left: '-2px', boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)', zIndex: 3 }} />
-                    <div className="corner br" style={{ position: 'absolute', width: '40px', height: '40px', borderColor: '#00ffff', borderStyle: 'solid', borderWidth: 0, borderBottomWidth: '4px', borderRightWidth: '4px', bottom: '-2px', right: '-2px', boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)', zIndex: 3 }} />
-
-                    {/* Scanning Sweep/Scanlines */}
-                    <div
-                        className="scanline"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
-                            transform: `translateY(${scanlineY1}px)`,
-                        }}
-                    />
-                    <div
-                        className="sweep"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '50%',
-                            height: '100%',
-                            background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.3) 50%, rgba(0, 255, 255, 0) 100%)',
-                            transform: `skewX(-25deg) translateX(${sweepX1}px)`,
-                        }}
-                    />
-                </div>
-
-                {/* RIGHT PLACEHOLDER */}
-                <div
-                    className="placeholder right"
-                    style={{
-                        position: 'absolute',
-                        width: '580px',
-                        height: '326px',
-                        top: '377px',
-                        right: '140px',
-                        backgroundColor: 'rgba(0, 15, 30, 0.4)',
-                        border: '2px solid rgba(0, 255, 255, 0.3)',
-                        boxShadow: '0 0 30px rgba(0, 255, 255, 0.1), inset 0 0 40px rgba(0, 85, 255, 0.2)',
-                        backdropFilter: 'blur(8px)',
-                        WebkitBackdropFilter: 'blur(8px)',
-                        overflow: 'hidden',
-                    }}
-                >
-                    {/* Holographic Corners */}
-                    <div className="corner tl" style={{ position: 'absolute', width: '40px', height: '40px', borderColor: '#00ffff', borderStyle: 'solid', borderWidth: 0, borderTopWidth: '4px', borderLeftWidth: '4px', top: '-2px', left: '-2px', boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)', zIndex: 3 }} />
-                    <div className="corner tr" style={{ position: 'absolute', width: '40px', height: '40px', borderColor: '#00ffff', borderStyle: 'solid', borderWidth: 0, borderTopWidth: '4px', borderRightWidth: '4px', top: '-2px', right: '-2px', boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)', zIndex: 3 }} />
-                    <div className="corner bl" style={{ position: 'absolute', width: '40px', height: '40px', borderColor: '#00ffff', borderStyle: 'solid', borderWidth: 0, borderBottomWidth: '4px', borderLeftWidth: '4px', bottom: '-2px', left: '-2px', boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)', zIndex: 3 }} />
-                    <div className="corner br" style={{ position: 'absolute', width: '40px', height: '40px', borderColor: '#00ffff', borderStyle: 'solid', borderWidth: 0, borderBottomWidth: '4px', borderRightWidth: '4px', bottom: '-2px', right: '-2px', boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)', zIndex: 3 }} />
-
-                    {/* Scanning Sweep/Scanlines */}
-                    <div
-                        className="scanline"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
-                            transform: `translateY(${scanlineY2}px)`,
-                        }}
-                    />
-                    <div
-                        className="sweep"
-                        style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '50%',
-                            height: '100%',
-                            background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.3) 50%, rgba(0, 255, 255, 0) 100%)',
-                            transform: `skewX(-25deg) translateX(${sweepX2}px)`,
-                        }}
-                    />
-                </div>
-
-                {/* CENTER SUBSCRIBE AREA */}
-                <div
-                    className="subscribe-center"
-                    style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: '340px',
-                        height: '340px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                    }}
-                >
-                    {/* Outer Hologram Ring */}
-                    <div
-                        className="hologram-ring ring-outer"
-                        style={{
-                            position: 'absolute',
-                            borderRadius: '50%',
-                            border: '2px solid transparent',
-                            width: '340px',
-                            height: '340px',
-                            borderTop: '4px solid #00ffff',
-                            borderBottom: '4px solid #0055ff',
-                            boxShadow: '0 0 40px rgba(0, 255, 255, 0.3)',
-                            transform: `rotate(${ringOuterRot}deg)`,
-                        }}
-                    />
-
-                    {/* Dashed Hologram Ring */}
-                    <div
-                        className="hologram-ring ring-dashed"
-                        style={{
-                            position: 'absolute',
-                            borderRadius: '50%',
-                            border: '2px dashed rgba(0, 255, 255, 0.5)',
-                            width: '310px',
-                            height: '310px',
-                            transform: `rotate(${ringDashedRot}deg)`,
-                        }}
-                    />
-
-                    {/* Inner Hologram Ring */}
-                    <div
-                        className="hologram-ring ring-inner"
-                        style={{
-                            position: 'absolute',
-                            borderRadius: '50%',
-                            border: '2px solid transparent',
-                            width: '280px',
-                            height: '280px',
-                            borderLeft: '3px solid #0055ff',
-                            borderRight: '3px solid #00ffff',
-                            transform: `rotate(${ringInnerRot}deg)`,
-                        }}
-                    />
-
-                    {/* Subscribe Core */}
-                    <div
-                        className="subscribe-core"
-                        style={{
-                            width: '220px',
-                            height: '220px',
-                            borderRadius: '50%',
-                            background: 'rgba(0, 20, 40, 0.6)',
-                            border: '4px solid #00ffff',
-                            boxShadow: '0 0 50px rgba(0, 255, 255, 0.5), inset 0 0 40px rgba(0, 85, 255, 0.5)',
-                            backdropFilter: 'blur(12px)',
-                            WebkitBackdropFilter: 'blur(12px)',
-                            position: 'relative',
-                            zIndex: 10,
-                        }}
-                    />
-                </div>
-            </div>
+          {/* Cyan grid */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              backgroundImage: `linear-gradient(rgba(0,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,255,0.3) 1px, transparent 1px)`,
+              backgroundSize: `${gridCellSize * 3}px ${gridCellSize * 3}px`,
+              backgroundPosition: `0px ${gridOffsetY * 3}px`,
+              opacity: 0.5,
+            }}
+          />
+          {/* Magenta grid overlay */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              backgroundImage: `linear-gradient(rgba(255,0,255,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(255,0,255,0.15) 1px, transparent 1px)`,
+              backgroundSize: `${gridCellSize * 10}px ${gridCellSize * 10}px`,
+              backgroundPosition: `0px ${((time * 15) % (gridCellSize * 10) * 0.5)}px`,
+              opacity: 0.4,
+            }}
+          />
         </div>
-    );
+
+        {/* ===== BACKGROUND ROTATING TORUS RINGS (CSS perspective) ===== */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 1,
+            height: 1,
+            transform: `translate(-50%, -50%) translateX(${camX * 2}px) translateY(${camY * 2}px)`,
+            zIndex: 4,
+          }}
+        >
+          {RING_DATA.map((ring, i) => {
+            const ringIndivRotX = ring.rotX + bgRingGroupRotZ * (i % 2 === 0 ? 1 : -1) * 0.2;
+            const ringIndivRotY = ring.rotY + bgRingGroupRotY;
+            const sizeBase = 320 * ring.scale;
+            const perspective = 800 - ring.posZ * 3;
+            return (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  width: sizeBase,
+                  height: sizeBase,
+                  top: -sizeBase / 2,
+                  left: -sizeBase / 2,
+                  borderRadius: '50%',
+                  border: `2px solid ${ring.color}`,
+                  boxShadow: `0 0 20px ${ring.color}, 0 0 40px ${ring.color}`,
+                  opacity: 0.25 - i * 0.03,
+                  transform: `perspective(${perspective}px) rotateX(${(ringIndivRotX * 180) / Math.PI + bgRingGroupRotZ * 30}deg) rotateY(${(ringIndivRotY * 180) / Math.PI + bgRingGroupRotY * 20}deg) rotateZ(${bgRingGroupRotZ * 57.3}deg)`,
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {/* ===== PARTICLES ===== */}
+        {STATIC_PARTICLES.map((p, i) => {
+          const cycleDur = fps * (10 / p.speed);
+          const pLocal = (loopFrame + Math.floor(i * cycleDur / PARTICLE_COUNT)) % Math.floor(cycleDur);
+          const pX = (p.x + (pLocal / cycleDur) * 1920) % 1920;
+          const pOpacity = interpolate(
+            pLocal,
+            [0, cycleDur * 0.1, cycleDur * 0.9, cycleDur],
+            [0, p.opacity, p.opacity, 0],
+            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+          );
+          return (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                left: pX,
+                top: p.y,
+                width: p.size,
+                height: p.size,
+                borderRadius: '50%',
+                backgroundColor: p.color,
+                opacity: pOpacity,
+                boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
+                zIndex: 5,
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* ===== UI LAYER ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0, left: 0,
+          width: '100%', height: '100%',
+          zIndex: 10,
+          pointerEvents: 'none',
+        }}
+      >
+        {/* ===== LEFT PLACEHOLDER ===== */}
+        <div
+          style={{
+            position: 'absolute',
+            width: 600,
+            height: 338,
+            top: 371,
+            left: 100,
+            background: 'rgba(1,4,15,0.7)',
+            border: '3px solid #00ffff',
+            boxShadow: placeholderBoxShadow,
+            backdropFilter: 'blur(8px)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Interior grid */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              backgroundImage: `linear-gradient(rgba(0,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,255,0.1) 1px, transparent 1px)`,
+              backgroundSize: '20px 20px',
+              zIndex: 0,
+            }}
+          />
+          {/* Scanline 1 */}
+          <div
+            style={{
+              position: 'absolute',
+              width: '100%',
+              height: 100,
+              background: 'linear-gradient(to bottom, transparent, rgba(0,255,255,0.4), transparent)',
+              top: 0,
+              left: 0,
+              transform: `translateY(${scanlineY1}px)`,
+              zIndex: 1,
+            }}
+          />
+          {/* Corners */}
+          {/* TL */}
+          <div style={{ position: 'absolute', width: 40, height: 40, top: -4, left: -4, borderTop: '4px solid #fff', borderLeft: '4px solid #fff', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
+          {/* TR */}
+          <div style={{ position: 'absolute', width: 40, height: 40, top: -4, right: -4, borderTop: '4px solid #fff', borderRight: '4px solid #fff', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
+          {/* BL */}
+          <div style={{ position: 'absolute', width: 40, height: 40, bottom: -4, left: -4, borderBottom: '4px solid #fff', borderLeft: '4px solid #fff', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
+          {/* BR */}
+          <div style={{ position: 'absolute', width: 40, height: 40, bottom: -4, right: -4, borderBottom: '4px solid #fff', borderRight: '4px solid #fff', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
+        </div>
+
+        {/* ===== RIGHT PLACEHOLDER ===== */}
+        <div
+          style={{
+            position: 'absolute',
+            width: 600,
+            height: 338,
+            top: 371,
+            right: 100,
+            background: 'rgba(1,4,15,0.7)',
+            border: '3px solid #00ffff',
+            boxShadow: placeholderBoxShadow,
+            backdropFilter: 'blur(8px)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Interior grid */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              backgroundImage: `linear-gradient(rgba(0,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,255,0.1) 1px, transparent 1px)`,
+              backgroundSize: '20px 20px',
+              zIndex: 0,
+            }}
+          />
+          {/* Scanline 2 (offset) */}
+          <div
+            style={{
+              position: 'absolute',
+              width: '100%',
+              height: 100,
+              background: 'linear-gradient(to bottom, transparent, rgba(0,255,255,0.4), transparent)',
+              top: 0,
+              left: 0,
+              transform: `translateY(${scanlineY2}px)`,
+              zIndex: 1,
+            }}
+          />
+          {/* Corners */}
+          <div style={{ position: 'absolute', width: 40, height: 40, top: -4, left: -4, borderTop: '4px solid #fff', borderLeft: '4px solid #fff', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
+          <div style={{ position: 'absolute', width: 40, height: 40, top: -4, right: -4, borderTop: '4px solid #fff', borderRight: '4px solid #fff', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
+          <div style={{ position: 'absolute', width: 40, height: 40, bottom: -4, left: -4, borderBottom: '4px solid #fff', borderLeft: '4px solid #fff', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
+          <div style={{ position: 'absolute', width: 40, height: 40, bottom: -4, right: -4, borderBottom: '4px solid #fff', borderRight: '4px solid #fff', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
+        </div>
+
+        {/* ===== SUBSCRIBE PORTAL (CENTER) ===== */}
+        <div
+          style={{
+            position: 'absolute',
+            width: 360,
+            height: 360,
+            left: 780,
+            top: 360,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderRadius: '50%',
+          }}
+        >
+          {/* Outer Reactor Ring */}
+          <div
+            style={{
+              position: 'absolute',
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+              border: '4px solid transparent',
+              borderTop: '4px solid #00ffff',
+              borderBottom: '4px solid #00ffff',
+              boxShadow: `0 0 30px #00ffff, inset 0 0 20px #00ffff`,
+              transform: `rotate(${outerRingRotation}deg)`,
+            }}
+          />
+          {/* Inner Magenta Ring */}
+          <div
+            style={{
+              position: 'absolute',
+              width: '80%',
+              height: '80%',
+              borderRadius: '50%',
+              border: '4px dashed #ff00ff',
+              boxShadow: '0 0 40px #ff00ff, inset 0 0 20px #ff00ff',
+              transform: `rotate(${innerRingRotation}deg)`,
+            }}
+          />
+          {/* Central Holographic Core */}
+          <div
+            style={{
+              position: 'absolute',
+              width: '45%',
+              height: '45%',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle at center, #ffffff 0%, #00ffff 40%, transparent 70%)',
+              boxShadow: `0 0 80px #00ffff, 0 0 120px #00ffff`,
+              transform: `scale(${coreScale})`,
+              opacity: coreOpacity,
+              filter: `brightness(${coreBrightness})`,
+            }}
+          />
+          {/* Core Target Rings - 3 staggered rings expanding outward */}
+          {Array.from({ length: TARGET_RING_COUNT }).map((_, i) => {
+            const targetCycle = fps * 1;
+            const offset = Math.floor((targetCycle * i) / TARGET_RING_COUNT);
+            const targetLocal = (loopFrame + offset) % targetCycle;
+            const targetScale = interpolate(targetLocal, [0, targetCycle], [0, 3], { easing: Easing.out(Easing.quad), extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+            const targetOpacity = interpolate(targetLocal, [0, targetCycle], [1, 0], { easing: Easing.out(Easing.quad), extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+            return (
+              <div
+                key={i}
+                style={{
+                  position: 'absolute',
+                  width: '25%',
+                  height: '25%',
+                  borderRadius: '50%',
+                  border: '6px solid #fff',
+                  boxShadow: '0 0 20px #fff',
+                  transform: `scale(${targetScale})`,
+                  opacity: targetOpacity,
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {/* ===== LIGHT STREAKS ===== */}
+        {STREAK_CONFIGS.map((streak, i) => {
+          const streakFpsCycle = Math.round(streak.cycleDuration * fps);
+          const delayFrames = Math.round(streak.delay * fps);
+          const streakLocal = (loopFrame - delayFrames + totalFrames) % totalFrames;
+          const streakCycleLocal = streakLocal % streakFpsCycle;
+
+          // power4.inOut: ease in then out
+          const streakProgress = interpolate(
+            streakCycleLocal,
+            [0, streakFpsCycle * 0.5, streakFpsCycle],
+            [0, 0.7, 1],
+            { easing: Easing.inOut(Easing.cubic), extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+          );
+          const streakX = interpolate(streakProgress, [0, 1], [-600, ORIGINAL_WIDTH + 400]);
+          const streakOpacity = streakCycleLocal < streakFpsCycle * 0.05
+            ? interpolate(streakCycleLocal, [0, streakFpsCycle * 0.05], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
+            : streakCycleLocal > streakFpsCycle * 0.9
+            ? interpolate(streakCycleLocal, [streakFpsCycle * 0.9, streakFpsCycle], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
+            : 1;
+
+          const isMagenta = streak.color === 'magenta';
+          const streakBg = isMagenta
+            ? 'linear-gradient(90deg, transparent, #ff00ff, #ffffff)'
+            : 'linear-gradient(90deg, transparent, #00ffff, #ffffff)';
+          const streakShadow = isMagenta
+            ? '0 0 20px #ff00ff, 0 0 40px #ff00ff'
+            : '0 0 20px #00ffff, 0 0 40px #00ffff';
+
+          return (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                height: 2,
+                width: streak.width,
+                background: streakBg,
+                boxShadow: streakShadow,
+                borderRadius: '50%',
+                top: streak.top,
+                left: 0,
+                zIndex: 5,
+                opacity: streakOpacity,
+                mixBlendMode: 'screen',
+                transform: `translateX(${streakX}px)`,
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* ===== VIGNETTE ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          boxShadow: 'inset 0 0 250px rgba(0,0,0,0.9)',
+          zIndex: 20,
+          pointerEvents: 'none',
+          top: 0,
+          left: 0,
+        }}
+      />
+    </div>
+  );
 };
 
-export default EsportsEndScreen;
+export default CyberpunkEsportsEndscreen;
 // END_OF_FILE
