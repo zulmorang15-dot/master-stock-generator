@@ -2,77 +2,154 @@ import { useVideoConfig, useCurrentFrame, interpolate, Easing, getInputProps } f
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
-const PARTICLE_COUNT = 120;
 
-// Deterministic particles generated outside of the render function
-const createParticles = () => {
-  const particles = [];
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    // High-quality deterministic pseudo-random generators
-    const x = ((Math.sin(i * 12.9898) * 43758.5453123) % 1) * 1920 - 960;
-    const y = ((Math.sin(i * 78.233) * 43758.5453123) % 1) * 1080 - 540;
-    const speed = 0.5 + Math.abs((Math.sin(i * 99.123) * 43758.5453123) % 1) * 1.5;
-    const size = 1.5 + Math.abs((Math.sin(i * 33.123) * 43758.5453123) % 1) * 4.5;
-    const driftOffset = i * 0.1;
-    particles.push({ x, y, speed, size, driftOffset });
-  }
-  return particles;
-};
+// Deterministic seed generation for particles outside component function
+const PARTICLE_COUNT = 250;
+const SEED_PARTICLES = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
+  // Deterministic pseudo-random coordinates
+  const r1 = Math.sin(i * 12.9898 + 437.58) * 43758.5453 % 1;
+  const r2 = Math.sin(i * 78.233 + 241.12) * 43758.5453 % 1;
+  const r3 = Math.sin(i * 45.123 + 903.45) * 43758.5453 % 1;
+  return {
+    x: (r1 - 0.5) * 1800,
+    y: (r2 - 0.5) * 350,
+    z: Math.abs(r3) * 1900 + 100, // Depth between 100 and 2000
+    color: i % 2 === 0 ? '#00FFFF' : '#FF00FF',
+  };
+});
 
-const PARTICLES = createParticles();
-
-const LuxuryFuturisticEndscreen = () => {
-  const { width, height, fps } = useVideoConfig();
+const SynthwaveHudViewport = () => {
+  const { width, height } = useVideoConfig();
   const frame = useCurrentFrame();
 
-  // Scale calculations to avoid black bars and fill 16:9 perfectly
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // Seamless 15-second loop configuration
-  const totalFrames = 15 * fps;
-  const localFrame = frame % totalFrames;
-  const t = localFrame / totalFrames; // 0.0 -> 1.0 normalized
+  // Synchronized camera paths mapping perfectly to 10s (600 frames at 60fps) loop
+  const cameraRotateZ = Math.sin((frame / 600) * Math.PI * 2) * 0.05;
+  const cameraPosY = Math.sin((frame / 600) * Math.PI * 4) * 12;
 
-  // UI Floating Effects (Symmetrical Sinusoidal mappings for perfect seamless looping)
-  const cardLeftY = interpolate(Math.sin(t * Math.PI * 2 * 3.75), [-1, 1], [-15, 0]);
-  const cardRightY = interpolate(Math.sin((t * Math.PI * 2 * 3.75) + Math.PI / 2), [-1, 1], [-15, 0]);
-  const subZoneY = interpolate(Math.sin(t * Math.PI * 2 * 4.285), [-1, 1], [0, 10]);
+  const cosRot = Math.cos(cameraRotateZ);
+  const sinRot = Math.sin(cameraRotateZ);
+  const focalLength = 550;
 
-  // Light Sweeps (5 second cycles perfectly fitting into 15s total)
-  const sweepTimeLeft = (localFrame % (5 * fps)) / (5 * fps);
-  const sweepLeftX = interpolate(sweepTimeLeft, [0, 0.2, 1], [-150, 200, 200], {
-    extrapolateRight: 'clamp',
-  });
+  // Projection helper function
+  const project = (x: number, y: number, z: number) => {
+    const xRel = x;
+    const yRel = y - cameraPosY;
+    const zRel = z;
 
-  const sweepTimeRight = ((localFrame + 2.5 * fps) % (5 * fps)) / (5 * fps);
-  const sweepRightX = interpolate(sweepTimeRight, [0, 0.2, 1], [-150, 200, 200], {
-    extrapolateRight: 'clamp',
-  });
+    // Camera roll matrix multiplication
+    const xRot = xRel * cosRot - yRel * sinRot;
+    const yRot = xRel * sinRot + yRel * cosRot;
 
-  // Center Subscribe Zone animations
-  const outerRot = t * 360;
-  const middleRot = -t * 360;
-  
-  // Alternate ease-in-out rotation for inner ring (returns to 0 at t = 1)
-  const innerRotProgress = Math.sin(t * Math.PI);
-  const innerRot = interpolate(innerRotProgress, [0, 1], [0, 180]);
+    // Apply focal depth projection
+    const px = (xRot * focalLength) / zRel + ORIGINAL_WIDTH / 2;
+    const py = (yRot * focalLength) / zRel + ORIGINAL_HEIGHT / 2;
+    return `${px.toFixed(1)},${py.toFixed(1)}`;
+  };
 
-  // Pulse effect (scale & shadows)
-  const pulseProgress = Math.sin(t * Math.PI * 2 * 4); // 4 full pulses in 15 seconds
-  const pulseScale = interpolate(pulseProgress, [-1, 1], [1, 1.02]);
-  const pulseShadowIntensity = interpolate(pulseProgress, [-1, 1], [30, 50]);
-  const pulseShadowAlpha = interpolate(pulseProgress, [-1, 1], [0.4, 0.7]);
-  const pulseInsetIntensity = interpolate(pulseProgress, [-1, 1], [20, 30]);
-  const pulseInsetAlpha = interpolate(pulseProgress, [-1, 1], [0.2, 0.4]);
+  // Generate seamless looping grid geometry
+  let bottomPath = '';
+  let topPath = '';
 
-  // Light Positions (Moving volumetric point light highlights)
-  const blueLightX = interpolate(Math.sin(t * Math.PI * 2), [-1, 1], [30, 70]);
-  const blueLightY = interpolate(Math.sin(t * Math.PI * 2), [-1, 1], [40, 60]);
-  const whiteLightX = interpolate(Math.cos(t * Math.PI * 2), [-1, 1], [70, 30]);
-  const whiteLightY = interpolate(Math.cos(t * Math.PI * 2), [-1, 1], [60, 30]);
+  const xMin = -1400;
+  const xMax = 1400;
+  const xStep = 100;
+  const zMin = 100;
+  const zMax = 2100;
+  const zStep = 100;
 
-  // Component style objects containing strict camelCase properties
-  const mainContainerStyle: React.CSSProperties = {
+  // Loops perfectly because it shifts by exactly 2 full grid segments in 600 frames
+  const zOffset = (frame / 600) * zStep * 2; 
+
+  // Longitudinal lines (running front-to-back)
+  for (let x = xMin; x <= xMax; x += xStep) {
+    let bottomSubPath = '';
+    let topSubPath = '';
+    for (let zBase = zMin; zBase <= zMax; zBase += zStep) {
+      const z = zBase - zOffset;
+      if (z < 60) continue;
+      
+      const waveAngle = (frame / 600) * Math.PI * 2 * 2;
+      const disp = Math.sin(x * 0.0035) * Math.cos(zBase * 0.0035 - waveAngle) * 45;
+      
+      const bPt = project(x, -115 + disp, z);
+      const tPt = project(x, 115 - disp, z);
+      
+      if (bottomSubPath === '') {
+        bottomSubPath = `M ${bPt}`;
+        topSubPath = `M ${tPt}`;
+      } else {
+        bottomSubPath += ` L ${bPt}`;
+        topSubPath += ` L ${tPt}`;
+      }
+    }
+    bottomPath += ' ' + bottomSubPath;
+    topPath += ' ' + topSubPath;
+  }
+
+  // Transverse lines (running left-to-right)
+  for (let zBase = zMin; zBase <= zMax; zBase += zStep) {
+    const z = zBase - zOffset;
+    if (z < 60) continue;
+    let bottomSubPath = '';
+    let topSubPath = '';
+    for (let x = xMin; x <= xMax; x += xStep) {
+      const waveAngle = (frame / 600) * Math.PI * 2 * 2;
+      const disp = Math.sin(x * 0.0035) * Math.cos(zBase * 0.0035 - waveAngle) * 45;
+
+      const bPt = project(x, -115 + disp, z);
+      const tPt = project(x, 115 - disp, z);
+
+      if (bottomSubPath === '') {
+        bottomSubPath = `M ${bPt}`;
+        topSubPath = `M ${tPt}`;
+      } else {
+        bottomSubPath += ` L ${bPt}`;
+        topSubPath += ` L ${tPt}`;
+      }
+    }
+    bottomPath += ' ' + bottomSubPath;
+    topPath += ' ' + topSubPath;
+  }
+
+  // Floating particles projection and deterministic loop wrap
+  const projectedParticles = SEED_PARTICLES.map((p) => {
+    let zParticle = p.z - (frame / 600) * 1900;
+    if (zParticle < 50) {
+      zParticle += 1900;
+    }
+
+    const xRel = p.x;
+    const yRel = p.y - cameraPosY;
+    const zRel = zParticle;
+
+    const xRot = xRel * cosRot - yRel * sinRot;
+    const yRot = xRel * sinRot + yRel * cosRot;
+
+    const px = (xRot * focalLength) / zRel + ORIGINAL_WIDTH / 2;
+    const py = (yRot * focalLength) / zRel + ORIGINAL_HEIGHT / 2;
+
+    const size = Math.max(0.5, (focalLength / zRel) * 2.0);
+    
+    let opacity = 0.8;
+    if (zRel > 1500) {
+      opacity = interpolate(zRel, [1500, 2000], [0.8, 0], { extrapolateRight: 'clamp' });
+    } else if (zRel < 200) {
+      opacity = interpolate(zRel, [50, 200], [0, 0.8], { extrapolateLeft: 'clamp' });
+    }
+
+    return { x: px, y: py, size, color: p.color, opacity };
+  }).filter(p => p.x >= -50 && p.x <= ORIGINAL_WIDTH + 50 && p.y >= -50 && p.y <= ORIGINAL_HEIGHT + 50);
+
+  // SVG Glow flow offsets
+  const strokeDashoffsetFlowLeft = interpolate(frame % 600, [0, 600], [2000, 0]);
+  const strokeDashoffsetFlowRight = interpolate(frame % 600, [0, 600], [0, -2000]);
+  const strokeDashoffsetFlowCircle = interpolate(frame % 600, [0, 600], [1000, 0]);
+  const strokeDashoffsetFlowCircleRev = interpolate(frame % 600, [0, 600], [0, 1000]);
+
+  // Styles defined using React camelCase properties
+  const mainWrapperStyle: React.CSSProperties = {
     width: ORIGINAL_WIDTH,
     height: ORIGINAL_HEIGHT,
     position: 'absolute',
@@ -81,378 +158,205 @@ const LuxuryFuturisticEndscreen = () => {
     transform: `translate(-50%, -50%) scale(${scaleFactor})`,
     transformOrigin: 'center center',
     overflow: 'hidden',
-    background: 'radial-gradient(circle at center, #050b1a 0%, #020408 100%)',
-  };
-
-  const canvasContainerStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: 1,
-    opacity: 0.8,
-    overflow: 'hidden',
-  };
-
-  const floorStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: '100%',
-    height: '50%',
-    background: 'linear-gradient(to top, #02050a 0%, #050b1a 100%)',
-    borderTop: '1px solid rgba(0, 240, 255, 0.1)',
-    opacity: 0.9,
-  };
-
-  const gridStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: 0,
-    left: '-50%',
-    width: '200%',
-    height: '600px',
-    backgroundImage: `
-      linear-gradient(to right, rgba(0, 240, 255, 0.15) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(0, 240, 255, 0.15) 1px, transparent 1px)
-    `,
-    backgroundSize: '40px 40px',
-    transform: 'perspective(500px) rotateX(75deg)',
-    transformOrigin: 'center bottom',
-    opacity: 0.15,
-    maskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)',
-    WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%)',
-  };
-
-  const perspectiveViewport: React.CSSProperties = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    perspective: '1000px',
-    perspectiveOrigin: '50% 30%',
-    pointerEvents: 'none',
+    backgroundColor: '#050010',
   };
 
   const uiLayerStyle: React.CSSProperties = {
     position: 'absolute',
     top: 0,
     left: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: 10,
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    zIndex: 2,
     pointerEvents: 'none',
   };
 
-  const videoCardLeftStyle: React.CSSProperties = {
+  const hudBoxLeftStyle: React.CSSProperties = {
     position: 'absolute',
-    width: '600px',
-    height: '337px',
-    top: '50%',
-    left: '220px',
-    transform: `translateY(calc(-50% + ${cardLeftY}px))`,
-    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(0, 170, 255, 0.05) 100%)',
-    backdropFilter: 'blur(12px)',
-    WebkitBackdropFilter: 'blur(12px)',
-    border: '1px solid rgba(0, 200, 255, 0.2)',
-    borderRadius: '12px',
-    boxShadow: `
-      0 20px 50px rgba(0, 0, 0, 0.5),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.1),
-      inset 0 0 20px rgba(0, 150, 255, 0.1),
-      0 0 30px rgba(0, 150, 255, 0.15)
-    `,
-    overflow: 'hidden',
+    width: 640,
+    height: 360,
+    top: 300,
+    left: 200,
   };
 
-  const videoCardRightStyle: React.CSSProperties = {
+  const hudBoxRightStyle: React.CSSProperties = {
     position: 'absolute',
-    width: '600px',
-    height: '337px',
-    top: '50%',
-    right: '220px',
-    transform: `translateY(calc(-50% + ${cardRightY}px))`,
-    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(0, 170, 255, 0.05) 100%)',
-    backdropFilter: 'blur(12px)',
-    WebkitBackdropFilter: 'blur(12px)',
-    border: '1px solid rgba(0, 200, 255, 0.2)',
-    borderRadius: '12px',
-    boxShadow: `
-      0 20px 50px rgba(0, 0, 0, 0.5),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.1),
-      inset 0 0 20px rgba(0, 150, 255, 0.1),
-      0 0 30px rgba(0, 150, 255, 0.15)
-    `,
-    overflow: 'hidden',
+    width: 640,
+    height: 360,
+    top: 300,
+    right: 200,
   };
 
-  const hudCornerBase: React.CSSProperties = {
+  const hudCircleStyle: React.CSSProperties = {
     position: 'absolute',
-    width: '20px',
-    height: '20px',
-    borderColor: '#00f0ff',
-    borderStyle: 'solid',
-    borderRadius: '4px',
-    opacity: 0.6,
-    boxShadow: '0 0 10px #00f0ff',
+    width: 250,
+    height: 250,
+    top: 710,
+    left: 835, // Exact 1920/2 - 250/2 center
   };
 
-  const subscribeZoneStyle: React.CSSProperties = {
+  const greenScreenStyle: React.CSSProperties = {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, calc(-50% + ${subZoneY}px))`,
-    width: '240px',
-    height: '240px',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#00FF00',
   };
 
-  const subRingStyle: React.CSSProperties = {
+  const greenScreenRoundStyle: React.CSSProperties = {
     position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#00FF00',
     borderRadius: '50%',
   };
 
-  const ringOuterStyle: React.CSSProperties = {
-    ...subRingStyle,
-    width: '220px',
-    height: '220px',
-    borderTop: '2px solid #00f0ff',
-    borderBottom: '2px solid #ffffff',
-    borderLeft: '2px solid transparent',
-    borderRight: '2px solid transparent',
-    boxShadow: '0 0 40px rgba(0, 240, 255, 0.2)',
-    transform: `rotate(${outerRot}deg)`,
+  const hudBorderStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: -10,
+    left: -10,
+    width: 'calc(100% + 20px)',
+    height: 'calc(100% + 20px)',
+    overflow: 'visible',
+    zIndex: 3,
+    filter: 'drop-shadow(0 0 8px #FF00FF) drop-shadow(0 0 15px #00FFFF)',
   };
 
-  const ringMiddleStyle: React.CSSProperties = {
-    ...subRingStyle,
-    width: '190px',
-    height: '190px',
-    borderWidth: '1px',
-    borderStyle: 'dashed',
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    transform: `rotate(${middleRot}deg)`,
+  const neonPathCyan: React.CSSProperties = {
+    fill: 'none',
+    strokeWidth: 4,
+    strokeLinecap: 'square',
+    stroke: '#00FFFF',
+    strokeDasharray: '200 1800',
   };
 
-  const ringInnerStyle: React.CSSProperties = {
-    ...subRingStyle,
-    width: '160px',
-    height: '160px',
-    borderLeft: '2px solid rgba(0, 200, 255, 0.8)',
-    borderRight: '2px solid rgba(0, 200, 255, 0.8)',
-    borderTop: '2px solid transparent',
-    borderBottom: '2px solid transparent',
-    transform: `rotate(${innerRot}deg)`,
+  const neonPathMagenta: React.CSSProperties = {
+    fill: 'none',
+    strokeWidth: 4,
+    strokeLinecap: 'square',
+    stroke: '#FF00FF',
+    strokeDasharray: '400 1600',
   };
 
-  const subCenterStyle: React.CSSProperties = {
-    width: '140px',
-    height: '140px',
-    background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(0, 150, 255, 0.05) 60%, transparent 100%)',
-    borderRadius: '50%',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    border: '2px solid rgba(255, 255, 255, 0.5)',
-    transform: `scale(${pulseScale})`,
-    boxShadow: `
-      0 0 ${pulseShadowIntensity}px rgba(0, 240, 255, ${pulseShadowAlpha}),
-      inset 0 0 ${pulseInsetIntensity}px rgba(255, 255, 255, ${pulseInsetAlpha})
-    `,
+  const glitchLayerStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    background: 'linear-gradient(rgba(0,255,255,0.03) 50%, rgba(255,0,255,0.03) 50%)',
+    backgroundSize: '100% 4px',
+    zIndex: 1,
+    mixBlendMode: 'screen',
   };
 
   return (
-    <div style={mainContainerStyle}>
-      {/* 3D WEBGL SIMULATED BACKGROUND */}
-      <div style={canvasContainerStyle}>
-        {/* Ambient Floor reflections */}
-        <div style={floorStyle} />
-        <div style={gridStyle} />
+    <div style={mainWrapperStyle}>
+      {/* Projected Vector Synthwave Terrain and Sky rendering */}
+      <svg style={{ position: 'absolute', top: 0, left: 0, width: ORIGINAL_WIDTH, height: ORIGINAL_HEIGHT, zIndex: 1, background: '#050010' }}>
+        <defs>
+          <radialGradient id="skyFog" cx="50%" cy="50%" r="55%">
+            <stop offset="0%" stopColor="#1b0033" stopOpacity={0.8} />
+            <stop offset="100%" stopColor="#050010" stopOpacity={1} />
+          </radialGradient>
+        </defs>
+        
+        <rect width={ORIGINAL_WIDTH} height={ORIGINAL_HEIGHT} fill="url(#skyFog)" />
+        
+        {/* Wireframe grids rendering with SVG filter glows */}
+        <path d={bottomPath} style={{ ...neonPathCyan, strokeDasharray: undefined, strokeWidth: 1.5, opacity: 0.35, filter: 'drop-shadow(0 0 6px #00FFFF)' }} />
+        <path d={topPath} style={{ ...neonPathMagenta, strokeDasharray: undefined, strokeWidth: 1.5, opacity: 0.35, filter: 'drop-shadow(0 0 6px #FF00FF)' }} />
 
-        {/* Floating holographic rings inside simulated 3D perspective viewport */}
-        <div style={perspectiveViewport}>
-          {[120, 240, 360].map((h, i) => {
-            const ringRotZ = t * 360 * (1 + i * 0.5);
-            const ringFloatY = Math.sin(t * Math.PI * 2 + i) * 20;
-            const ringScale = 1 - (i * 0.15);
-            return (
-              <div
-                key={i}
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  width: '800px',
-                  height: '800px',
-                  marginLeft: '-400px',
-                  marginTop: '-400px',
-                  transform: `translate3d(0, ${h + ringFloatY}px, -150px) rotateX(80deg) rotateZ(${ringRotZ}deg) scale(${ringScale})`,
-                  transformStyle: 'preserve-3d',
-                  pointerEvents: 'none',
-                }}
-              >
-                <svg width="100%" height="100%" viewBox="0 0 200 200">
-                  <circle
-                    cx="100"
-                    cy="100"
-                    r="95"
-                    fill="none"
-                    stroke="#00f0ff"
-                    strokeWidth="0.4"
-                    strokeOpacity="0.35"
-                    style={{ filter: 'drop-shadow(0 0 6px #00f0ff)' }}
-                  />
-                </svg>
-              </div>
-            );
-          })}
-        </div>
+        {/* 3D Depth Sorted Floating Starfield */}
+        {projectedParticles.map((pt, i) => (
+          <circle
+            key={i}
+            cx={pt.x}
+            cy={pt.y}
+            r={pt.size}
+            fill={pt.color}
+            opacity={pt.opacity}
+            style={{ filter: `drop-shadow(0 0 ${pt.size * 1.5}px ${pt.color})` }}
+          />
+        ))}
+      </svg>
 
-        {/* Dynamic moving light source highlights */}
-        <div
-          style={{
-            position: 'absolute',
-            left: `${blueLightX}%`,
-            top: `${blueLightY}%`,
-            width: '600px',
-            height: '600px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(0, 240, 255, 0.08) 0%, transparent 70%)',
-            transform: 'translate(-50%, -50%)',
-            pointerEvents: 'none',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            left: `${whiteLightX}%`,
-            top: `${whiteLightY}%`,
-            width: '500px',
-            height: '500px',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, transparent 70%)',
-            transform: 'translate(-50%, -50%)',
-            pointerEvents: 'none',
-          }}
-        />
+      {/* Retro-cyber scanlines overlays */}
+      <div style={glitchLayerStyle} />
 
-        {/* Volumetric Floating Dust Particles (Seamless Boundary Loop) */}
-        {PARTICLES.map((p, idx) => {
-          // Continuous looping scroll upward
-          const currentY = ((p.y + p.speed * localFrame + 540) % 1080) - 540;
-          const currentX = p.x + Math.sin(t * Math.PI * 2 + p.driftOffset) * 15;
-          
-          // Edge fade in & fade out to remove sharp pops
-          const alpha = interpolate(currentY, [-540, -420, 420, 540], [0, 0.55, 0.55, 0], {
-            extrapolateLeft: 'clamp',
-            extrapolateRight: 'clamp',
-          });
-
-          return (
-            <div
-              key={idx}
-              style={{
-                position: 'absolute',
-                left: currentX + 960,
-                top: currentY + 540,
-                width: `${p.size}px`,
-                height: `${p.size}px`,
-                borderRadius: '50%',
-                backgroundColor: '#00f0ff',
-                opacity: alpha,
-                boxShadow: '0 0 6px #00f0ff',
-                pointerEvents: 'none',
-              }}
-            />
-          );
-        })}
-      </div>
-
-      {/* FOREGROUND INTERACTIVE UI LAYER */}
+      {/* Top Graphic Interface layer */}
       <div style={uiLayerStyle}>
         
-        {/* Ambient Top & Bottom HUD Lines */}
-        <div
-          style={{
-            position: 'absolute',
-            background: 'linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.5), transparent)',
-            height: '1px',
-            width: '600px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            top: '120px',
-            opacity: 0.5,
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            background: 'linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.5), transparent)',
-            height: '1px',
-            width: '600px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            bottom: '120px',
-            opacity: 0.5,
-          }}
-        />
-
-        {/* LEFT VIDEO CARD CARD-LEFT */}
-        <div style={videoCardLeftStyle}>
-          {/* Light Sweep */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              width: '50%',
-              height: '100%',
-              background: 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%)',
-              transform: 'skewX(-25deg)',
-              left: `${sweepLeftX}%`,
-            }}
-          />
-          {/* Top Left Corner */}
-          <div style={{ ...hudCornerBase, top: '10px', left: '10px', borderRightWidth: 0, borderBottomWidth: 0, borderTopWidth: '2px', borderLeftWidth: '2px' }} />
-          {/* Top Right Corner */}
-          <div style={{ ...hudCornerBase, top: '10px', right: '10px', borderLeftWidth: 0, borderBottomWidth: 0, borderTopWidth: '2px', borderRightWidth: '2px' }} />
-          {/* Bottom Left Corner */}
-          <div style={{ ...hudCornerBase, bottom: '10px', left: '10px', borderRightWidth: 0, borderTopWidth: 0, borderBottomWidth: '2px', borderLeftWidth: '2px' }} />
-          {/* Bottom Right Corner */}
-          <div style={{ ...hudCornerBase, bottom: '10px', right: '10px', borderLeftWidth: 0, borderTopWidth: 0, borderBottomWidth: '2px', borderRightWidth: '2px' }} />
+        {/* Box Left */}
+        <div style={hudBoxLeftStyle} id="box-left">
+          <div style={greenScreenStyle} />
+          <svg style={hudBorderStyle} viewBox="0 0 660 380">
+            <rect 
+              style={{ ...neonPathCyan, strokeDashoffset: strokeDashoffsetFlowLeft }} 
+              x="10" 
+              y="10" 
+              width="640" 
+              height="360" 
+            />
+            <rect 
+              style={{ ...neonPathMagenta, strokeDashoffset: strokeDashoffsetFlowRight }} 
+              x="6" 
+              y="6" 
+              width="648" 
+              height="368" 
+            />
+            <circle cx="10" cy="10" r="4" fill="#00FFFF" />
+            <circle cx="650" cy="10" r="4" fill="#00FFFF" />
+            <circle cx="10" cy="370" r="4" fill="#00FFFF" />
+            <circle cx="650" cy="370" r="4" fill="#00FFFF" />
+          </svg>
         </div>
 
-        {/* RIGHT VIDEO CARD CARD-RIGHT */}
-        <div style={videoCardRightStyle}>
-          {/* Light Sweep */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              width: '50%',
-              height: '100%',
-              background: 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%)',
-              transform: 'skewX(-25deg)',
-              left: `${sweepRightX}%`,
-            }}
-          />
-          {/* Top Left Corner */}
-          <div style={{ ...hudCornerBase, top: '10px', left: '10px', borderRightWidth: 0, borderBottomWidth: 0, borderTopWidth: '2px', borderLeftWidth: '2px' }} />
-          {/* Top Right Corner */}
-          <div style={{ ...hudCornerBase, top: '10px', right: '10px', borderLeftWidth: 0, borderBottomWidth: 0, borderTopWidth: '2px', borderRightWidth: '2px' }} />
-          {/* Bottom Left Corner */}
-          <div style={{ ...hudCornerBase, bottom: '10px', left: '10px', borderRightWidth: 0, borderTopWidth: 0, borderBottomWidth: '2px', borderLeftWidth: '2px' }} />
-          {/* Bottom Right Corner */}
-          <div style={{ ...hudCornerBase, bottom: '10px', right: '10px', borderLeftWidth: 0, borderTopWidth: 0, borderBottomWidth: '2px', borderRightWidth: '2px' }} />
+        {/* Box Right */}
+        <div style={hudBoxRightStyle} id="box-right">
+          <div style={greenScreenStyle} />
+          <svg style={hudBorderStyle} viewBox="0 0 660 380">
+            <rect 
+              style={{ ...neonPathCyan, strokeDashoffset: strokeDashoffsetFlowLeft }} 
+              x="10" 
+              y="10" 
+              width="640" 
+              height="360" 
+            />
+            <rect 
+              style={{ ...neonPathMagenta, strokeDashoffset: strokeDashoffsetFlowRight }} 
+              x="6" 
+              y="6" 
+              width="648" 
+              height="368" 
+            />
+            <circle cx="10" cy="10" r="4" fill="#FF00FF" />
+            <circle cx="650" cy="10" r="4" fill="#FF00FF" />
+            <circle cx="10" cy="370" r="4" fill="#FF00FF" />
+            <circle cx="650" cy="370" r="4" fill="#FF00FF" />
+          </svg>
         </div>
 
-        {/* CENTER SUBSCRIBE ZONE */}
-        <div style={subscribeZoneStyle}>
-          <div style={ringOuterStyle} />
-          <div style={ringMiddleStyle} />
-          <div style={ringInnerStyle} />
-          <div style={subCenterStyle} />
+        {/* HUD Sub Circle */}
+        <div style={hudCircleStyle} id="circle-sub">
+          <div style={greenScreenRoundStyle} />
+          <svg style={hudBorderStyle} viewBox="0 0 270 270">
+            <circle 
+              style={{ ...neonPathCyan, strokeDasharray: '200 800', strokeDashoffset: strokeDashoffsetFlowCircle }} 
+              cx="135" 
+              cy="135" 
+              r="125" 
+            />
+            <circle 
+              style={{ ...neonPathMagenta, strokeDasharray: '400 600', strokeDashoffset: strokeDashoffsetFlowCircleRev }} 
+              cx="135" 
+              cy="135" 
+              r="130" 
+            />
+          </svg>
         </div>
 
       </div>
@@ -460,5 +364,5 @@ const LuxuryFuturisticEndscreen = () => {
   );
 };
 
-export default LuxuryFuturisticEndscreen;
+export default SynthwaveHudViewport;
 // END_OF_FILE
