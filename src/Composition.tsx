@@ -1,226 +1,374 @@
-import React, { useMemo } from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import React, { useRef, useEffect } from 'react';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-export const YouTubeOutroTemplate: React.FC = () => {
+const COLORS_BASE = [
+  'rgba(0, 234, 255, ',
+  'rgba(255, 0, 212, ',
+  'rgba(120, 80, 255, ',
+  'rgba(255, 255, 255, ',
+  'rgba(40, 60, 120, ',
+];
+
+const NUM_LINES = 160;
+const NUM_GLITCH_BLOCKS = 80;
+const NUM_WIDE_BANDS = 30;
+
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed + 1) * 43758.5453123;
+  return x - Math.floor(x);
+}
+
+const STATIC_LINES: {
+  yFrac: number;
+  xFrac: number;
+  wFrac: number;
+  thickness: number;
+  colorIdx: number;
+  alpha: number;
+  speed: number;
+}[] = Array.from({ length: NUM_LINES }, (_, i) => ({
+  yFrac: seededRandom(i * 7 + 0),
+  xFrac: seededRandom(i * 7 + 1),
+  wFrac: 40 / 1920 + seededRandom(i * 7 + 2) * (400 / 1920),
+  thickness: 2 + seededRandom(i * 7 + 3) * 7,
+  colorIdx: Math.floor(seededRandom(i * 7 + 4) * COLORS_BASE.length),
+  alpha: 0.25 + seededRandom(i * 7 + 5) * 0.65,
+  speed: (seededRandom(i * 7 + 6) - 0.5) * 5,
+}));
+
+const GLITCH_BLOCKS: {
+  yFrac: number;
+  hFrac: number;
+  xFrac: number;
+  wFrac: number;
+  colorIdx: number;
+  alpha: number;
+  triggerFrac: number;
+}[] = Array.from({ length: NUM_GLITCH_BLOCKS }, (_, i) => ({
+  yFrac: seededRandom(i * 9 + 100),
+  hFrac: (4 + seededRandom(i * 9 + 101) * 50) / 1080,
+  xFrac: seededRandom(i * 9 + 102),
+  wFrac: (80 + seededRandom(i * 9 + 103) * 550) / 1920,
+  colorIdx: Math.floor(seededRandom(i * 9 + 104) * COLORS_BASE.length),
+  alpha: 0.2 + seededRandom(i * 9 + 105) * 0.4,
+  triggerFrac: seededRandom(i * 9 + 106),
+}));
+
+const WIDE_BANDS: {
+  yFrac: number;
+  hFrac: number;
+  alpha: number;
+  triggerFrac: number;
+}[] = Array.from({ length: NUM_WIDE_BANDS }, (_, i) => ({
+  yFrac: seededRandom(i * 5 + 200),
+  hFrac: (10 + seededRandom(i * 5 + 201) * 60) / 1080,
+  alpha: 0.05 + seededRandom(i * 5 + 202) * 0.12,
+  triggerFrac: seededRandom(i * 5 + 203),
+}));
+
+const GlitchTheEnd: React.FC = () => {
   const frame = useCurrentFrame();
   const { width, height, fps } = useVideoConfig();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Fullscreen 16:9 scaling logic
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // Background Gradient loop (12 seconds)
-  const bgX = interpolate(frame, [0, 180, 360], [0, 100, 0], {
-    easing: Easing.inOut(Easing.quad),
-  });
+  const TOTAL_FRAMES = fps * 10;
+  const localFrame = frame % TOTAL_FRAMES;
+  const cycleProgress = localFrame / TOTAL_FRAMES;
 
-  // Red Wave Circle slide (4 seconds loop)
-  const localFrameRed = frame % (fps * 4);
-  const redX = interpolate(localFrameRed, [0, fps * 4], [0, -25], {
-    extrapolateRight: 'clamp',
-  });
+  // ---- textShake: 3s cycle mapped to steps(15) ----
+  const shakeFrames = fps * 3;
+  const shakeLocal = localFrame % shakeFrames;
+  const shakeProgress = shakeLocal / shakeFrames;
 
-  // Green Wave Circle slide (Adjusted to 4 seconds for flawless 12s loop)
-  const localFrameGreen = frame % (fps * 4);
-  const greenX = interpolate(localFrameGreen, [0, fps * 4], [0, -25], {
-    extrapolateRight: 'clamp',
-  });
+  const shakeKeyframesX = [0, 0.10, 0.20, 0.30, 0.45, 0.55, 0.70, 0.85, 1.0];
+  const shakeValuesX =   [0,  -4,    4,   -2,    5,   -5,    2,   -4,    0];
+  const shakeKeyframesY = [0, 0.10, 0.20, 0.30, 0.45, 0.55, 0.70, 0.85, 1.0];
+  const shakeValuesY =   [0,   2,   -2,    0,    2,   -2,    3,   -3,    0];
 
-  // Subscribe Circle pulse (2 seconds loop)
-  const localFramePulse = frame % (fps * 2);
-  const pulseSpread = interpolate(localFramePulse, [0, fps * 1.4, fps * 2], [0, 33, 33]);
-  const pulseOpacity = interpolate(localFramePulse, [0, fps * 1.4, fps * 2], [0.5, 0, 0]);
+  const shakeX = interpolate(shakeProgress, shakeKeyframesX, shakeValuesX, { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const shakeY = interpolate(shakeProgress, shakeKeyframesY, shakeValuesY, { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-  // Subscribe Button blink (1.5 seconds loop)
-  const localFrameBlink = frame % (fps * 1.5);
-  const isBlinking = localFrameBlink >= (fps * 1.2) && localFrameBlink < (fps * 1.425);
+  // ---- glitchBefore: 2.4s cycle, alternate-reverse → we use modulo on full cycle ----
+  const beforeFrames = fps * 2.4;
+  const beforeLocal = localFrame % beforeFrames;
+  const beforeProgress = beforeLocal / beforeFrames;
 
-  // Video Boxes glow (3 seconds loop)
-  const localFrameLeft = frame % (fps * 3);
-  const localFrameRight = (frame + (fps * 1.5)) % (fps * 3);
+  const beforeKf = [0, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 1.0];
+  const beforeTX = interpolate(beforeProgress, beforeKf, [0, -12, 9, -14, 8, -10, 12, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const beforeTY = interpolate(beforeProgress, beforeKf, [0, -4, 2, 0, -4, 4, 0, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const beforeClipTop = interpolate(beforeProgress, beforeKf, [0, 20, 60, 10, 40, 80, 30, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const beforeClipBottom = interpolate(beforeProgress, beforeKf, [0, 50, 10, 70, 30, 5, 45, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-  const glowLeft = interpolate(localFrameLeft, [0, fps * 1.5, fps * 3], [0, 1, 0], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const glowRight = interpolate(localFrameRight, [0, fps * 1.5, fps * 3], [0, 1, 0], {
-    easing: Easing.inOut(Easing.quad),
-  });
+  // ---- glitchAfter: 2s cycle ----
+  const afterFrames = fps * 2.0;
+  const afterLocal = localFrame % afterFrames;
+  const afterProgress = afterLocal / afterFrames;
 
-  // Play button pulse (2 seconds loop)
-  const localFramePlay = frame % (fps * 2);
-  const playProgress = interpolate(localFramePlay, [0, fps * 1, fps * 2], [0, 1, 0], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const playOpacity = 0.4 + playProgress * 0.6;
-  const playScale = 1 + playProgress * 0.2;
+  const afterKf = [0, 0.15, 0.30, 0.45, 0.60, 0.75, 0.90, 1.0];
+  const afterTX = interpolate(afterProgress, afterKf, [0, 12, -9, 14, -8, 10, -12, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const afterTY = interpolate(afterProgress, afterKf, [0, 4, -2, 0, 4, -4, 0, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const afterClipTop = interpolate(afterProgress, afterKf, [0, 55, 15, 70, 25, 5, 45, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const afterClipBottom = interpolate(afterProgress, afterKf, [0, 15, 60, 8, 50, 80, 30, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-  // Custom Styles
-  const containerStyle: React.CSSProperties = {
-    width: ORIGINAL_WIDTH,
-    height: ORIGINAL_HEIGHT,
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-    transformOrigin: 'center center',
-    overflow: 'hidden',
-    background: 'linear-gradient(125deg, #6a2c91, #7b2cd8, #4a2370, #8e35b5, #5a2580)',
-    backgroundSize: '300% 300%',
-    backgroundPosition: `${bgX}% 50%`,
-    fontFamily: "'Arial Black', Arial, sans-serif",
-  };
+  // ---- flicker: 9s cycle ----
+  const flickerFrames = fps * 9;
+  const flickerLocal = localFrame % flickerFrames;
+  const flickerProgress = flickerLocal / flickerFrames;
 
-  const waveCircleStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '-8%',
-    left: '4%',
-    width: '28%',
-    aspectRatio: '1',
-    borderRadius: '50%',
-    overflow: 'hidden',
-    backgroundColor: '#ff3b6b',
-  };
+  const flickerKf = [0, 0.02, 0.03, 0.04, 0.05, 0.06, 0.48, 0.49, 0.50, 0.78, 0.79, 0.80, 1.0];
+  const flickerVals = [0, 0.06, 0, 0.14, 0.03, 0, 0, 0.2, 0, 0, 0.12, 0, 0];
+  const flickerOpacity = interpolate(flickerProgress, flickerKf, flickerVals, { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-  const redSvgStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    left: '-10%',
-    width: '130%',
-    height: '80%',
-    transform: `translate(${redX}%, -50%)`,
-  };
+  // ---- scanlines offset: 8s cycle ----
+  const scanFrames = fps * 8;
+  const scanLocal = localFrame % scanFrames;
+  const scanOffset = interpolate(scanLocal, [0, scanFrames], [0, 100], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-  const greenCircleStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: '-18%',
-    right: '2%',
-    width: '30%',
-    aspectRatio: '1',
-    borderRadius: '50%',
-    overflow: 'hidden',
-    backgroundColor: '#3ddc84',
-  };
+  // ---- Canvas drawing ----
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-  const greenSvgStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '0',
-    left: '-10%',
-    width: '130%',
-    height: '100%',
-    transform: `translateX(${greenX}%)`,
-  };
+    const W = ORIGINAL_WIDTH;
+    const H = ORIGINAL_HEIGHT;
+    canvas.width = W;
+    canvas.height = H;
 
-  const cornerStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: '8%',
-    aspectRatio: '1',
-    backgroundColor: '#fff',
-    borderRadius: '0 100% 0 0',
-    opacity: 0.95,
-  };
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#05060a';
+    ctx.fillRect(0, 0, W, H);
 
-  const subCircleStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '8%',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    width: '12%',
-    aspectRatio: '1',
-    borderRadius: '50%',
-    border: '4px solid #fff',
-    boxShadow: `0 0 0 ${pulseSpread}px rgba(255, 255, 255, ${pulseOpacity})`,
-  };
+    // Draw moving glitch lines
+    for (let i = 0; i < STATIC_LINES.length; i++) {
+      const line = STATIC_LINES[i];
+      const lineY = line.yFrac * H;
+      const lineW = line.wFrac * W;
 
-  const subBtnStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '30%',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    backgroundColor: isBlinking ? '#fff' : '#000',
-    color: isBlinking ? '#000' : '#fff',
-    fontSize: '28px',
-    fontWeight: 900,
-    letterSpacing: '2px',
-    padding: '8px 24px',
-    whiteSpace: 'nowrap',
-  };
+      // Simulate x movement deterministically from frame
+      const totalDistPerFrame = line.speed + Math.sin(localFrame * 0.05 + lineY) * 2;
+      let lineX = (line.xFrac * W + totalDistPerFrame * localFrame) % (W + lineW);
+      if (lineX < -lineW) lineX = W + (lineX % (W + lineW));
+      // wrap
+      lineX = ((lineX % (W + lineW)) + (W + lineW)) % (W + lineW) - lineW;
 
-  const getBoxStyle = (glowVal: number, side: 'left' | 'right'): React.CSSProperties => {
-    return {
-      position: 'absolute',
-      bottom: '8%',
-      width: '36%',
-      aspectRatio: '16/9',
-      border: `3px solid rgba(255, 255, 255, ${0.7 + glowVal * 0.3})`,
-      backgroundColor: 'rgba(255, 255, 255, 0.03)',
-      boxShadow: `0 0 ${glowVal * 25}px rgba(255, 255, 255, ${0.2 + glowVal * 0.6}), inset 0 0 ${glowVal * 20}px rgba(255, 255, 255, ${glowVal * 0.15})`,
-      left: side === 'left' ? '9%' : undefined,
-      right: side === 'right' ? '9%' : undefined,
-    };
-  };
+      const a = line.alpha * (0.55 + 0.45 * Math.abs(Math.sin(localFrame * 0.1 + lineY)));
+      ctx.fillStyle = COLORS_BASE[line.colorIdx] + a + ')';
+      ctx.fillRect(lineX, lineY, lineW, line.thickness);
+    }
 
-  const playStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${playScale})`,
-    width: 0,
-    height: 0,
-    borderStyle: 'solid',
-    borderWidth: '12px 0 12px 20px',
-    borderColor: `transparent transparent transparent rgba(255, 255, 255, ${playOpacity})`,
-  };
+    // Draw glitch blocks (deterministic: show based on cycleProgress vs triggerFrac)
+    const blockWindowSize = 0.18;
+    for (let i = 0; i < GLITCH_BLOCKS.length; i++) {
+      const blk = GLITCH_BLOCKS[i];
+      const triggerStart = blk.triggerFrac;
+      const triggerEnd = (triggerStart + blockWindowSize) % 1.0;
+      let show = false;
+      if (triggerEnd > triggerStart) {
+        show = cycleProgress >= triggerStart && cycleProgress < triggerEnd;
+      } else {
+        show = cycleProgress >= triggerStart || cycleProgress < triggerEnd;
+      }
+      if (show) {
+        const by = blk.yFrac * H;
+        const bh = blk.hFrac * H;
+        const bx = blk.xFrac * W;
+        const bw = blk.wFrac * W;
+        ctx.fillStyle = COLORS_BASE[blk.colorIdx] + blk.alpha + ')';
+        ctx.fillRect(bx, by, bw, bh);
+      }
+    }
+
+    // Draw wide white bands (deterministic)
+    const bandWindowSize = 0.08;
+    for (let i = 0; i < WIDE_BANDS.length; i++) {
+      const band = WIDE_BANDS[i];
+      const triggerStart = band.triggerFrac;
+      const triggerEnd = (triggerStart + bandWindowSize) % 1.0;
+      let show = false;
+      if (triggerEnd > triggerStart) {
+        show = cycleProgress >= triggerStart && cycleProgress < triggerEnd;
+      } else {
+        show = cycleProgress >= triggerStart || cycleProgress < triggerEnd;
+      }
+      if (show) {
+        const by = band.yFrac * H;
+        const bh = band.hFrac * H;
+        ctx.fillStyle = 'rgba(255,255,255,' + band.alpha + ')';
+        ctx.fillRect(0, by, W, bh);
+      }
+    }
+  }, [localFrame, cycleProgress]);
 
   return (
-    <div style={containerStyle}>
-      {/* Red Wave Circle */}
-      <div style={waveCircleStyle}>
-        <svg viewBox="0 0 200 200" preserveAspectRatio="none" style={redSvgStyle}>
-          <g fill="none" stroke="#1a1a2e" strokeWidth="7">
-            <path d="M0 20 Q 25 0 50 20 T 100 20 T 150 20 T 200 20 T 250 20" />
-            <path d="M0 50 Q 25 30 50 50 T 100 50 T 150 50 T 200 50 T 250 50" />
-            <path d="M0 80 Q 25 60 50 80 T 100 80 T 150 80 T 200 80 T 250 80" />
-            <path d="M0 110 Q 25 90 50 110 T 100 110 T 150 110 T 200 110 T 250 110" />
-            <path d="M0 140 Q 25 120 50 140 T 100 140 T 150 140 T 200 140 T 250 140" />
-            <path d="M0 170 Q 25 150 50 170 T 100 170 T 150 170 T 200 170 T 250 170" />
-          </g>
-        </svg>
+    <div
+      style={{
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+        background: '#05060a',
+      }}
+    >
+      {/* Canvas layer */}
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 1,
+        }}
+      />
+
+      {/* Text wrap */}
+      <div
+        style={{
+          position: 'absolute',
+          zIndex: 3,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        {/* Main glitch text container */}
+        <div
+          style={{
+            position: 'relative',
+            fontSize: 120,
+            fontWeight: 800,
+            letterSpacing: '0.12em',
+            color: '#f5f5ff',
+            textTransform: 'uppercase',
+            fontFamily: 'Arial, sans-serif',
+            textShadow: '0 0 4px rgba(255,255,255,0.4), 0 0 12px rgba(0,234,255,0.3)',
+            transform: `translate(${shakeX}px, ${shakeY}px)`,
+          }}
+        >
+          {/* Before layer - cyan */}
+          <span
+            style={{
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              color: '#00eaff',
+              textShadow: '0 0 10px rgba(0,234,255,0.6)',
+              zIndex: -1,
+              fontWeight: 800,
+              letterSpacing: '0.12em',
+              fontFamily: 'Arial, sans-serif',
+              textTransform: 'uppercase',
+              fontSize: 120,
+              transform: `translate(${beforeTX}px, ${beforeTY}px)`,
+              clipPath: `inset(${beforeClipTop}% 0 ${beforeClipBottom}% 0)`,
+              display: 'block',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            THE END
+          </span>
+
+          {/* After layer - magenta */}
+          <span
+            style={{
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              color: '#ff00d4',
+              textShadow: '0 0 10px rgba(255,0,212,0.6)',
+              zIndex: -2,
+              fontWeight: 800,
+              letterSpacing: '0.12em',
+              fontFamily: 'Arial, sans-serif',
+              textTransform: 'uppercase',
+              fontSize: 120,
+              transform: `translate(${afterTX}px, ${afterTY}px)`,
+              clipPath: `inset(${afterClipTop}% 0 ${afterClipBottom}% 0)`,
+              display: 'block',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            THE END
+          </span>
+
+          {/* Main text */}
+          THE END
+        </div>
       </div>
 
-      {/* Green Wave Circle */}
-      <div style={greenCircleStyle}>
-        <svg viewBox="0 0 200 200" preserveAspectRatio="none" style={greenSvgStyle}>
-          <g fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="6">
-            <path d="M0 30 Q 25 10 50 30 T 100 30 T 150 30 T 200 30 T 250 30" />
-            <path d="M0 60 Q 25 40 50 60 T 100 60 T 150 60 T 200 60 T 250 60" />
-            <path d="M0 90 Q 25 70 50 90 T 100 90 T 150 90 T 200 90 T 250 90" />
-            <path d="M0 120 Q 25 100 50 120 T 100 120 T 150 120 T 200 120 T 250 120" />
-            <path d="M0 150 Q 25 130 50 150 T 100 150 T 150 150 T 200 150 T 250 150" />
-          </g>
-        </svg>
-      </div>
+      {/* Scanlines */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 4,
+          pointerEvents: 'none',
+          background: 'linear-gradient(rgba(0,0,0,0) 50%, rgba(0,0,0,0.35) 50%)',
+          backgroundSize: '100% 4px',
+          backgroundPosition: `0 ${scanOffset}px`,
+          opacity: 0.5,
+        }}
+      />
 
-      {/* White corner */}
-      <div style={cornerStyle} />
+      {/* Vignette */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 5,
+          pointerEvents: 'none',
+          background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,0.7) 100%)',
+        }}
+      />
 
-      {/* Subscribe elements */}
-      <div style={subCircleStyle} />
-      <div style={subBtnStyle}>SUBSCRIBE</div>
-
-      {/* Video boxes */}
-      <div style={getBoxStyle(glowLeft, 'left')}>
-        <div style={playStyle} />
-      </div>
-      <div style={getBoxStyle(glowRight, 'right')}>
-        <div style={playStyle} />
-      </div>
+      {/* Flicker */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 6,
+          background: '#fff',
+          mixBlendMode: 'overlay',
+          opacity: flickerOpacity,
+          pointerEvents: 'none',
+        }}
+      />
     </div>
   );
 };
 
-export default YouTubeOutroTemplate;
+export default GlitchTheEnd;
 // END_OF_FILE
