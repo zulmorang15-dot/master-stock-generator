@@ -1357,8 +1357,8 @@
     <div class="batch-bar" id="batchBar" style="flex-wrap: wrap;">
       <span class="batch-count" id="batchCount">0 item dipilih</span>
       <button class="btn-batch-clear" onclick="clearBatchSelection()">✕ Batal Pilih</button>
-      <button class="btn-batch-seo" id="btnBatchSeo" onclick="triggerBatchSEO()">✨ Gen Judul Terpilih</button>
       <button class="btn-batch-tsx" id="btnBatchTsx" onclick="triggerBatchTsx()">⚙️ Gen TSX & Preview Terpilih</button>
+      <button class="btn-batch-seo" id="btnBatchSeo" onclick="triggerBatchSEO()">✨ Gen Judul Terpilih</button>
       <button class="btn-batch-4k" id="btnBatch4k" onclick="triggerBatch4K()">🚀 Gen 4K Terpilih</button>
       <button class="btn-batch-download" id="btnBatchDownload" onclick="triggerBatchDownload()" style="background: linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; padding:6px 12px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer;">📥 Batch Download (MOV)</button>
       <button class="btn-batch-del" id="btnBatchDelete" onclick="triggerBatchDelete()">🗑 Batch Hapus</button>
@@ -3131,26 +3131,26 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       </select>
     `;
 
-    // Button 1: Judul
-    const hasJudul = !!(item.judul && item.judul.trim());
-    let btnJudulText = hasJudul ? '✨ REGEN JUDUL' : '✨ GEN JUDUL';
-    if (isSeoRunning) btnJudulText = '⏳ Generating...';
-    const btnJudulDisabled = isAnyRunning;
-    const btnJudul = `<button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${btnJudulDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btnJudulText}</button>`;
-
-    // Combined Button 2: TSX & Preview
+    // Button 1: TSX & Preview (FIRST — must be done before SEO)
     const hasPreview = !!item.previewUrl;
+    const hasJudul = !!(item.judul && item.judul.trim());
     let btnTsxPreviewText = hasPreview ? '⚙️ REGEN TSX & PREVIEW' : '⚙️ GEN TSX & PREVIEW';
     if (isTsxRunning) btnTsxPreviewText = '⏳ Converting TSX...';
     else if (isPreviewRunning) btnTsxPreviewText = '⏳ Rendering Preview...';
-    const btnTsxPreviewDisabled = isAnyRunning || !hasJudul;
+    const btnTsxPreviewDisabled = isAnyRunning;
     const btnTsxPreview = `<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${btnTsxPreviewDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:${btnTsxPreviewDisabled ? 'rgba(100,100,100,0.1)' : 'linear-gradient(135deg,rgba(56,189,248,0.15),rgba(168,85,247,0.15))'}; border:1px solid ${btnTsxPreviewDisabled ? 'rgba(100,100,100,0.2)' : 'rgba(56,189,248,0.35)'}; color:${btnTsxPreviewDisabled ? 'var(--text-dim)' : 'var(--cyan)'};">${btnTsxPreviewText}</button>`;
 
-    // Button 4: 4K
+    // Button 2: Judul (SEO) — requires preview to exist
+    let btnJudulText = hasJudul ? '✨ REGEN JUDUL' : '✨ GEN JUDUL';
+    if (isSeoRunning) btnJudulText = '⏳ Generating...';
+    const btnJudulDisabled = isAnyRunning || !hasPreview;
+    const btnJudul = `<button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${btnJudulDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btnJudulText}</button>`;
+
+    // Button 3: 4K — requires judul to exist
     const has4k = !!item.outputPath4k;
     let btn4kText = has4k ? '🚀 REGEN 4K' : '🚀 GEN 4K';
     if (is4kRunning) btn4kText = '⏳ Rendering 4K...';
-    const btn4kDisabled = isAnyRunning || !hasPreview;
+    const btn4kDisabled = isAnyRunning || !hasJudul;
     const btn4k = `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${btn4kDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btn4kText}</button>`;
 
     // Download 4K Direct MOV Button
@@ -3178,8 +3178,8 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     return `
       <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
         ${aiSelect}
-        ${btnJudul}
         ${btnTsxPreview}
+        ${btnJudul}
         ${btn4k}
         ${download4kBtn}
         ${downloadZipBtn}
