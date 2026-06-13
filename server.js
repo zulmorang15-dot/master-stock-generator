@@ -657,32 +657,248 @@ async function callGemini(prompt, model = "gemini-2.0-flash") {
   }
 }
 
-// Fungsi Scraping Live Data dari Adobe Stock
+// ══════════════════════════════════════════════════════════════
+// MARKET RESEARCH SCRAPERS — Adobe Stock + Shutterstock
+// ══════════════════════════════════════════════════════════════
+
+const SCRAPE_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+// Fungsi Scraping Live Data dari Adobe Stock (enhanced)
 async function scrapAdobeStock(keyword) {
   try {
-    const searchUrl = "https://stock.adobe.com/id/search/video?k=" + encodeURIComponent(keyword);
+    const searchUrl = "https://stock.adobe.com/search/video?k=" + encodeURIComponent(keyword) + "&search_type=usertyped";
     console.log("🔍 Mengorek data Adobe Stock untuk: " + keyword);
 
     const { data } = await axios.get(searchUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      }
+      headers: { "User-Agent": SCRAPE_UA },
+      timeout: 15000
     });
 
     const $ = cheerio.load(data);
-    let referensi = [];
+    let results = [];
 
-    $(".search-result-cell, .thumb-frame").each((index, element) => {
-      if (index >= 4) return false;
-      const judul = $(element).find("img").attr("alt") || $(element).find(".js-search-result-title").text().trim();
-      if (judul) referensi.push("- Referensi " + (index + 1) + ": " + judul);
+    // Try multiple selectors for robustness
+    $("img[alt]").each((index, element) => {
+      const alt = $(element).attr("alt") || "";
+      if (alt.length > 10 && !alt.includes("Adobe") && !alt.includes("stock") && results.length < 20) {
+        results.push({
+          title: alt.trim(),
+          index: results.length + 1
+        });
+      }
     });
 
-    return referensi.length > 0 ? referensi.join("\n") : "- Referensi 1: " + keyword + " abstract motion background loop";
+    // Fallback: try result cells
+    if (results.length === 0) {
+      $(".search-result-cell, .thumb-frame").each((index, element) => {
+        if (index >= 10) return false;
+        const judul = $(element).find("img").attr("alt") || $(element).find(".js-search-result-title").text().trim();
+        if (judul) results.push({ title: judul, index: results.length + 1 });
+      });
+    }
+
+    // Extract total result count if available
+    let totalResults = "";
+    const resultCountText = $(".search-count, [data-testid='result-count'], .nb-results").first().text().trim();
+    if (resultCountText) totalResults = resultCountText;
+
+    return {
+      platform: "Adobe Stock",
+      keyword,
+      totalResults,
+      items: results,
+      titles: results.map(r => r.title),
+      raw: results.length > 0 ? results.map(r => `- ${r.title}`).join("\n") : `- ${keyword} abstract motion background loop`
+    };
   } catch (error) {
-    return "- Referensi 1: " + keyword + " tech abstract neon background loop";
+    console.log("⚠️ Adobe Stock scrape failed:", error.message);
+    return {
+      platform: "Adobe Stock",
+      keyword,
+      totalResults: "",
+      items: [],
+      titles: [],
+      raw: `- ${keyword} tech abstract neon background loop`
+    };
   }
 }
+
+// Fungsi Scraping Live Data dari Shutterstock
+async function scrapShutterstock(keyword) {
+  try {
+    const slug = keyword.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const searchUrl = `https://www.shutterstock.com/video/search/${slug}`;
+    console.log("🔍 Mengorek data Shutterstock untuk: " + keyword);
+
+    const { data } = await axios.get(searchUrl, {
+      headers: {
+        "User-Agent": SCRAPE_UA,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9"
+      },
+      timeout: 15000
+    });
+
+    const $ = cheerio.load(data);
+    let results = [];
+
+    // Shutterstock stores video descriptions in alt tags and data attributes
+    $("img[alt]").each((index, element) => {
+      const alt = $(element).attr("alt") || "";
+      if (alt.length > 10 && !alt.includes("Shutterstock") && !alt.includes("logo") && !alt.includes("icon") && results.length < 20) {
+        results.push({
+          title: alt.trim(),
+          index: results.length + 1
+        });
+      }
+    });
+
+    // Also try to extract from JSON-LD or script tags
+    $("script[type='application/ld+json']").each((i, el) => {
+      try {
+        const json = JSON.parse($(el).html());
+        if (json && Array.isArray(json)) {
+          json.forEach(item => {
+            if (item.name && results.length < 25) {
+              results.push({ title: item.name, index: results.length + 1 });
+            }
+          });
+        } else if (json && json.name) {
+          results.push({ title: json.name, index: results.length + 1 });
+        }
+      } catch (e) { /* skip malformed JSON-LD */ }
+    });
+
+    // Extract total result count
+    let totalResults = "";
+    const countEl = $("[data-testid='search-results-count'], .c-pagination__count, .globalSearch_totalResults").first().text().trim();
+    if (countEl) totalResults = countEl;
+
+    // Deduplicate by title
+    const seen = new Set();
+    results = results.filter(r => {
+      if (seen.has(r.title.toLowerCase())) return false;
+      seen.add(r.title.toLowerCase());
+      return true;
+    });
+
+    return {
+      platform: "Shutterstock",
+      keyword,
+      totalResults,
+      items: results,
+      titles: results.map(r => r.title),
+      raw: results.length > 0 ? results.map(r => `- ${r.title}`).join("\n") : `- ${keyword} abstract motion loop`
+    };
+  } catch (error) {
+    console.log("⚠️ Shutterstock scrape failed:", error.message);
+    return {
+      platform: "Shutterstock",
+      keyword,
+      totalResults: "",
+      items: [],
+      titles: [],
+      raw: `- ${keyword} abstract motion loop`
+    };
+  }
+}
+
+// Scrape both platforms in parallel
+async function scrapAllPlatforms(keyword) {
+  const [adobe, shutter] = await Promise.all([
+    scrapAdobeStock(keyword),
+    scrapShutterstock(keyword)
+  ]);
+  return { adobe, shutter };
+}
+
+// POST /api/research-market -> Deep market research from both platforms
+app.post("/api/research-market", async (req, res) => {
+  const { keyword } = req.body;
+  if (!keyword || !keyword.trim()) {
+    return res.status(400).json({ error: "Keyword diperlukan" });
+  }
+
+  console.log(`🔬 Memulai riset pasar mendalam untuk: "${keyword}"`);
+
+  try {
+    // 1. Scrape both platforms in parallel
+    const { adobe, shutter } = await scrapAllPlatforms(keyword);
+    console.log(`📊 Adobe: ${adobe.titles.length} results, Shutterstock: ${shutter.titles.length} results`);
+
+    // 2. Build combined competitor data
+    const competitorData = [
+      `=== ADOBE STOCK (${adobe.titles.length} video ditemukan${adobe.totalResults ? ', total: ' + adobe.totalResults : ''}) ===`,
+      adobe.raw,
+      ``,
+      `=== SHUTTERSTOCK (${shutter.titles.length} video ditemukan${shutter.totalResults ? ', total: ' + shutter.totalResults : ''}) ===`,
+      shutter.raw
+    ].join("\n");
+
+    // 3. Send to AI for deep market analysis
+    const prompt = `You are an elite Microstock Market Analyst specializing in Adobe Stock and Shutterstock video markets (USA/Global).
+
+KEYWORD BEING RESEARCHED: "${keyword}"
+
+COMPETITOR DATA FROM LIVE SCRAPING:
+${competitorData}
+
+Perform a DEEP MARKET ANALYSIS and output ONLY a valid JSON object (no markdown, no explanation):
+{
+  "keyword": "${keyword}",
+  "marketSummary": "2-3 sentence summary of the competitive landscape for this keyword",
+  "totalCompetitors": { "adobe": "${adobe.totalResults || 'unknown'}", "shutterstock": "${shutter.totalResults || 'unknown'}" },
+  "competitionLevel": "Low/Medium/High/Saturated",
+  "demandSignal": "Low/Medium/High/Very High based on competitor volume and keyword specificity",
+  "topTrends": ["array of 5 visual/style trends observed in competitor titles"],
+  "commonKeywords": ["array of 10-15 most frequently used keywords in competitor titles"],
+  "underservedNiches": ["array of 3-5 underserved angles or gaps in the market"],
+  "recommendedTitles": [
+    {
+      "title": "SEO-optimized English title (max 12 words, no programming terms)",
+      "why": "Brief reason why this title would perform well"
+    }
+  ],
+  "recommendedKeywords": "35-50 comma-separated English keywords for stock metadata. Use 3-pillar technique: Pilar 1 (What), Pilar 2 (Visual/Style), Pilar 3 (Use case). NO programming terms.",
+  "recommendedCategories": {
+    "adobe": "Best Adobe Stock category name",
+    "shutterstock": "Best Shutterstock category name"
+  },
+  "pricingInsight": "Brief note on pricing potential for this niche",
+  "actionableStrategy": "3-sentence actionable strategy for creating videos in this niche that will outsell competitors"
+}
+
+Generate 5 recommended titles that would OUTPERFORM existing competitors. Focus on what's MISSING in the market, not copying.`;
+
+    console.log("🤖 Mengirim data kompetitor ke AI untuk analisis mendalam...");
+    const aiResponse = await callAIWithFallback(prompt, { preferModel: 'syntx-claude' });
+
+    let jsonText = aiResponse.trim();
+    if (jsonText.includes("```json")) {
+      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+    } else if (jsonText.includes("```")) {
+      jsonText = jsonText.split("```")[1].split("```")[0].trim();
+    }
+
+    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+    const analysis = JSON.parse(jsonText);
+
+    // 4. Return combined result
+    console.log(`✅ Riset pasar selesai untuk: "${keyword}"`);
+    res.json({
+      success: true,
+      keyword,
+      scrapeData: {
+        adobe: { count: adobe.titles.length, total: adobe.totalResults, titles: adobe.titles },
+        shutter: { count: shutter.titles.length, total: shutter.totalResults, titles: shutter.titles }
+      },
+      analysis
+    });
+  } catch (error) {
+    console.error("❌ Gagal riset pasar:", error.message);
+    res.status(500).json({ error: "Gagal melakukan riset pasar", details: error.message });
+  }
+});
 
 // JALUR 1: AMBIL DATA & OPTIMALISASI ATM VIA OPENROUTER
 app.post("/api/generate", async (req, res) => {
@@ -697,7 +913,7 @@ app.post("/api/generate", async (req, res) => {
   }
 
   const prompt = "Kamu adalah pakar Creative Director SEO Microstock USA.\n" +
-    "Berikut adalah tren data judul kompetitor di Adobe Stock saat ini:\n" + dataScrap + "\n\n" +
+    "Berikut adalah tren data judul kompetitor di Adobe Stock saat ini:\n" + dataScrap.raw + "\n\n" +
     "Lakukan strategi ATM untuk pasar USA. Buat 5 variasi ide video yang LUAR BIASA KREATIF, visualnya mewah, kompleks, futuristik, dan bernilai jual tinggi.\n\n" +
     "Keluarkan hasil dalam format JSON murni berbentuk Array of Object tanpa teks pengantar/penutup apa pun.\n" +
     "DILARANG menggunakan karakter double quote (\") di dalam nilai string. Gunakan single quote (') jika perlu.\n" +
@@ -752,7 +968,7 @@ app.post("/api/generate-gemini", async (req, res) => {
   }
 
   const prompt = "Kamu adalah pakar Creative Director SEO Microstock USA.\n" +
-    "Berikut adalah tren data judul kompetitor di Adobe Stock saat ini:\n" + dataScrap + "\n\n" +
+    "Berikut adalah tren data judul kompetitor di Adobe Stock saat ini:\n" + dataScrap.raw + "\n\n" +
     "Lakukan strategi ATM untuk pasar USA. Buat 5 variasi ide video yang LUAR BIASA KREATIF, visualnya mewah, kompleks, futuristik, dan bernilai jual tinggi.\n\n" +
     "Keluarkan hasil dalam format JSON murni berbentuk Array of Object tanpa teks pengantar/penutup apa pun.\n" +
     "DILARANG menggunakan karakter double quote (\") di dalam nilai string. Gunakan single quote (') jika perlu.\n" +
