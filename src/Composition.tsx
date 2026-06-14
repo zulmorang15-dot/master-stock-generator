@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -212,8 +212,8 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
 
   const ringInnerRotation = interpolate(
     localFrame,
-    [0, fps * 12, fps * CYCLE_DURATION],
-    [0, -360, -360 - (360 * (CYCLE_DURATION - 12) / 12)],
+    [0, fps * CYCLE_DURATION],
+    [0, -450],
     {
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
@@ -499,7 +499,6 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
           const totalDuration = fps * CYCLE_DURATION;
           const startFrame = fps * streak.delay;
           const animDuration = fps * streak.speed;
-          const cycleFrames = startFrame + animDuration;
           const adjustedFrame = (localFrame - startFrame + totalDuration) % totalDuration;
 
           const streakX = interpolate(
