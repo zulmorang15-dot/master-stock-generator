@@ -1678,6 +1678,10 @@ const active4kRenders = {}; // { itemId: boolean }
 const render4kQueue = [];
 let isProcessingRender4k = false;
 
+// SEO background queue state
+const seoQueue = []; // Array of objects: { id, aiModel }
+let isProcessingSeo = false;
+
 
 // Sequential Git operator lock (Mutex) to prevent local commit/push conflicts
 let gitMutex = Promise.resolve();
@@ -3428,6 +3432,115 @@ async function run4kRenderBackground(itemId) {
   }
 }
 
+async function executeSingleSeoTask(id, aiModel) {
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    console.error("Gagal membaca database");
+    return;
+  }
+
+  const item = items.find(i => i.id === id);
+  if (!item) {
+    console.log(`[SeoQueue] Item ${id} tidak ditemukan.`);
+    return;
+  }
+  if (!item.htmlPreview) {
+    console.log(`[SeoQueue] Item ${id} tidak memiliki htmlPreview.`);
+    return;
+  }
+
+  activeSeoGenerations[id] = true;
+  try {
+    const timeStr = new Date().toLocaleTimeString('id-ID');
+    if (!item.logs) item.logs = [];
+    item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+    item.logs.push({ message: `✨ Memulai regenerasi Judul & Keywords (AI: ${aiModel || 'auto'})`, type: "info", time: timeStr });
+    item.lastLogMessage = "Menghubungi AI...";
+    saveOrUpdateItem(item);
+
+    // Sync memory logs
+    taskLogs[id] = [...item.logs];
+    addTaskLog(id, "Menghubungi AI...", "info");
+
+    const promptsData = loadPromptsConfig();
+    const cleanHtml = stripScripts(item.htmlPreview);
+    const activeSeoPrompt = promptsData.seoPrompt.replace("{{HTML_CONTENT}}", cleanHtml);
+
+    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: aiModel || 'auto', taskId: id });
+    
+    let jsonText = aiResponse.trim();
+    if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+    } else if (jsonText.includes("```")) {
+      const parts = jsonText.split("```");
+      for (const p of parts) {
+        if (p.trim().startsWith("{") || p.trim().startsWith("[")) {
+          jsonText = p.trim();
+          break;
+        }
+      }
+    }
+
+    const seoResult = JSON.parse(jsonText);
+    item.judul = seoResult.title || item.judul;
+    item.keywords = seoResult.keywords || item.keywords;
+    
+    // Normalisasi keywords dan judul
+    if (typeof sanitizeKeywordsAndTitle === 'function') {
+      const sanitized = sanitizeKeywordsAndTitle(item.judul, item.keywords);
+      item.judul = sanitized.title;
+      item.keywords = sanitized.keywords;
+    }
+
+    item.statusConvertTsx = 'waiting'; // Reset status TSX to waiting so they can build it
+    const finishTime = new Date().toLocaleTimeString('id-ID');
+    item.logs.push({ message: `✅ Regenerasi SEO sukses! Judul: "${item.judul}"`, type: "success", time: finishTime });
+    item.lastLogMessage = "Regenerasi SEO sukses.";
+    
+    saveOrUpdateItem(item);
+    addTaskLog(id, `✅ Regenerasi SEO sukses! Judul: "${item.judul}"`, "success");
+  } catch (err) {
+    console.error(`[SeoQueue] Gagal memproses ${id}:`, err.message);
+    const errTime = new Date().toLocaleTimeString('id-ID');
+    item.logs.push({ message: `❌ Gagal regenerasi SEO: ${err.message}`, type: "error", time: errTime });
+    item.lastLogMessage = "Gagal regenerasi SEO.";
+    saveOrUpdateItem(item);
+    addTaskLog(id, `❌ Gagal regenerasi SEO: ${err.message}`, "error");
+  } finally {
+    activeSeoGenerations[id] = false;
+    
+    if (taskSseClients[id]) {
+      taskSseClients[id].forEach(client => {
+        client.write(`data: ${JSON.stringify({ type: 'done', message: 'SEO selesai' })}\n\n`);
+        client.end();
+      });
+      delete taskSseClients[id];
+    }
+  }
+}
+
+async function processSeoQueue() {
+  if (isProcessingSeo) return;
+  if (seoQueue.length === 0) return;
+
+  isProcessingSeo = true;
+  const task = seoQueue.shift();
+  console.log(`[SeoQueue] Processing next item: ${task.id}. Remaining: ${seoQueue.length}`);
+
+  try {
+    await executeSingleSeoTask(task.id, task.aiModel);
+  } catch (err) {
+    console.error(`[SeoQueue] Fatal error executing task ${task.id}:`, err);
+  } finally {
+    isProcessingSeo = false;
+    setTimeout(processSeoQueue, 1000);
+  }
+}
+
 async function processRender4kQueue() {
   if (isProcessingRender4k) return;
   if (render4kQueue.length === 0) return;
@@ -3938,6 +4051,86 @@ app.post("/api/start-task/:id", (req, res) => {
   processQueue();
 
   res.json({ success: true, id });
+});
+
+// POST: Mulai batch task TSX / Preview konversi secara sekuensial di server
+app.post("/api/batch-start-tasks", (req, res) => {
+  const { ids, aiModel, loop, transparent, fps, animationDuration } = req.body;
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({ error: "Daftar ID tidak valid" });
+  }
+
+  // Baca item dari DB
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    return res.status(500).json({ error: "Gagal membaca database" });
+  }
+
+  let count = 0;
+  ids.forEach(id => {
+    const item = items.find(i => i.id === id);
+    if (item && item.statusConvertTsx === 'waiting' && !taskQueue.includes(id) && !activeTasks.has(id)) {
+      item.statusConvertTsx = 'queued';
+      if (aiModel) item.aiModel = aiModel;
+      
+      delete item._userSetVideoConfig;
+      if (loop !== undefined) item.loop = !!loop;
+      if (transparent !== undefined) item.transparent = !!transparent;
+      const targetFps = Number(fps) || item.fps || 30;
+      item.fps = targetFps;
+      if (animationDuration) {
+        item.animationDuration = Number(animationDuration);
+        item.durationInFrames = Number(animationDuration) * targetFps;
+      }
+      
+      if (!item.logs) item.logs = [];
+      const timeStr = new Date().toLocaleTimeString('id-ID');
+      item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+      item.logs.push({ message: `▶ Memulai proses batch dengan AI: ${aiModel || 'auto'}`, type: "info", time: timeStr });
+      item.lastLogMessage = "Memulai proses batch...";
+
+      taskLogs[id] = [...item.logs];
+      taskQueue.push(id);
+      count++;
+    }
+  });
+
+  if (count > 0) {
+    fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+    processQueue();
+  }
+
+  console.log(`📡 Batch start-tasks diproses: ${count} dari ${ids.length} item dimasukkan ke antrean.`);
+  res.json({ success: true, count });
+});
+
+// POST: Batch regenerasi SEO metadata secara sekuensial di server
+app.post("/api/batch-regenerate-seo", (req, res) => {
+  const { ids, aiModel } = req.body;
+  if (!ids || !Array.isArray(ids)) {
+    return res.status(400).json({ error: "Daftar ID tidak valid" });
+  }
+
+  let count = 0;
+  ids.forEach(id => {
+    // Cek apakah tidak sedang aktif dan belum masuk antrean
+    const alreadyInQueue = seoQueue.some(task => task.id === id);
+    if (!alreadyInQueue && !activeSeoGenerations[id]) {
+      seoQueue.push({ id, aiModel });
+      count++;
+    }
+  });
+
+  if (count > 0) {
+    processSeoQueue();
+  }
+
+  console.log(`📡 Batch regenerate-seo diproses: ${count} dari ${ids.length} item dimasukkan ke antrean.`);
+  res.json({ success: true, count });
 });
 
 // Fungsi untuk memperbarui file .env dan memory variables

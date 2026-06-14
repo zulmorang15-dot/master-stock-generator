@@ -94,6 +94,7 @@ jobs:
             --props=temp-props.json \
             --codec=h264 \
             --scale=0.5 \
+            --gl=swiftshader \
             --muted \
             --log=verbose
 
