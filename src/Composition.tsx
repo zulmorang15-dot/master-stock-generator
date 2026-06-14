@@ -1,79 +1,85 @@
-import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 import React, { useRef, useEffect } from 'react';
+import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 import * as THREE from 'three';
 
+// Define static dimensions for consistent fullscreen scale math
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const SEED_WAVE_COUNT = 3000;
-const WAVE_POSITIONS = new Float32Array(SEED_WAVE_COUNT * 3);
-const WAVE_PHASES = new Float32Array(SEED_WAVE_COUNT);
+// Deterministic Wave Particles Pre-calculation
+const WAVE_COUNT = 3000;
+const WAVE_X_Z_PHASES = Array.from({ length: WAVE_COUNT }, (_, idx) => {
+    // Standard deterministic pseudo-random sequences
+    const x = (((idx * 17.31) % 40) - 20) * 5;
+    const z = (((idx * 29.73) % 40) - 20) * 5;
+    const phase = ((idx * 3.1415) % (Math.PI * 2));
+    return { x, z, phase };
+});
 
-let seed = 12345;
-function pseudoRandom() {
-    const x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
-}
+// Deterministic Dust Particles Pre-calculation
+const DUST_COUNT = 300;
+const DUST_POSITIONS = Array.from({ length: DUST_COUNT }, (_, idx) => {
+    const x = (((idx * 43.19) % 150) - 75);
+    const y = (((idx * 71.83) % 100) - 50);
+    const z = (((idx * 113.27) % 150) - 75);
+    return { x, y, z };
+});
 
-for (let i = 0; i < SEED_WAVE_COUNT; i++) {
-    const x = (pseudoRandom() - 0.5) * 200;
-    const z = (pseudoRandom() - 0.5) * 200;
-    WAVE_POSITIONS[i * 3] = x;
-    WAVE_POSITIONS[i * 3 + 1] = 0;
-    WAVE_POSITIONS[i * 3 + 2] = z;
-    WAVE_PHASES[i] = pseudoRandom() * Math.PI * 2;
-}
-
-const SEED_DUST_COUNT = 300;
-const DUST_POSITIONS = new Float32Array(SEED_DUST_COUNT * 3);
-for (let i = 0; i < SEED_DUST_COUNT; i++) {
-    DUST_POSITIONS[i * 3] = (pseudoRandom() - 0.5) * 150;
-    DUST_POSITIONS[i * 3 + 1] = (pseudoRandom() - 0.5) * 100;
-    DUST_POSITIONS[i * 3 + 2] = (pseudoRandom() - 0.5) * 150;
-}
-
-const EsportsEndScreen: React.FC = () => {
+const FuturisticEsportsEndScreen: React.FC = () => {
     const { width, height, fps } = useVideoConfig();
     const frame = useCurrentFrame();
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-    const gridRef = useRef<THREE.GridHelper | null>(null);
+    const gridHelperRef = useRef<THREE.GridHelper | null>(null);
     const waveMeshRef = useRef<THREE.Points | null>(null);
     const backgroundCoreRef = useRef<THREE.Mesh | null>(null);
     const outerCoreRef = useRef<THREE.Mesh | null>(null);
     const dustSystemRef = useRef<THREE.Points | null>(null);
 
+    // Dynamic scale factor calculation for filling the rendering target canvas
+    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+
+    // Initialize Three.js environment once on mount
     useEffect(() => {
-        if (!canvasRef.current) return;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
         const scene = new THREE.Scene();
+        sceneRef.current = scene;
         scene.fog = new THREE.FogExp2(0x010308, 0.003);
 
-        const camera = new THREE.PerspectiveCamera(60, 1920 / 1080, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(60, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 1000);
         camera.position.set(0, 15, 60);
+        cameraRef.current = camera;
 
-        const renderer = new THREE.WebGLRenderer({
-            canvas: canvasRef.current,
-            alpha: true,
-            antialias: true
-        });
-        renderer.setSize(1920, 1080);
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
         renderer.setPixelRatio(1);
+        rendererRef.current = renderer;
 
+        // Animated Cyber Grid Floor
         const gridHelper = new THREE.GridHelper(400, 100, 0x00ffff, 0x002266);
         gridHelper.position.y = -15;
-        gridHelper.material.transparent = true;
-        gridHelper.material.opacity = 0.4;
-        gridHelper.material.blending = THREE.AdditiveBlending;
+        if (gridHelper.material instanceof THREE.Material) {
+            gridHelper.material.transparent = true;
+            gridHelper.material.opacity = 0.4;
+            gridHelper.material.blending = THREE.AdditiveBlending;
+        }
         scene.add(gridHelper);
+        gridHelperRef.current = gridHelper;
 
+        // Wave Particle Grid Setup
         const waveGeometry = new THREE.BufferGeometry();
-        waveGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(WAVE_POSITIONS), 3));
-        waveGeometry.setAttribute('phase', new THREE.BufferAttribute(new Float32Array(WAVE_PHASES), 1));
+        const wavePositionsArr = new Float32Array(WAVE_COUNT * 3);
+        WAVE_X_Z_PHASES.forEach((p, idx) => {
+            wavePositionsArr[idx * 3] = p.x;
+            wavePositionsArr[idx * 3 + 1] = 0;
+            wavePositionsArr[idx * 3 + 2] = p.z;
+        });
+        waveGeometry.setAttribute('position', new THREE.BufferAttribute(wavePositionsArr, 3));
 
         const particleMat = new THREE.PointsMaterial({
             color: 0x00aaff,
@@ -81,22 +87,25 @@ const EsportsEndScreen: React.FC = () => {
             transparent: true,
             opacity: 0.8,
             blending: THREE.AdditiveBlending,
-            depthWrite: false
+            depthWrite: false,
         });
         const waveMesh = new THREE.Points(waveGeometry, particleMat);
         waveMesh.position.y = -10;
         scene.add(waveMesh);
+        waveMeshRef.current = waveMesh;
 
+        // Cyber Center Core Spheres
         const coreGeo = new THREE.SphereGeometry(8, 32, 32);
         const coreMat = new THREE.MeshBasicMaterial({
             color: 0x0055ff,
             wireframe: true,
             transparent: true,
             opacity: 0.15,
-            blending: THREE.AdditiveBlending
+            blending: THREE.AdditiveBlending,
         });
         const backgroundCore = new THREE.Mesh(coreGeo, coreMat);
         scene.add(backgroundCore);
+        backgroundCoreRef.current = backgroundCore;
 
         const outerCoreGeo = new THREE.IcosahedronGeometry(14, 1);
         const outerCoreMat = new THREE.MeshBasicMaterial({
@@ -104,36 +113,41 @@ const EsportsEndScreen: React.FC = () => {
             wireframe: true,
             transparent: true,
             opacity: 0.1,
-            blending: THREE.AdditiveBlending
+            blending: THREE.AdditiveBlending,
         });
         const outerCore = new THREE.Mesh(outerCoreGeo, outerCoreMat);
         scene.add(outerCore);
+        outerCoreRef.current = outerCore;
 
+        // Holographic Floating Dust
         const dustGeo = new THREE.BufferGeometry();
-        dustGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(DUST_POSITIONS), 3));
+        const dustPositionsArr = new Float32Array(DUST_COUNT * 3);
+        DUST_POSITIONS.forEach((p, idx) => {
+            dustPositionsArr[idx * 3] = p.x;
+            dustPositionsArr[idx * 3 + 1] = p.y;
+            dustPositionsArr[idx * 3 + 2] = p.z;
+        });
+        dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositionsArr, 3));
+
         const dustMat = new THREE.PointsMaterial({
             color: 0x00ffff,
             size: 0.8,
             transparent: true,
             opacity: 0.6,
-            blending: THREE.AdditiveBlending
+            blending: THREE.AdditiveBlending,
         });
         const dustSystem = new THREE.Points(dustGeo, dustMat);
         scene.add(dustSystem);
-
-        sceneRef.current = scene;
-        cameraRef.current = camera;
-        rendererRef.current = renderer;
-        gridRef.current = gridHelper;
-        waveMeshRef.current = waveMesh;
-        backgroundCoreRef.current = backgroundCore;
-        outerCoreRef.current = outerCore;
         dustSystemRef.current = dustSystem;
 
         return () => {
             renderer.dispose();
             gridHelper.geometry.dispose();
-            (gridHelper.material as THREE.Material).dispose();
+            if (Array.isArray(gridHelper.material)) {
+                gridHelper.material.forEach((m) => m.dispose());
+            } else {
+                gridHelper.material.dispose();
+            }
             waveGeometry.dispose();
             particleMat.dispose();
             coreGeo.dispose();
@@ -145,131 +159,97 @@ const EsportsEndScreen: React.FC = () => {
         };
     }, []);
 
+    // Deterministic Frame Render Effect (Ensures frame-locking, eliminates drift and jitter)
     useEffect(() => {
         const scene = sceneRef.current;
         const camera = cameraRef.current;
         const renderer = rendererRef.current;
-        const gridHelper = gridRef.current;
-        const waveMesh = waveMeshRef.current;
         const backgroundCore = backgroundCoreRef.current;
         const outerCore = outerCoreRef.current;
+        const waveMesh = waveMeshRef.current;
+        const gridHelper = gridHelperRef.current;
         const dustSystem = dustSystemRef.current;
 
-        if (!scene || !camera || !renderer) return;
+        if (!scene || !camera || !renderer || !backgroundCore || !outerCore || !waveMesh || !gridHelper || !dustSystem) {
+            return;
+        }
 
         const elapsedTime = frame / fps;
 
-        const camX = Math.sin((elapsedTime / 10) * Math.PI * 2) * 2.5;
-        const camY = 15 + Math.cos((elapsedTime / 10) * Math.PI * 2) * 1.5;
-        camera.position.set(camX, camY, 60);
+        // Loop aligned rotations
+        backgroundCore.rotation.y = elapsedTime * 0.2;
+        backgroundCore.rotation.x = elapsedTime * 0.1;
 
-        camera.rotation.z = Math.sin((elapsedTime / 20) * Math.PI * 2) * 0.01;
-        camera.rotation.x = -0.025 + Math.cos((elapsedTime / 20) * Math.PI * 2) * 0.025;
+        outerCore.rotation.y = -elapsedTime * 0.15;
+        outerCore.rotation.z = elapsedTime * 0.1;
 
-        if (backgroundCore) {
-            backgroundCore.rotation.y = elapsedTime * (Math.PI * 2 / 10);
-            backgroundCore.rotation.x = elapsedTime * (Math.PI * 2 / 20);
+        // Dynamic 3D Camera Loop Pathing (20 seconds precise duration)
+        const cycleRatio = (frame / (fps * 20)) * Math.PI * 2;
+        camera.position.x = Math.sin(cycleRatio) * 5;
+        camera.position.y = 15 + Math.cos(cycleRatio) * 3;
+        camera.position.z = 60;
+        camera.rotation.z = Math.sin(cycleRatio) * 0.02;
+        camera.rotation.x = -0.05 + Math.cos(cycleRatio) * 0.02;
+
+        // Wave heights calculations matching standard CSS/JS deterministic curves
+        const positions = waveMesh.geometry.attributes.position.array as Float32Array;
+        const tWave1 = (frame / (fps * 20)) * Math.PI * 2 * 30;
+        const tWave2 = (frame / (fps * 20)) * Math.PI * 2 * 15;
+
+        for (let i = 0; i < WAVE_COUNT; i++) {
+            const x = WAVE_X_Z_PHASES[i].x;
+            const z = WAVE_X_Z_PHASES[i].z;
+            positions[i * 3 + 1] = Math.sin(x * 0.05 + tWave1) * 4 + Math.cos(z * 0.05 + tWave2) * 4;
         }
-        if (outerCore) {
-            outerCore.rotation.y = -elapsedTime * (Math.PI * 2 / 5);
-            outerCore.rotation.z = elapsedTime * (Math.PI * 2 / 10);
-        }
+        waveMesh.geometry.attributes.position.needsUpdate = true;
 
-        if (gridHelper) {
-            gridHelper.position.z = (elapsedTime * 5) % 20;
-        }
+        // Move Grid Forward continuously (seamlessly loops step size)
+        const gridStep = 4;
+        gridHelper.position.z = (elapsedTime * 5) % gridStep;
 
-        if (dustSystem) {
-            dustSystem.rotation.y = elapsedTime * (Math.PI * 2 / 20);
-        }
-
-        if (waveMesh) {
-            const positions = waveMesh.geometry.attributes.position.array as Float32Array;
-            const waveTime = elapsedTime % 20;
-            const timeTerm1 = waveTime * (Math.PI * 2 / 20) * 10;
-            const timeTerm2 = waveTime * (Math.PI * 2 / 20) * 5;
-
-            for (let i = 0; i < SEED_WAVE_COUNT; i++) {
-                const x = positions[i * 3];
-                const z = positions[i * 3 + 2];
-                positions[i * 3 + 1] = Math.sin(x * 0.05 + timeTerm1) * 4 + 
-                                     Math.cos(z * 0.05 + timeTerm2) * 4;
-            }
-            waveMesh.geometry.attributes.position.needsUpdate = true;
-        }
+        // Dust Slow Rotation
+        const dustAngle = (frame / (fps * 20)) * Math.PI * 2 * 2;
+        dustSystem.rotation.y = dustAngle;
 
         renderer.render(scene, camera);
     }, [frame, fps]);
 
-    const leftScanlineTranslateY = interpolate(
-        frame % (fps * 4),
-        [0, fps * 4],
-        [-100, 100],
-        { easing: Easing.linear }
-    );
+    // Precise UI Timings (Driven natively via Remotion interpolation)
+    const scanFrameLeft = frame % (fps * 4);
+    const scanFrameRight = (frame + fps * 2) % (fps * 4);
+    const scanYLeft = interpolate(scanFrameLeft, [0, fps * 4], [-100, 100]);
+    const scanYRight = interpolate(scanFrameRight, [0, fps * 4], [-100, 100]);
 
-    const rightScanlineTranslateY = interpolate(
-        (frame + fps * 2) % (fps * 4),
-        [0, fps * 4],
-        [-100, 100],
-        { easing: Easing.linear }
-    );
+    const sweepFrameLeft = frame % (fps * 6);
+    const sweepFrameRight = (frame + fps * 3) % (fps * 6);
+    const sweepXLeft = interpolate(sweepFrameLeft, [0, fps * 1.2, fps * 6], [-100, 200, 200], { easing: Easing.bezier(0.19, 1, 0.22, 1) });
+    const sweepXRight = interpolate(sweepFrameRight, [0, fps * 1.2, fps * 6], [-100, 200, 200], { easing: Easing.bezier(0.19, 1, 0.22, 1) });
 
-    const leftSweepProgress = frame % (fps * 5);
-    const leftSweepLeft = leftSweepProgress < fps * 1.2
-        ? interpolate(leftSweepProgress, [0, fps * 1.2], [-100, 200], { easing: Easing.bezier(0.19, 1, 0.22, 1) })
-        : 200;
+    const outerRot = interpolate(frame % (fps * 12), [0, fps * 12], [0, 360]);
+    const innerRot = interpolate(frame % (fps * 8), [0, fps * 8], [360, 0]);
+    const dashedRot = interpolate(frame % (fps * 20), [0, fps * 20], [0, 360]);
 
-    const rightSweepProgress = (frame + fps * 2.5) % (fps * 5);
-    const rightSweepLeft = rightSweepProgress < fps * 1.2
-        ? interpolate(rightSweepProgress, [0, fps * 1.2], [-100, 200], { easing: Easing.bezier(0.19, 1, 0.22, 1) })
-        : 200;
+    const crosshairPulse = frame % (fps * 2);
+    const crosshairScale = interpolate(crosshairPulse, [0, fps * 1, fps * 2], [1.0, 1.2, 1.0], { easing: Easing.inOut(Easing.quad) });
+    const crosshairOpacity = interpolate(crosshairPulse, [0, fps * 1, fps * 2], [0.5, 0.4, 0.5], { easing: Easing.inOut(Easing.quad) });
 
-    const rotateOuter = interpolate(
-        frame % (fps * 10),
-        [0, fps * 10],
-        [0, 360],
-        { easing: Easing.linear }
-    );
+    const hoverLeftY = interpolate(frame % (fps * 6), [0, fps * 3, fps * 6], [-8, 8, -8], { easing: Easing.inOut(Easing.quad) });
+    const hoverRightY = interpolate((frame + fps * 3) % (fps * 6), [0, fps * 3, fps * 6], [-8, 8, -8], { easing: Easing.inOut(Easing.quad) });
 
-    const rotateInner = interpolate(
-        frame % (fps * 5),
-        [0, fps * 5],
-        [360, 0],
-        { easing: Easing.linear }
-    );
+    const subPulseFrame = frame % (fps * 4);
+    const subPulseScale = interpolate(subPulseFrame, [0, fps * 2, fps * 4], [1.0, 1.04, 1.0], { easing: Easing.inOut(Easing.quad) });
 
-    const rotateDashed = interpolate(
-        frame % (fps * 20),
-        [0, fps * 20],
-        [0, 360],
-        { easing: Easing.linear }
-    );
-
-    const crosshairTime = frame % (fps * 4);
-    const crosshairScale = interpolate(
-        crosshairTime,
-        [0, fps * 2, fps * 4],
-        [1, 1.2, 1],
-        { easing: Easing.inOut(Easing.quad) }
-    );
-    const crosshairOpacity = interpolate(
-        crosshairTime,
-        [0, fps * 2, fps * 4],
-        [1, 0.4, 1],
-        { easing: Easing.inOut(Easing.quad) }
-    );
-
+    // CSS styling presets re-engineered into safe inline Javascript camelCased styles
     const containerStyle: React.CSSProperties = {
         position: 'absolute',
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
         overflow: 'hidden',
         background: 'radial-gradient(circle at center, #020b1f 0%, #010308 100%)',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
     };
 
     const canvasStyle: React.CSSProperties = {
@@ -291,27 +271,19 @@ const EsportsEndScreen: React.FC = () => {
         pointerEvents: 'none',
     };
 
-    const placeholderBaseStyle: React.CSSProperties = {
+    const getPlaceholderStyle = (isLeft: boolean, hoverY: number): React.CSSProperties => ({
         position: 'absolute',
         width: 580,
         height: 326,
-        top: 377,
+        top: 377 + hoverY,
         background: 'rgba(0, 15, 30, 0.4)',
         border: '2px solid rgba(0, 255, 255, 0.3)',
         boxShadow: '0 0 30px rgba(0, 255, 255, 0.1), inset 0 0 40px rgba(0, 85, 255, 0.2)',
         backdropFilter: 'blur(8px)',
         overflow: 'hidden',
-    };
-
-    const placeholderLeftStyle: React.CSSProperties = {
-        ...placeholderBaseStyle,
-        left: 140,
-    };
-
-    const placeholderRightStyle: React.CSSProperties = {
-        ...placeholderBaseStyle,
-        right: 140,
-    };
+        left: isLeft ? 140 : undefined,
+        right: !isLeft ? 140 : undefined,
+    });
 
     const cornerBaseStyle: React.CSSProperties = {
         position: 'absolute',
@@ -324,73 +296,75 @@ const EsportsEndScreen: React.FC = () => {
         zIndex: 3,
     };
 
-    const cornerTlStyle: React.CSSProperties = { ...cornerBaseStyle, top: -2, left: -2, borderTopWidth: 4, borderLeftWidth: 4 };
-    const cornerTrStyle: React.CSSProperties = { ...cornerBaseStyle, top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4 };
-    const cornerBlStyle: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4 };
-    const cornerBrStyle: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4 };
+    const tlStyle: React.CSSProperties = { ...cornerBaseStyle, top: -2, left: -2, borderTopWidth: 4, borderLeftWidth: 4 };
+    const trStyle: React.CSSProperties = { ...cornerBaseStyle, top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4 };
+    const blStyle: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4 };
+    const brStyle: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4 };
 
-    const scanlineBaseStyle: React.CSSProperties = {
+    const scanlineStyle = (yPercent: number): React.CSSProperties => ({
         position: 'absolute',
         top: 0,
         left: 0,
         width: '100%',
         height: '100%',
         background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
-    };
+        transform: `translateY(${yPercent}%)`,
+    });
 
-    const sweepBaseStyle: React.CSSProperties = {
+    const sweepStyle = (leftPercent: number): React.CSSProperties => ({
         position: 'absolute',
         top: 0,
+        left: `${leftPercent}%`,
         width: '50%',
         height: '100%',
         background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.3) 50%, rgba(0, 255, 255, 0) 100%)',
         transform: 'skewX(-25deg)',
-    };
+    });
 
-    const subscribeCenterStyle: React.CSSProperties = {
+    const subscribeCenterStyle = (pulseScale: number): React.CSSProperties => ({
         position: 'absolute',
         top: '50%',
         left: '50%',
-        transform: 'translate(-50%, -50%)',
+        transform: `translate(-50%, -50%) scale(${pulseScale})`,
         width: 340,
         height: 340,
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-    };
+    });
 
-    const hologramRingStyle: React.CSSProperties = {
+    const hologramRingBaseStyle: React.CSSProperties = {
         position: 'absolute',
         borderRadius: '50%',
         border: '2px solid transparent',
     };
 
-    const ringOuterStyle: React.CSSProperties = {
-        ...hologramRingStyle,
+    const ringOuterStyle = (rot: number): React.CSSProperties => ({
+        ...hologramRingBaseStyle,
         width: 340,
         height: 340,
         borderTop: '4px solid #00ffff',
         borderBottom: '4px solid #0055ff',
         boxShadow: '0 0 40px rgba(0, 255, 255, 0.3)',
-        transform: `rotate(${rotateOuter}deg)`,
-    };
+        transform: `rotate(${rot}deg)`,
+    });
 
-    const ringInnerStyle: React.CSSProperties = {
-        ...hologramRingStyle,
+    const ringInnerStyle = (rot: number): React.CSSProperties => ({
+        ...hologramRingBaseStyle,
         width: 280,
         height: 280,
         borderLeft: '3px solid #0055ff',
         borderRight: '3px solid #00ffff',
-        transform: `rotate(${rotateInner}deg)`,
-    };
+        transform: `rotate(${rot}deg)`,
+    });
 
-    const ringDashedStyle: React.CSSProperties = {
-        ...hologramRingStyle,
+    const ringDashedStyle = (rot: number): React.CSSProperties => ({
+        ...hologramRingBaseStyle,
         width: 310,
         height: 310,
         border: '2px dashed rgba(0, 255, 255, 0.5)',
-        transform: `rotate(${rotateDashed}deg)`,
-    };
+        transform: `rotate(${rot}deg)`,
+    });
 
     const subscribeCoreStyle: React.CSSProperties = {
         width: 220,
@@ -404,24 +378,24 @@ const EsportsEndScreen: React.FC = () => {
         zIndex: 10,
     };
 
-    const hudLineStyle = (positionProps: React.CSSProperties): React.CSSProperties => ({
+    const hudLineStyle = (custom: React.CSSProperties): React.CSSProperties => ({
         position: 'absolute',
         background: '#00ffff',
         opacity: 0.2,
         boxShadow: '0 0 10px #00ffff',
-        left: 0,
-        width: '100%',
-        height: 1,
-        ...positionProps,
+        ...custom,
     });
 
-    const hudCrosshairBaseStyle: React.CSSProperties = {
+    const hudCrosshairStyle = (custom: React.CSSProperties, scale: number, opacity: number): React.CSSProperties => ({
         position: 'absolute',
         width: 20,
         height: 20,
-    };
+        transform: `scale(${scale})`,
+        opacity,
+        ...custom,
+    });
 
-    const crosshairBeforeStyle: React.CSSProperties = {
+    const crosshairHorizontal: React.CSSProperties = {
         position: 'absolute',
         top: '50%',
         left: 0,
@@ -431,7 +405,7 @@ const EsportsEndScreen: React.FC = () => {
         transform: 'translateY(-50%)',
     };
 
-    const crosshairAfterStyle: React.CSSProperties = {
+    const crosshairVertical: React.CSSProperties = {
         position: 'absolute',
         top: 0,
         left: '50%',
@@ -441,60 +415,58 @@ const EsportsEndScreen: React.FC = () => {
         transform: 'translateX(-50%)',
     };
 
-    const crosshairStyle = (positionProps: React.CSSProperties): React.CSSProperties => ({
-        ...hudCrosshairBaseStyle,
-        ...positionProps,
-        transform: `scale(${crosshairScale})`,
-        opacity: crosshairOpacity,
-    });
-
     return (
         <div style={containerStyle}>
             <canvas ref={canvasRef} style={canvasStyle} />
 
             <div style={uiLayerStyle}>
-                <div style={hudLineStyle({ top: 150 })} />
-                <div style={hudLineStyle({ bottom: 150 })} />
+                {/* Horizontal HUD Guide Lines */}
+                <div style={hudLineStyle({ top: '150px', left: 0, width: '100%', height: '1px' })} />
+                <div style={hudLineStyle({ bottom: '150px', left: 0, width: '100%', height: '1px' })} />
 
-                <div style={crosshairStyle({ top: 140, left: 140 })}>
-                    <div style={crosshairBeforeStyle} />
-                    <div style={crosshairAfterStyle} />
+                {/* HUD Corners Crosshairs */}
+                <div style={hudCrosshairStyle({ top: '140px', left: '140px' }, crosshairScale, crosshairOpacity)}>
+                    <div style={crosshairHorizontal} />
+                    <div style={crosshairVertical} />
                 </div>
-                <div style={crosshairStyle({ top: 140, right: 140 })}>
-                    <div style={crosshairBeforeStyle} />
-                    <div style={crosshairAfterStyle} />
+                <div style={hudCrosshairStyle({ top: '140px', right: '140px' }, crosshairScale, crosshairOpacity)}>
+                    <div style={crosshairHorizontal} />
+                    <div style={crosshairVertical} />
                 </div>
-                <div style={crosshairStyle({ bottom: 140, left: 140 })}>
-                    <div style={crosshairBeforeStyle} />
-                    <div style={crosshairAfterStyle} />
+                <div style={hudCrosshairStyle({ bottom: '140px', left: '140px' }, crosshairScale, crosshairOpacity)}>
+                    <div style={crosshairHorizontal} />
+                    <div style={crosshairVertical} />
                 </div>
-                <div style={crosshairStyle({ bottom: 140, right: 140 })}>
-                    <div style={crosshairBeforeStyle} />
-                    <div style={crosshairAfterStyle} />
-                </div>
-
-                <div style={placeholderLeftStyle}>
-                    <div style={cornerTlStyle} />
-                    <div style={cornerTrStyle} />
-                    <div style={cornerBlStyle} />
-                    <div style={cornerBrStyle} />
-                    <div style={{ ...scanlineBaseStyle, transform: `translateY(${leftScanlineTranslateY}%)` }} />
-                    <div style={{ ...sweepBaseStyle, left: `${leftSweepLeft}%` }} />
+                <div style={hudCrosshairStyle({ bottom: '140px', right: '140px' }, crosshairScale, crosshairOpacity)}>
+                    <div style={crosshairHorizontal} />
+                    <div style={crosshairVertical} />
                 </div>
 
-                <div style={placeholderRightStyle}>
-                    <div style={cornerTlStyle} />
-                    <div style={cornerTrStyle} />
-                    <div style={cornerBlStyle} />
-                    <div style={cornerBrStyle} />
-                    <div style={{ ...scanlineBaseStyle, transform: `translateY(${rightScanlineTranslateY}%)` }} />
-                    <div style={{ ...sweepBaseStyle, left: `${rightSweepLeft}%` }} />
+                {/* Left Placement Window */}
+                <div style={getPlaceholderStyle(true, hoverLeftY)}>
+                    <div style={tlStyle} />
+                    <div style={trStyle} />
+                    <div style={blStyle} />
+                    <div style={brStyle} />
+                    <div style={scanlineStyle(scanYLeft)} />
+                    <div style={sweepStyle(sweepXLeft)} />
                 </div>
 
-                <div style={subscribeCenterStyle}>
-                    <div style={ringOuterStyle} />
-                    <div style={ringDashedStyle} />
-                    <div style={ringInnerStyle} />
+                {/* Right Placement Window */}
+                <div style={getPlaceholderStyle(false, hoverRightY)}>
+                    <div style={tlStyle} />
+                    <div style={trStyle} />
+                    <div style={blStyle} />
+                    <div style={brStyle} />
+                    <div style={scanlineStyle(scanYRight)} />
+                    <div style={sweepStyle(sweepXRight)} />
+                </div>
+
+                {/* Centered Futuristic Interactive Hub */}
+                <div style={subscribeCenterStyle(subPulseScale)}>
+                    <div style={ringOuterStyle(outerRot)} />
+                    <div style={ringDashedStyle(dashedRot)} />
+                    <div style={ringInnerStyle(innerRot)} />
                     <div style={subscribeCoreStyle} />
                 </div>
             </div>
@@ -502,5 +474,5 @@ const EsportsEndScreen: React.FC = () => {
     );
 };
 
-export default EsportsEndScreen;
+export default FuturisticEsportsEndScreen;
 // END_OF_FILE
