@@ -4,177 +4,260 @@ import * as THREE from 'three';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
+const PARTICLE_COUNT = 1600;
 
-const FLOOR_RES = 80;
-const FLOOR_WIDTH = 4500;
-const FLOOR_DEPTH = 4500;
+// Deterministic pseudo-random sequence to avoid Math.random() inside rendering
+const particleData = (() => {
+  const data = [];
+  let seed = 12345;
+  const rnd = () => {
+    const x = Math.sin(seed++) * 10000;
+    return x - Math.floor(x);
+  };
+  const TWO_PI = Math.PI * 2;
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const x = 4500 * rnd() - 2250;
+    const y = -100 + rnd() * 800;
+    const z = 5000 * rnd() - 2500;
+    data.push({
+      x,
+      y,
+      z,
+      baseY: y,
+      phase: rnd() * TWO_PI,
+      amp: 40 + rnd() * 90,
+    });
+  }
+  return data;
+})();
 
-const CyberspaceBackground: React.FC = () => {
-  const { width, height, fps, durationInFrames } = useVideoConfig();
+export const CyberspaceWireframeLiquidWave: React.FC = () => {
+  const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  // Keep references to Three.js objects
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const floorGeometryRef = useRef<THREE.PlaneGeometry | null>(null);
-  const pointLight1Ref = useRef<THREE.PointLight | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const pointLightRef = useRef<THREE.PointLight | null>(null);
   const pointLight2Ref = useRef<THREE.PointLight | null>(null);
+  const floorGeometryRef = useRef<THREE.PlaneGeometry | null>(null);
+  const basePositionsRef = useRef<number[]>([]);
+  const particlesRef = useRef<THREE.Points | null>(null);
+  const moverGroupRef = useRef<THREE.Group | null>(null);
 
-  // Scaling logic to maintain aspect ratio with no black bars
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // Initialize Three.js Scene (Runs once)
   useEffect(() => {
     if (!canvasRef.current) return;
 
+    const FLOOR_RES = 80;
+    const FLOOR_WIDTH = 3600;
+    const FLOOR_DEPTH = 4800;
+    const ASPECT = ORIGINAL_WIDTH / ORIGINAL_HEIGHT;
+
+    // 1. Scene & Camera
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x020205);
-    scene.fog = new THREE.FogExp2(0x020205, 0.0007);
+    scene.fog = new THREE.FogExp2(0x05060f, 0.00050);
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(60, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 1, 4000);
-    camera.position.set(0, 250, 1200);
-    camera.lookAt(0, 50, 0);
+    const camera = new THREE.PerspectiveCamera(65, ASPECT, 1, 6000);
+    camera.position.set(0, 520, 2650);
     cameraRef.current = camera;
 
-    const ambientLight = new THREE.AmbientLight(0x111122, 1.5);
-    scene.add(ambientLight);
+    // 2. Lights
+    const hemisphereLight = new THREE.HemisphereLight(0x18324a, 0x0a0a14, 0.6);
+    scene.add(hemisphereLight);
 
-    const pointLight1 = new THREE.PointLight(0x00ffff, 4, 3000);
-    scene.add(pointLight1);
-    pointLight1Ref.current = pointLight1;
+    const centerLight = new THREE.SpotLight(0x00e5ff, 1.2);
+    centerLight.position.set(0, 1200, 2000);
+    centerLight.penumbra = 1;
+    centerLight.decay = 2;
+    scene.add(centerLight);
 
-    const pointLight2 = new THREE.PointLight(0xff00ff, 4, 3000);
+    const pointLight = new THREE.PointLight(0x00f0ff, 2.0, 6000);
+    pointLight.position.z = 200;
+    scene.add(pointLight);
+    pointLightRef.current = pointLight;
+
+    const pointLight2 = new THREE.PointLight(0xff2e97, 1.8, 6000);
+    pointLight2.position.z = 200;
     scene.add(pointLight2);
     pointLight2Ref.current = pointLight2;
 
+    // 3. Water Surface Grid
     const floorGroup = new THREE.Group();
-    scene.add(floorGroup);
+    const moverGroup = new THREE.Group();
+    scene.add(moverGroup);
+    moverGroupRef.current = moverGroup;
 
-    const floorGeometry = new THREE.PlaneGeometry(FLOOR_WIDTH, FLOOR_DEPTH, FLOOR_RES, FLOOR_RES);
+    const floorGeometry = new THREE.PlaneGeometry(
+      FLOOR_WIDTH + 1800,
+      FLOOR_DEPTH,
+      FLOOR_RES,
+      FLOOR_RES
+    );
     floorGeometryRef.current = floorGeometry;
 
+    // Save initial coordinates for wave animations
+    const basePositions: number[] = [];
+    const posAttr = floorGeometry.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+      basePositions.push(posAttr.getX(i), posAttr.getY(i));
+    }
+    basePositionsRef.current = basePositions;
+
     const solidMaterial = new THREE.MeshPhongMaterial({
-      color: 0x050515,
-      emissive: 0x000000,
+      color: 0x07101f,
+      emissive: 0x040a18,
       side: THREE.DoubleSide,
+      shininess: 60,
       flatShading: true,
     });
 
-    // Multiple wireframe layers to simulate a rich glowing neon bloom effect
-    const wireframeMaterial1 = new THREE.MeshPhongMaterial({
-      color: 0x00ffff,
-      emissive: 0x005577,
+    const wireframeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x35f0ff,
       side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
       wireframe: true,
       transparent: true,
-      opacity: 1.0,
-      blending: THREE.AdditiveBlending,
+      opacity: 0.45,
     });
 
-    const wireframeMaterial2 = new THREE.MeshPhongMaterial({
-      color: 0x00aaff,
-      emissive: 0x002244,
-      side: THREE.DoubleSide,
-      wireframe: true,
+    const floorMesh = new THREE.Mesh(floorGeometry, solidMaterial);
+    const floorMesh2 = new THREE.Mesh(floorGeometry, wireframeMaterial);
+
+    floorMesh2.position.y = 14;
+    floorMesh2.position.z = 4;
+
+    floorGroup.add(floorMesh);
+    floorGroup.add(floorMesh2);
+    scene.add(floorGroup);
+
+    floorMesh.rotation.x = Math.PI / 1.62;
+    floorMesh2.rotation.x = Math.PI / 1.62;
+    floorGroup.position.y = 120;
+
+    // 4. Floating Particles (deterministic seeded loop)
+    const pGeometry = new THREE.BufferGeometry();
+    const pVertices: number[] = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      pVertices.push(particleData[i].x, particleData[i].y, particleData[i].z);
+    }
+    pGeometry.setAttribute('position', new THREE.Float32BufferAttribute(pVertices, 3));
+
+    const pMaterial = new THREE.PointsMaterial({
+      color: 0x9fe8ff,
+      size: 7,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.85,
       blending: THREE.AdditiveBlending,
+      depthWrite: false,
     });
 
-    const wireframeMaterial3 = new THREE.MeshPhongMaterial({
-      color: 0xff00ff,
-      emissive: 0x440044,
-      side: THREE.DoubleSide,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.3,
-      blending: THREE.AdditiveBlending,
-    });
+    const particles = new THREE.Points(pGeometry, pMaterial);
+    moverGroup.add(particles);
+    particlesRef.current = particles;
 
-    const solidMesh = new THREE.Mesh(floorGeometry, solidMaterial);
-    const wireframeMesh1 = new THREE.Mesh(floorGeometry, wireframeMaterial1);
-    const wireframeMesh2 = new THREE.Mesh(floorGeometry, wireframeMaterial2);
-    const wireframeMesh3 = new THREE.Mesh(floorGeometry, wireframeMaterial3);
-
-    wireframeMesh1.position.z = 2;
-    wireframeMesh2.position.z = 4;
-    wireframeMesh2.scale.set(1.002, 1.002, 1.002);
-    wireframeMesh3.position.z = 6;
-    wireframeMesh3.scale.set(1.004, 1.004, 1.004);
-
-    floorGroup.add(solidMesh);
-    floorGroup.add(wireframeMesh1);
-    floorGroup.add(wireframeMesh2);
-    floorGroup.add(wireframeMesh3);
-
-    floorGroup.rotation.x = -Math.PI / 2;
-    floorGroup.position.y = -100;
-
+    // 5. Renderer setup
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
       antialias: true,
-      alpha: false,
+      alpha: true,
     });
+    renderer.setPixelRatio(2);
+    renderer.setClearColor(0x05060f, 1);
     renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-    renderer.setPixelRatio(1);
     rendererRef.current = renderer;
 
     return () => {
       renderer.dispose();
       floorGeometry.dispose();
       solidMaterial.dispose();
-      wireframeMaterial1.dispose();
-      wireframeMaterial2.dispose();
-      wireframeMaterial3.dispose();
+      wireframeMaterial.dispose();
+      pGeometry.dispose();
+      pMaterial.dispose();
     };
   }, []);
 
-  // Frame-locked render loop matching exact loop cycle of the video
+  // Frame-locked deterministic renderer effect
   useEffect(() => {
     const scene = sceneRef.current;
     const camera = cameraRef.current;
     const renderer = rendererRef.current;
-    const floorGeometry = floorGeometryRef.current;
-    const pointLight1 = pointLight1Ref.current;
+    const pointLight = pointLightRef.current;
     const pointLight2 = pointLight2Ref.current;
+    const floorGeometry = floorGeometryRef.current;
+    const particles = particlesRef.current;
+    const moverGroup = moverGroupRef.current;
 
-    if (!scene || !camera || !renderer || !floorGeometry || !pointLight1 || !pointLight2) return;
-
-    // Symmetrical progress looping over durationInFrames to prevent frame jumps
-    const progress = frame / durationInFrames;
-    const angle = progress * Math.PI * 2;
-
-    // Replicate lights circular orbit
-    pointLight1.position.x = Math.cos(angle) * 1500;
-    pointLight1.position.y = 300;
-    pointLight1.position.z = Math.sin(angle) * 1500;
-
-    pointLight2.position.x = Math.cos(-angle) * 1500;
-    pointLight2.position.y = 300;
-    pointLight2.position.z = Math.sin(-angle) * 1500;
-
-    // Wave computation for mesh vertices
-    const positionAttribute = floorGeometry.attributes.position;
-    const vertex = new THREE.Vector3();
-
-    for (let i = 0; i < positionAttribute.count; i++) {
-      vertex.fromBufferAttribute(positionAttribute, i);
-
-      const wave1 = Math.sin(vertex.x * 0.003 + angle) * 150;
-      const wave2 = Math.cos(vertex.y * 0.003 + angle * 2) * 100;
-
-      positionAttribute.setZ(i, wave1 + wave2);
+    if (
+      !scene ||
+      !camera ||
+      !renderer ||
+      !pointLight ||
+      !pointLight2 ||
+      !floorGeometry ||
+      !particles ||
+      !moverGroup
+    ) {
+      return;
     }
-    positionAttribute.needsUpdate = true;
-    floorGeometry.computeVertexNormals();
 
-    // Deterministically draw the current frame
+    const LOOP_DURATION = 15.0; // 15s seamless loop window
+    const TWO_PI = Math.PI * 2;
+    const OMEGA = TWO_PI / LOOP_DURATION;
+
+    const t = (frame / fps) % LOOP_DURATION;
+    const phase = OMEGA * t;
+
+    // Moving neon orbital lights
+    pointLight.position.x = 2600 * Math.cos(phase);
+    pointLight.position.z = 2600 * Math.sin(phase);
+    pointLight.position.y = 350 + 200 * Math.sin(phase);
+
+    pointLight2.position.x = 2000 * Math.cos(-phase - Math.PI);
+    pointLight2.position.z = 2000 * Math.sin(-phase - Math.PI);
+    pointLight2.position.y = 350 + 200 * Math.cos(phase);
+
+    // Cinematographic camera parallax
+    camera.position.x = Math.sin(phase) * 180;
+    camera.position.y = 520 + Math.sin(phase * 2) * 60;
+    camera.lookAt(0, 80, 0);
+
+    // Grid liquid wave displacement simulation
+    const basePositions = basePositionsRef.current;
+    if (basePositions.length > 0) {
+      const positionAttribute = floorGeometry.attributes.position;
+      for (let i = 0; i < positionAttribute.count; i++) {
+        const x = basePositions[i * 2];
+        const y = basePositions[i * 2 + 1];
+
+        const wave1 = Math.sin(x * 0.0026 + phase) * 110;
+        const wave2 = Math.cos(y * 0.0023 + phase) * 110;
+        const wave3 = Math.sin((x + y) * 0.0017 + phase * 2.0) * 55;
+
+        positionAttribute.setZ(i, wave1 + wave2 + wave3);
+      }
+      positionAttribute.needsUpdate = true;
+      floorGeometry.computeVertexNormals();
+    }
+
+    // Floating particle motion
+    const pPos = particles.geometry.attributes.position;
+    const array = pPos.array as Float32Array;
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const s = particleData[i];
+      array[i * 3 + 1] = s.baseY + Math.sin(phase + s.phase) * s.amp;
+    }
+    pPos.needsUpdate = true;
+
+    // Micro drift forward/backward
+    moverGroup.position.z = Math.sin(phase) * 500;
+
+    // Paint frame
     renderer.render(scene, camera);
-  }, [frame, durationInFrames]);
+  }, [frame, fps]);
 
   return (
     <div
@@ -187,23 +270,23 @@ const CyberspaceBackground: React.FC = () => {
         transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
         overflow: 'hidden',
-        backgroundColor: '#020205',
+        backgroundColor: '#05060f',
       }}
     >
       <div
-        id="canvas-container"
         style={{
           width: '100%',
           height: '100%',
+          boxShadow: '0 0 60px rgba(0, 200, 255, 0.15)',
           position: 'relative',
         }}
       >
         <canvas
           ref={canvasRef}
           style={{
-            display: 'block',
             width: '100%',
             height: '100%',
+            display: 'block',
           }}
         />
       </div>
@@ -211,5 +294,5 @@ const CyberspaceBackground: React.FC = () => {
   );
 };
 
-export default CyberspaceBackground;
+export default CyberspaceWireframeLiquidWave;
 // END_OF_FILE
