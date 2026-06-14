@@ -4493,8 +4493,31 @@ app.delete("/api/chat/sessions/:id", (req, res) => {
   try {
     let sessions = loadChatHistory();
     const before = sessions.length;
+    
+    // Temukan sesi yang akan dihapus untuk membersihkan file gambarnya
+    const sessionToDelete = sessions.find(s => s.id === req.params.id);
+    
     sessions = sessions.filter(s => s.id !== req.params.id);
     if (sessions.length === before) return res.status(404).json({ error: "Sesi tidak ditemukan" });
+    
+    // Hapus file attachment gambar yang diunggah ke sesi ini jika ada
+    if (sessionToDelete && Array.isArray(sessionToDelete.messages)) {
+      sessionToDelete.messages.forEach(msg => {
+        if (msg.imageUrl && msg.imageUrl.startsWith('/chat-uploads/')) {
+          const filename = path.basename(msg.imageUrl);
+          const filepath = path.join(__dirname, 'public', 'chat-uploads', filename);
+          try {
+            if (fs.existsSync(filepath)) {
+              fs.unlinkSync(filepath);
+              console.log(`🗑 Berhasil menghapus file gambar chat: ${filename}`);
+            }
+          } catch (fileErr) {
+            console.warn(`Gagal menghapus file gambar chat ${filename}:`, fileErr.message);
+          }
+        }
+      });
+    }
+    
     saveChatHistory(sessions);
     res.json({ success: true });
   } catch (err) {
@@ -4671,6 +4694,23 @@ app.post("/api/chat/sessions/:id/message/:messageIndex/edit", async (req, res) =
     if (req.body.hasOwnProperty('imageUrl')) {
       imageUrl = req.body.imageUrl || null;
     }
+
+    // Hapus file gambar lampiran dari pesan-pesan setelah messageIndex yang akan dipangkas (truncated)
+    const truncatedMessages = session.messages.slice(messageIndex + 1);
+    truncatedMessages.forEach(msg => {
+      if (msg.imageUrl && msg.imageUrl.startsWith('/chat-uploads/')) {
+        const filename = path.basename(msg.imageUrl);
+        const filepath = path.join(__dirname, 'public', 'chat-uploads', filename);
+        try {
+          if (fs.existsSync(filepath)) {
+            fs.unlinkSync(filepath);
+            console.log(`🗑 Hapus file gambar chat terpangkas: ${filename}`);
+          }
+        } catch (fileErr) {
+          console.warn(`Gagal menghapus file gambar chat terpangkas ${filename}:`, fileErr.message);
+        }
+      }
+    });
 
     // Truncate messages: keep only up to messageIndex
     session.messages = session.messages.slice(0, messageIndex + 1);
