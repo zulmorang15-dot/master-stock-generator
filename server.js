@@ -1459,18 +1459,30 @@ app.delete("/api/delete-item/:id", (req, res) => {
       return res.status(404).json({ error: `Item "${id}" tidak ditemukan` });
     }
 
-    // Hapus file HTML dan TSX lokal jika ada
-    const htmlLocalPath = path.join(__dirname, "public", "saved-code", `${id}.html`);
-    const tsxLocalPath = path.join(__dirname, "public", "saved-code", `${id}.tsx`);
+    // Hapus file HTML, TSX, video preview, video 4K, dan file temp lokal jika ada
+    const pathsToCleanup = [
+      path.join(__dirname, "public", "saved-code", `${id}.html`),
+      path.join(__dirname, "public", "saved-code", `${id}.tsx`),
+      path.join(__dirname, "public", "previews", `${id}-preview.mp4`),
+      path.join(__dirname, "public", "previews", `${id}.mp4`),
+      path.join(__dirname, "out", `${id}-4k.mov`),
+      path.join(__dirname, "out", `${id}_4k.mov`),
+      path.join(__dirname, `temp-props-preview-${id}.json`),
+      path.join(__dirname, `temp-props-4k-${id}.json`),
+      path.join(__dirname, `temp-link-${id}-preview.zip`),
+      path.join(__dirname, `temp-link-${id}-4k.zip`)
+    ];
+
     try {
-      if (fs.existsSync(htmlLocalPath)) fs.unlinkSync(htmlLocalPath);
-      if (fs.existsSync(tsxLocalPath)) fs.unlinkSync(tsxLocalPath);
+      pathsToCleanup.forEach(p => {
+        if (fs.existsSync(p)) fs.unlinkSync(p);
+      });
     } catch (fileErr) {
       console.warn(`Gagal menghapus file lokal untuk ${id}:`, fileErr.message);
     }
 
     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
-    console.log(`🗑 Item "${id}" beserta kode lokalnya berhasil dihapus`);
+    console.log(`🗑 Item "${id}" beserta kode dan file videonya berhasil dihapus`);
     res.json({ success: true });
   } catch (error) {
     console.error("❌ Gagal hapus item:", error.message);
@@ -1495,13 +1507,25 @@ app.post("/api/batch-delete", (req, res) => {
     // Filter out deleted items and unlink their local files
     items = items.filter(item => {
       if (ids.includes(item.id)) {
-        const htmlLocalPath = path.join(__dirname, "public", "saved-code", `${item.id}.html`);
-        const tsxLocalPath = path.join(__dirname, "public", "saved-code", `${item.id}.tsx`);
+        const id = item.id;
+        const pathsToCleanup = [
+          path.join(__dirname, "public", "saved-code", `${id}.html`),
+          path.join(__dirname, "public", "saved-code", `${id}.tsx`),
+          path.join(__dirname, "public", "previews", `${id}-preview.mp4`),
+          path.join(__dirname, "public", "previews", `${id}.mp4`),
+          path.join(__dirname, "out", `${id}-4k.mov`),
+          path.join(__dirname, "out", `${id}_4k.mov`),
+          path.join(__dirname, `temp-props-preview-${id}.json`),
+          path.join(__dirname, `temp-props-4k-${id}.json`),
+          path.join(__dirname, `temp-link-${id}-preview.zip`),
+          path.join(__dirname, `temp-link-${id}-4k.zip`)
+        ];
         try {
-          if (fs.existsSync(htmlLocalPath)) fs.unlinkSync(htmlLocalPath);
-          if (fs.existsSync(tsxLocalPath)) fs.unlinkSync(tsxLocalPath);
+          pathsToCleanup.forEach(p => {
+            if (fs.existsSync(p)) fs.unlinkSync(p);
+          });
         } catch (fileErr) {
-          console.warn(`Gagal menghapus file lokal untuk ${item.id}:`, fileErr.message);
+          console.warn(`Gagal menghapus file lokal untuk ${id}:`, fileErr.message);
         }
         return false;
       }
@@ -1511,7 +1535,7 @@ app.post("/api/batch-delete", (req, res) => {
     const deletedCount = beforeCount - items.length;
 
     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
-    console.log(`🗑 Berhasil menghapus ${deletedCount} item terpilih beserta kode lokalnya`);
+    console.log(`🗑 Berhasil menghapus ${deletedCount} item terpilih beserta kode dan file videonya`);
     res.json({ success: true, deletedCount });
   } catch (error) {
     console.error("❌ Gagal batch hapus item:", error.message);
