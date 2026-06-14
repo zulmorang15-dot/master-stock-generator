@@ -1,382 +1,367 @@
 import React, { useRef, useEffect } from 'react';
-import { useVideoConfig, useCurrentFrame } from 'remotion';
+import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import * as THREE from 'three';
 
-// --- DETERMINISTIC PARTICLE GENERATOR ---
-// Generate pseudo-random parameters based on seed index so that offline frame rendering is 100% stable.
-interface ParticleSeed {
-    x: number;
-    y: number;
-    size: number;
-    color: string;
-    speedX: number;
-    speedY: number;
-    phase: number;
-    freq: number;
-}
+// Deterministic Cinematic Theme Setup
+const THEME = {
+  primaryColor: 0x00f0ff,
+  secondaryColor: 0xff00ff,
+  bgGradientStart: "#03020c",
+  bgGradientEnd: "#000000",
+  cssGlow: "#00f0ff",
+  cssGlowSec: "#ff00ff",
+  glassBg: "rgba(10, 10, 18, 0.45)",
+  glassBorder: "rgba(0, 240, 255, 0.4)"
+};
 
-const PARTICLE_COUNT = 150;
-const SEEDS: ParticleSeed[] = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
-    const pseudoRandom = (seed: number) => {
-        const x = Math.sin(seed) * 10000;
-        return x - Math.floor(x);
-    };
-    const randX = pseudoRandom(i * 12.34);
-    const randY = pseudoRandom(i * 56.78);
-    const randSize = pseudoRandom(i * 90.12);
-    const randColor = pseudoRandom(i * 34.56);
-    const randSpeedX = pseudoRandom(i * 78.90);
-    const randSpeedY = pseudoRandom(i * 12.89);
-    const randPhase = pseudoRandom(i * 45.67);
-    const randFreq = pseudoRandom(i * 89.01);
+const PARTICLE_COUNT = 1000;
 
-    return {
-        x: randX * 1920,
-        y: randY * 1080,
-        size: randSize * 1.5 + 0.5,
-        color: randColor > 0.5 ? '#00e5ff' : '#d900ff',
-        speedX: (randSpeedX - 0.5) * 0.8,
-        speedY: (randSpeedY - 0.5) * 0.8,
-        phase: randPhase * Math.PI * 2,
-        freq: randFreq * 0.05 + 0.02,
-    };
+// Pre-calculate randomized layout structures outside render loop to maintain deterministic state
+const PARTICLE_DATA = Array.from({ length: PARTICLE_COUNT }, () => {
+  const radius = Math.random() * 55 + 5;
+  const theta = Math.random() * Math.PI * 2;
+  const z = (Math.random() - 0.5) * 120;
+  const phase = Math.random() * Math.PI * 2;
+  return { radius, theta, z, phase };
 });
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const CyberpunkUI: React.FC = () => {
-    const { width, height } = useVideoConfig();
-    const frame = useCurrentFrame();
+const PremiumCinematicEndscreen: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { width, height, fps } = useVideoConfig();
 
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const particlesRef = useRef<THREE.Points | null>(null);
+  const complexMeshRef = useRef<THREE.Mesh | null>(null);
 
-    // Canvas particle render effect
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Clean scaling calculation to ensure fullscreen coverage with no black bars
+  const scaleFactor = Math.max(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+  const loopDuration = 15; // 15 seconds loop
+  const totalFrames = fps * loopDuration;
+  const localFrame = frame % totalFrames;
+  const elapsedTime = localFrame / fps;
+  const loopFreq = (2 * Math.PI) / loopDuration;
 
-        ctx.clearRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+  // Cinematic Entry & Exit UI Reveal Animations (Seamless loop pairing)
+  const introTransition = interpolate(localFrame, [0, 45], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.quad),
+  });
+  const outroTransition = interpolate(localFrame, [totalFrames - 45, totalFrames], [1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.in(Easing.quad),
+  });
+  const uiTransition = introTransition * outroTransition;
 
-        SEEDS.forEach((p) => {
-            // Compute deterministic position updated strictly by the frame index
-            let x = (p.x + p.speedX * frame) % ORIGINAL_WIDTH;
-            if (x < 0) x += ORIGINAL_WIDTH;
-            let y = (p.y + p.speedY * frame) % ORIGINAL_HEIGHT;
-            if (y < 0) y += ORIGINAL_HEIGHT;
+  // Initialize ThreeJS Cinematic Engine
+  useEffect(() => {
+    if (!canvasRef.current) return;
 
-            // Seamlessly oscillate opacity within 1200 frames (20s @ 60fps)
-            // Frequency is normalized using integer factors of 1200 to loop perfectly
-            const k = Math.floor(p.freq * 20) + 1; 
-            const opacity = 0.2 + 0.8 * (0.5 + 0.5 * Math.sin(p.phase + frame * (k * 2 * Math.PI / 1200)));
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x020105, 0.015);
+    sceneRef.current = scene;
 
-            ctx.globalAlpha = opacity;
-            ctx.fillStyle = p.color;
-            ctx.beginPath();
-            ctx.arc(x, y, p.size, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    }, [frame]);
+    const camera = new THREE.PerspectiveCamera(60, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 1000);
+    camera.position.z = 45;
+    cameraRef.current = camera;
 
-    // Vortex Rotation periods calculated to loop cleanly within 1200 frames.
-    // 600, 300, 240, 150 frames are all clean factors of 1200 (20 seconds @ 60fps)
-    const spinCoreDeg = (frame % 600) * (360 / 600);
-    const spinCyan1Deg = (frame % 300) * (360 / 300);
-    const spinMag1Deg = -1 * ((frame % 240) * (360 / 240));
-    const spinCyan2Deg = (frame % 150) * (360 / 150);
+    const renderer = new THREE.WebGLRenderer({
+      canvas: canvasRef.current,
+      antialias: true,
+      alpha: true,
+    });
+    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+    renderer.setPixelRatio(2);
+    rendererRef.current = renderer;
 
-    // Subtle scale pulsing on the entire portal element to add motion fidelity
-    const portalPulse = 1.0 + 0.02 * Math.sin(frame * (4 * Math.PI / 300));
+    // Fluid Vortex Particle System Setup
+    const particleGeo = new THREE.BufferGeometry();
+    const positions = new Float32Array(PARTICLE_COUNT * 3);
 
-    return (
-        <div
-            style={{
-                width: ORIGINAL_WIDTH,
-                height: ORIGINAL_HEIGHT,
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-                transformOrigin: 'center center',
-                overflow: 'hidden',
-                backgroundColor: '#000',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-            }}
-        >
-            {/* Main Cyberpunk Container with Aspect Ratio and Glow Borders */}
-            <div
-                style={{
-                    position: 'relative',
-                    width: '100%',
-                    height: '100%',
-                    background: 'radial-gradient(circle at center, #0a0216 0%, #05010a 100%)',
-                    overflow: 'hidden',
-                    boxShadow: '0 0 50px rgba(0, 0, 0, 1)',
-                }}
-            >
-                {/* 1. BACKGROUND LAYERS */}
-                
-                {/* Micro Hexagonal Structural Grid */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        inset: 0,
-                        backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='69.28203230275509' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M40 17.32050807568877l-20 11.547005383792516L0 17.32050807568877V-5.773502691896258l20-11.547005383792516 20 11.547005383792516V17.32050807568877zm0 46.18802153517006l-20 11.547005383792516-20-11.547005383792516V40.414513459481295l20-11.547005383792516 20 11.547005383792516v23.094010767585034z' fill='rgba%280, 229, 255, 0.04%29' fill-rule='evenodd'/%3E%3C/svg%3E")`,
-                        backgroundSize: '30px 52px',
-                        zIndex: 1,
-                    }}
-                />
+    PARTICLE_DATA.forEach((pt, i) => {
+      positions[i * 3] = Math.cos(pt.theta) * pt.radius;
+      positions[i * 3 + 1] = Math.sin(pt.theta) * pt.radius;
+      positions[i * 3 + 2] = pt.z;
+    });
 
-                {/* Cyber Scan / Speed Lines */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        background: 'repeating-linear-gradient(to bottom, transparent, transparent 49.5%, rgba(0, 229, 255, 0.05) 50%, transparent 50.5%)',
-                        backgroundSize: '100% 20px',
-                        opacity: 0.6,
-                        zIndex: 2,
-                    }}
-                />
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-                {/* Interactive Starfield & Particle Dust */}
-                <canvas
-                    ref={canvasRef}
-                    width={ORIGINAL_WIDTH}
-                    height={ORIGINAL_HEIGHT}
-                    style={{
-                        position: 'absolute',
-                        inset: 0,
-                        zIndex: 3,
-                    }}
-                />
+    const pMaterial = new THREE.PointsMaterial({
+      color: THEME.primaryColor,
+      size: 0.35,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
 
-                {/* 2. MAIN INTERACTIVE LAYOUT CONTENT */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        inset: 0,
-                        zIndex: 4,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '6% 8%',
-                        boxSizing: 'border-box',
-                    }}
-                >
-                    {/* LEFT PANEL - TARGETING / UI MONITORS */}
-                    <div
-                        style={{
-                            width: '44%',
-                            height: '85%',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-evenly',
-                        }}
-                    >
-                        {/* Box 1 */}
-                        <div
-                            style={{
-                                position: 'relative',
-                                width: '100%',
-                                aspectRatio: '16 / 9',
-                                borderRadius: '4px',
-                                border: '2px solid transparent',
-                                background: 'linear-gradient(#05010a, #05010a) padding-box, linear-gradient(135deg, #00e5ff 0%, #d900ff 100%) border-box',
-                                boxShadow: '0 0 10px rgba(0, 229, 255, 0.2), inset 0 0 15px rgba(217, 0, 255, 0.1)',
-                                overflow: 'hidden',
-                            }}
-                        >
-                            {/* Inner Grid / Reticle Lines (representing HUD UI) */}
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    border: '1px solid rgba(0, 229, 255, 0.05)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}
-                            >
-                                <div style={{ width: '40%', height: '40%', border: '1px dashed rgba(217, 0, 255, 0.2)', borderRadius: '50%' }} />
-                            </div>
+    const particles = new THREE.Points(particleGeo, pMaterial);
+    scene.add(particles);
+    particlesRef.current = particles;
 
-                            {/* Node Crosshairs */}
-                            <div style={{ position: 'absolute', backgroundColor: '#00e5ff', boxShadow: '0 0 8px #00e5ff', zIndex: 2, top: '-2px', left: '8%', width: '12px', height: '2px' }} />
-                            <div style={{ position: 'absolute', backgroundColor: '#00e5ff', boxShadow: '0 0 8px #00e5ff', zIndex: 2, top: '15%', left: '-2px', width: '2px', height: '12px' }} />
-                            
-                            <div style={{ position: 'absolute', backgroundColor: '#d900ff', boxShadow: '0 0 8px #d900ff', zIndex: 2, bottom: '-2px', right: '8%', width: '12px', height: '2px' }} />
-                            <div style={{ position: 'absolute', backgroundColor: '#d900ff', boxShadow: '0 0 8px #d900ff', zIndex: 2, bottom: '15%', right: '-2px', width: '2px', height: '12px' }} />
-                        </div>
+    // Abstract Sculptural Torus Knot Core
+    const complexGeometry = new THREE.TorusKnotGeometry(14, 3.5, 200, 32, 3, 5);
+    const meshMaterial = new THREE.MeshStandardMaterial({
+      color: THEME.secondaryColor,
+      wireframe: true,
+      roughness: 0.1,
+      metalness: 0.9,
+      emissive: THEME.secondaryColor,
+      emissiveIntensity: 0.45,
+    });
 
-                        {/* Box 2 */}
-                        <div
-                            style={{
-                                position: 'relative',
-                                width: '100%',
-                                aspectRatio: '16 / 9',
-                                borderRadius: '4px',
-                                border: '2px solid transparent',
-                                background: 'linear-gradient(#05010a, #05010a) padding-box, linear-gradient(135deg, #00e5ff 0%, #d900ff 100%) border-box',
-                                boxShadow: '0 0 10px rgba(0, 229, 255, 0.2), inset 0 0 15px rgba(217, 0, 255, 0.1)',
-                                overflow: 'hidden',
-                            }}
-                        >
-                            {/* Inner Grid / Reticle Lines */}
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    border: '1px solid rgba(0, 229, 255, 0.05)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}
-                            >
-                                <div style={{ width: '60%', height: '1px', backgroundColor: 'rgba(0, 229, 255, 0.15)' }} />
-                                <div style={{ height: '60%', width: '1px', backgroundColor: 'rgba(0, 229, 255, 0.15)', position: 'absolute' }} />
-                            </div>
+    const complexMesh = new THREE.Mesh(complexGeometry, meshMaterial);
+    complexMesh.position.set(0, 0, -10);
+    scene.add(complexMesh);
+    complexMeshRef.current = complexMesh;
 
-                            {/* Node Crosshairs */}
-                            <div style={{ position: 'absolute', backgroundColor: '#00e5ff', boxShadow: '0 0 8px #00e5ff', zIndex: 2, top: '-2px', left: '8%', width: '12px', height: '2px' }} />
-                            <div style={{ position: 'absolute', backgroundColor: '#00e5ff', boxShadow: '0 0 8px #00e5ff', zIndex: 2, top: '15%', left: '-2px', width: '2px', height: '12px' }} />
-                            
-                            <div style={{ position: 'absolute', backgroundColor: '#d900ff', boxShadow: '0 0 8px #d900ff', zIndex: 2, bottom: '-2px', right: '8%', width: '12px', height: '2px' }} />
-                            <div style={{ position: 'absolute', backgroundColor: '#d900ff', boxShadow: '0 0 8px #d900ff', zIndex: 2, bottom: '15%', right: '-2px', width: '2px', height: '12px' }} />
-                        </div>
-                    </div>
+    // Lights
+    const dirLight1 = new THREE.DirectionalLight(0xffffff, 2);
+    dirLight1.position.set(1, 1, 1).normalize();
+    scene.add(dirLight1);
 
-                    {/* RIGHT PANEL - COMPLEX ANOMALY VORTEX PORTAL */}
-                    <div
-                        style={{
-                            width: '45%',
-                            height: '100%',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                        }}
-                    >
-                        <div
-                            style={{
-                                width: '90%',
-                                aspectRatio: '1 / 1',
-                                position: 'relative',
-                                display: 'flex',
-                                justifyContent: 'center',
-                                alignItems: 'center',
-                                transform: `scale(${portalPulse})`,
-                            }}
-                        >
-                            {/* Ambient External Portal Glow */}
-                            <div
-                                style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    borderRadius: '50%',
-                                    background: 'radial-gradient(circle, transparent 50%, rgba(0, 229, 255, 0.1) 65%, transparent 75%)',
-                                    position: 'absolute',
-                                }}
-                            />
+    const pointLight = new THREE.PointLight(THEME.primaryColor, 3, 100);
+    pointLight.position.set(0, 0, 10);
+    scene.add(pointLight);
 
-                            {/* Hard-surface Portal Cybernetic Containment Ring */}
-                            <div
-                                style={{
-                                    width: '90%',
-                                    height: '90%',
-                                    borderRadius: '50%',
-                                    border: '2px solid transparent',
-                                    background: 'linear-gradient(#05010a, #05010a) padding-box, linear-gradient(135deg, #00e5ff 20%, #d900ff 80%) border-box',
-                                    boxShadow: '0 0 20px rgba(0, 229, 255, 0.4), inset 0 0 25px rgba(217, 0, 255, 0.4)',
-                                    position: 'absolute',
-                                    zIndex: 5,
-                                }}
-                            />
+    return () => {
+      renderer.dispose();
+      particleGeo.dispose();
+      pMaterial.dispose();
+      complexGeometry.dispose();
+      meshMaterial.dispose();
+    };
+  }, []);
 
-                            {/* Animated Conic Glow Aura */}
-                            <div
-                                style={{
-                                    width: '105%',
-                                    height: '105%',
-                                    position: 'absolute',
-                                    background: 'conic-gradient(from 0deg, transparent 0%, rgba(0, 229, 255, 0.25) 15%, transparent 30%, rgba(217, 0, 255, 0.25) 60%, transparent 80%)',
-                                    borderRadius: '50%',
-                                    filter: 'blur(12px)',
-                                    transform: `rotate(${spinCoreDeg}deg)`,
-                                }}
-                            />
+  // Frame-Locked Updates
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const particles = particlesRef.current;
+    const complexMesh = complexMeshRef.current;
 
-                            {/* Outer Cyan Organic Plasma Filament */}
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%',
-                                    mixBlendMode: 'screen',
-                                    opacity: 0.8,
-                                    width: '85%',
-                                    height: '85%',
-                                    border: '3px solid #00e5ff',
-                                    filter: 'blur(4px)',
-                                    transform: `rotate(${spinCyan1Deg}deg)`,
-                                }}
-                            />
+    if (!renderer || !scene || !camera) return;
 
-                            {/* Middle Magenta Organic Plasma Filament (Counter-rotating) */}
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    borderRadius: '50% 50% 30% 70% / 60% 40% 70% 30%',
-                                    mixBlendMode: 'screen',
-                                    opacity: 0.8,
-                                    width: '75%',
-                                    height: '75%',
-                                    border: '4px solid #d900ff',
-                                    filter: 'blur(5px)',
-                                    transform: `rotate(${spinMag1Deg}deg)`,
-                                }}
-                            />
+    // Seamless camera rotation/drift path mapping
+    camera.position.x = Math.sin(elapsedTime * loopFreq) * 2.5;
+    camera.position.y = Math.cos(elapsedTime * loopFreq) * 1.8;
+    camera.lookAt(scene.position);
 
-                            {/* Deep Core Cyan Plasma Filament */}
-                            <div
-                                style={{
-                                    position: 'absolute',
-                                    borderRadius: '60% 40% 50% 50% / 30% 60% 40% 70%',
-                                    mixBlendMode: 'screen',
-                                    opacity: 0.8,
-                                    width: '65%',
-                                    height: '65%',
-                                    border: '2px solid #00e5ff',
-                                    filter: 'blur(3px)',
-                                    transform: `rotate(${spinCyan2Deg}deg)`,
-                                }}
-                            />
+    // Knot core continuous seamless transformation
+    if (complexMesh) {
+      complexMesh.rotation.x = elapsedTime * loopFreq * 2;
+      complexMesh.rotation.y = elapsedTime * loopFreq * 3;
+      complexMesh.rotation.z = Math.sin(elapsedTime * loopFreq) * 0.5;
+    }
 
-                            {/* Singularity / Center Black Hole */}
-                            <div
-                                style={{
-                                    width: '55%',
-                                    height: '55%',
-                                    borderRadius: '50%',
-                                    background: 'radial-gradient(circle, #000000 40%, #05010a 70%, transparent 100%)',
-                                    position: 'absolute',
-                                    zIndex: 4,
-                                    boxShadow: 'inset 0 0 20px rgba(0, 0, 0, 1)',
-                                }}
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
+    // Mathematical dynamic particle stream updates
+    if (particles) {
+      const positions = particles.geometry.attributes.position.array as Float32Array;
+      const zRange = 120;
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const pt = PARTICLE_DATA[i];
+        let currentZ = pt.z + elapsedTime * 16.0;
+        currentZ = ((currentZ + 60) % zRange) - 60; // Clean viewport modulo wrap
+
+        const idx = i * 3;
+        positions[idx] = Math.cos(pt.theta) * pt.radius + Math.sin(elapsedTime * loopFreq * 5 + pt.phase) * 1.5;
+        positions[idx + 1] = Math.sin(pt.theta) * pt.radius + Math.cos(elapsedTime * loopFreq * 5 + pt.phase) * 1.5;
+        positions[idx + 2] = currentZ;
+      }
+
+      particles.geometry.attributes.position.needsUpdate = true;
+      particles.rotation.z = elapsedTime * loopFreq;
+    }
+
+    renderer.render(scene, camera);
+  }, [localFrame, elapsedTime, loopFreq]);
+
+  // Frame-Locked Gradient Sweep (4.5s cycle)
+  const sweepFrame = localFrame % (fps * 4.5);
+  const sweepPercent = interpolate(sweepFrame, [0, fps * 4.5], [-100, 100], {
+    easing: Easing.inOut(Easing.quad),
+  });
+
+  // Infinite Ambient Float Mechanics for Placeholders
+  const floatYLeft = Math.sin(elapsedTime * loopFreq * 2) * 10;
+  const floatYRight = Math.cos(elapsedTime * loopFreq * 2) * 10;
+  const floatXLeft = Math.cos(elapsedTime * loopFreq) * 6;
+  const floatXRight = -Math.cos(elapsedTime * loopFreq) * 6;
+
+  // Reveal Animations
+  const videoYOffset = interpolate(uiTransition, [0, 1], [60, 0]);
+  const videoScale = interpolate(uiTransition, [0, 1], [0.8, 1]);
+  const subscribeScale = interpolate(uiTransition, [0, 1], [0, 1], {
+    easing: Easing.bezier(0.25, 1, 0.5, 1.15),
+  });
+
+  // Seamless ring rotation coordinates
+  const ring1Rotation = (localFrame / totalFrames) * 360;
+  const ring2Rotation = 360 - (localFrame / totalFrames) * 360;
+
+  // Style Definitions (Guaranteeing CamelCase JSX compliance)
+  const wrapperStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    background: 'radial-gradient(circle at 50% 50%, #0a0616 0%, #020105 100%)',
+  };
+
+  const uiLayerStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 10,
+    pointerEvents: 'auto',
+    boxSizing: 'border-box',
+    padding: '90px',
+  };
+
+  const videoPlaceholderBase: React.CSSProperties = {
+    position: 'absolute',
+    width: '620px',
+    height: '348px',
+    background: THEME.glassBg,
+    backdropFilter: 'blur(25px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(25px) saturate(180%)',
+    border: `3px solid ${THEME.glassBorder}`,
+    borderRadius: '24px',
+    boxShadow: `0 0 50px rgba(0, 0, 0, 0.8), inset 0 0 30px rgba(255, 255, 255, 0.05), 0 0 30px ${THEME.glassBorder}`,
+    overflow: 'hidden',
+  };
+
+  const leftVideoStyle: React.CSSProperties = {
+    ...videoPlaceholderBase,
+    left: '110px',
+    top: '366px',
+    transform: `translate(${floatXLeft}px, ${floatYLeft + videoYOffset}px) scale(${videoScale})`,
+    opacity: uiTransition,
+  };
+
+  const rightVideoStyle: React.CSSProperties = {
+    ...videoPlaceholderBase,
+    right: '110px',
+    top: '366px',
+    transform: `translate(${floatXRight}px, ${floatYRight + videoYOffset}px) scale(${videoScale})`,
+    opacity: uiTransition,
+  };
+
+  const sweepOverlayStyle: React.CSSProperties = {
+    content: '""',
+    position: 'absolute',
+    top: '-50%',
+    left: '-50%',
+    width: '200%',
+    height: '200%',
+    background: 'linear-gradient(45deg, transparent 45%, rgba(255, 255, 255, 0.1) 50%, transparent 55%)',
+    transform: `translate(${sweepPercent}%, ${sweepPercent}%) rotate(45deg)`,
+    pointerEvents: 'none',
+  };
+
+  const subscribeWrapperStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: '50%',
+    top: '540px',
+    transform: 'translate(-50%, -50%)',
+    width: '280px',
+    height: '280px',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+  };
+
+  const outerRingBaseStyle: React.CSSProperties = {
+    position: 'absolute',
+    borderRadius: '50%',
+    opacity: 0.6 * uiTransition,
+    pointerEvents: 'none',
+  };
+
+  const ring1Style: React.CSSProperties = {
+    ...outerRingBaseStyle,
+    width: '250px',
+    height: '250px',
+    border: `2px dashed ${THEME.cssGlowSec}`,
+    filter: `drop-shadow(0 0 8px ${THEME.cssGlowSec})`,
+    transform: `rotate(${ring1Rotation}deg)`,
+  };
+
+  const ring2Style: React.CSSProperties = {
+    ...outerRingBaseStyle,
+    width: '275px',
+    height: '275px',
+    border: `1px solid ${THEME.cssGlow}`,
+    borderImage: `linear-gradient(to right, ${THEME.cssGlow} 40px, transparent 180px) 1`,
+    filter: `drop-shadow(0 0 12px ${THEME.cssGlow})`,
+    transform: `rotate(${ring2Rotation}deg)`,
+  };
+
+  const subscribeCircleStyle: React.CSSProperties = {
+    width: '190px',
+    height: '190px',
+    background: THEME.glassBg,
+    backdropFilter: 'blur(30px)',
+    WebkitBackdropFilter: 'blur(30px)',
+    border: `4px solid ${THEME.cssGlow}`,
+    borderRadius: '50%',
+    boxShadow: `0 0 60px rgba(0, 0, 0, 0.9), 0 0 40px ${THEME.cssGlow}, inset 0 0 25px rgba(255, 255, 255, 0.1)`,
+    position: 'relative',
+    zIndex: 5,
+    cursor: 'pointer',
+    transform: `scale(${subscribeScale})`,
+    opacity: uiTransition,
+  };
+
+  const vignetteStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    background: 'radial-gradient(circle at 50% 50%, transparent 30%, rgba(2, 1, 5, 0.85) 100%)',
+    zIndex: 5,
+    pointerEvents: 'none',
+  };
+
+  return (
+    <div style={wrapperStyle}>
+      <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' }} />
+      <div style={vignetteStyle} />
+      <div style={uiLayerStyle}>
+        <div style={leftVideoStyle}>
+          <div style={sweepOverlayStyle} />
         </div>
-    );
+
+        <div style={subscribeWrapperStyle}>
+          <div style={ring1Style} />
+          <div style={ring2Style} />
+          <div style={subscribeCircleStyle} />
+        </div>
+
+        <div style={rightVideoStyle}>
+          <div style={sweepOverlayStyle} />
+        </div>
+      </div>
+    </div>
+  );
 };
 
-export default CyberpunkUI;
+export default PremiumCinematicEndscreen;
 // END_OF_FILE
