@@ -52,7 +52,9 @@ const chatUpload = multer({
 const dbPath = path.join(__dirname, "saved-items.json");
 if (!fs.existsSync(dbPath)) {
   fs.writeFileSync(dbPath, JSON.stringify([]));
-} else {
+}
+
+function performStartupCleanup() {
   // Scan and fix stale states on startup
   try {
     const data = fs.readFileSync(dbPath, "utf-8");
@@ -5162,6 +5164,9 @@ app.get("/api/proxy-image", async (req, res) => {
     res.status(500).send("Gagal memproses gambar");
   }
 });
+
+// Jalankan pembersihan database startup setelah semua queue didefinisikan
+performStartupCleanup();
 
 const PORT = 5000;
 app.listen(PORT, () => {
