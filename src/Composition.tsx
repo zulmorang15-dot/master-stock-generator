@@ -1,434 +1,540 @@
-import React, { useMemo } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-// Perfectly deterministic particle setups to support smooth looping (all durations must divide 600 perfectly)
-const PARTICLES = [
-  { id: 1, left: 8, duration: 150, delay: 35, scale: 1.2, colorType: 0 },
-  { id: 2, left: 14, duration: 200, delay: 110, scale: 0.8, colorType: 1 },
-  { id: 3, left: 22, duration: 300, delay: 215, scale: 1.5, colorType: 2 },
-  { id: 4, left: 29, duration: 120, delay: 15, scale: 0.9, colorType: 0 },
-  { id: 5, left: 35, duration: 150, delay: 85, scale: 1.1, colorType: 1 },
-  { id: 6, left: 41, duration: 200, delay: 45, scale: 1.6, colorType: 2 },
-  { id: 7, left: 47, duration: 300, delay: 160, scale: 0.7, colorType: 0 },
-  { id: 8, left: 54, duration: 120, delay: 95, scale: 1.3, colorType: 1 },
-  { id: 9, left: 60, duration: 150, delay: 125, scale: 1.0, colorType: 2 },
-  { id: 10, left: 66, duration: 200, delay: 5, scale: 1.4, colorType: 0 },
-  { id: 11, left: 73, duration: 300, delay: 280, scale: 0.6, colorType: 1 },
-  { id: 12, left: 79, duration: 120, delay: 40, scale: 1.2, colorType: 2 },
-  { id: 13, left: 85, duration: 150, delay: 65, scale: 1.1, colorType: 0 },
-  { id: 14, left: 92, duration: 200, delay: 175, scale: 1.7, colorType: 1 },
-  { id: 15, left: 11, duration: 300, delay: 90, scale: 0.8, colorType: 2 },
-  { id: 16, left: 19, duration: 120, delay: 70, scale: 1.3, colorType: 0 },
-  { id: 17, left: 26, duration: 150, delay: 145, scale: 1.0, colorType: 1 },
-  { id: 18, left: 33, duration: 200, delay: 30, scale: 1.5, colorType: 2 },
-  { id: 19, left: 38, duration: 300, delay: 220, scale: 0.9, colorType: 0 },
-  { id: 20, left: 44, duration: 120, delay: 105, scale: 1.2, colorType: 1 },
-  { id: 21, left: 51, duration: 150, delay: 55, scale: 0.5, colorType: 2 },
-  { id: 22, left: 57, duration: 200, delay: 135, scale: 1.4, colorType: 0 },
-  { id: 23, left: 64, duration: 300, delay: 15, scale: 1.1, colorType: 1 },
-  { id: 24, left: 70, duration: 120, delay: 85, scale: 1.6, colorType: 2 },
-  { id: 25, left: 77, duration: 150, delay: 115, scale: 0.7, colorType: 0 },
-  { id: 26, left: 83, duration: 200, delay: 195, scale: 1.3, colorType: 1 },
-  { id: 27, left: 89, duration: 300, delay: 50, scale: 1.0, colorType: 2 },
-  { id: 28, left: 95, duration: 120, delay: 25, scale: 1.5, colorType: 0 }
-];
+// Deterministic hexagon grid node generator
+const generateHexGrid = () => {
+  const hexes = [];
+  const R = 34; // radius
+  const w = R * 2; // flat-top width
+  const h = Math.sqrt(3) * R; // flat-top height
+  const hSpacing = w * 0.75; // column spacing
 
-const AuroraGlassEndscreen: React.FC = () => {
-  const { width, height, fps } = useVideoConfig();
+  // Loop to completely fill 1920x1080 with padding
+  for (let col = -1; col * hSpacing < ORIGINAL_WIDTH + w; col++) {
+    for (let row = -1; row * h < ORIGINAL_HEIGHT + h; row++) {
+      const x = col * hSpacing;
+      const y = row * h + (col % 2 !== 0 ? h / 2 : 0);
+
+      const dx = (x - ORIGINAL_WIDTH * 0.5) / (ORIGINAL_WIDTH * 0.5);
+      const dy = (y - ORIGINAL_HEIGHT * 0.4) / (ORIGINAL_HEIGHT * 0.5);
+      const dist = Math.min(1, Math.sqrt(dx * dx + dy * dy));
+      const base = 0.10 + (1 - dist) * 0.30;
+
+      // Deterministic phase/speed to avoid Math.random()
+      const hash1 = Math.abs(Math.sin(col * 12.9898 + row * 78.233) * 43758.5453) % 1;
+      const hash2 = Math.abs(Math.cos(col * 45.123 + row * 9.876) * 12345.6789) % 1;
+      const phase = hash1 * Math.PI * 2;
+      const spd = 0.4 + hash2 * 1.2;
+
+      hexes.push({ x, y, base, phase, spd });
+    }
+  }
+  return hexes;
+};
+
+const EndScreenPro: React.FC = () => {
+  const { width, height } = useVideoConfig();
   const frame = useCurrentFrame();
-
-  // Scale calculations to support high fidelity responsive canvas without letterboxes
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // Background Grid motion (75 frames = 2.5 seconds loop)
-  const gridFrame = frame % 75;
-  const gridY = interpolate(gridFrame, [0, 75], [0, 50], { easing: Easing.linear });
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const hexes = useMemo(() => generateHexGrid(), []);
 
-  // Aurora floating motion math (deterministic trigonometry with seamless cycle over 600 frames)
-  const float1X = Math.sin((frame / 600) * Math.PI * 2) * 8;
-  const float1Y = Math.cos((frame / 600) * Math.PI * 2) * 12;
-  const float1Scale = 1 + (Math.sin((frame / 600) * Math.PI * 2) + 1) * 0.075;
+  // Frame-locked canvas renderer
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-  const float2X = Math.sin((frame / 600) * Math.PI * 4) * -10;
-  const float2Y = Math.cos((frame / 600) * Math.PI * 4) * -8;
-  const float2Scale = 1 + (Math.sin((frame / 600) * Math.PI * 4) + 1) * 0.1;
+    ctx.clearRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+    const R = 34;
+    const t = frame * 0.02;
 
-  const float3X = Math.sin((frame / 600) * Math.PI * 2 + 1) * -6;
-  const float3Y = Math.cos((frame / 600) * Math.PI * 2 + 1) * 10;
-  const float3Scale = 0.9 + (Math.sin((frame / 600) * Math.PI * 2 + 1) + 1) * 0.1;
+    hexes.forEach((hx) => {
+      const flick = 0.5 + 0.5 * Math.sin(t * hx.spd + hx.phase);
+      const alpha = hx.base * 0.4 + hx.base * flick;
 
-  // Central Glass Panel Entrance and Exit timeline mappings
-  const panelOpacity = interpolate(frame, [0, 45, 550, 600], [0, 1, 1, 0], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const panelScale = interpolate(frame, [0, 45, 550, 600], [0.85, 0.92, 0.92, 0.85], {
-    easing: Easing.inOut(Easing.quad),
-  });
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 180) * (60 * i);
+        const px = hx.x + R * Math.cos(a);
+        const py = hx.y + R * Math.sin(a);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = `rgba(90, 165, 225, ${alpha})`;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = `rgba(150, 210, 255, ${alpha * 0.6})`;
+      ctx.stroke();
+    });
+  }, [frame, hexes]);
 
-  // Glossy Sweep inside Central Glass Panel (150 frames = 5s loop, divides 600 perfectly)
-  const sweepFrame = frame % 150;
-  const sweepProgress = interpolate(sweepFrame, [0, 90, 150], [200, -100, -100], {
-    easing: Easing.inOut(Easing.quad),
-  });
+  // Corner floats (6s and 7.5s cycles fit perfectly in 15s)
+  const fA = frame % 180;
+  const txA = interpolate(fA, [0, 90, 180], [0, 15, 0], { easing: Easing.inOut(Easing.quad) });
+  const tyA = interpolate(fA, [0, 90, 180], [0, 15, 0], { easing: Easing.inOut(Easing.quad) });
+  const rotA = interpolate(fA, [0, 90, 180], [0, 8, 0], { easing: Easing.inOut(Easing.quad) });
 
-  // Conic-Gradient Color Rotation for Avatar (150 frames cycle)
-  const avatarHue = interpolate(frame % 150, [0, 150], [0, 360], { easing: Easing.linear });
+  const fB = frame % 225;
+  const txB = interpolate(fB, [0, 112.5, 225], [15, 0, 15], { easing: Easing.inOut(Easing.quad) });
+  const tyB = interpolate(fB, [0, 112.5, 225], [15, 0, 15], { easing: Easing.inOut(Easing.quad) });
+  const rotB = interpolate(fB, [0, 112.5, 225], [8, 0, 8], { easing: Easing.inOut(Easing.quad) });
 
-  // Expanding Pulse Ring from Avatar (75 frames cycle)
-  const ringFrame = frame % 75;
-  const ringScale = interpolate(ringFrame, [0, 75], [1, 1.5], { easing: Easing.out(Easing.quad) });
-  const ringOpacity = interpolate(ringFrame, [0, 75], [0.9, 0], { easing: Easing.out(Easing.quad) });
-
-  // Pulsing CTA Button (75 frames cycle)
-  const btnFrame = frame % 75;
-  const btnScale = interpolate(btnFrame, [0, 37.5, 75], [1, 1.05, 1], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const btnShadowBlur = interpolate(btnFrame, [0, 37.5, 75], [18, 32, 18], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const btnShadowR = 255;
-  const btnShadowG = interpolate(btnFrame, [0, 37.5, 75], [107, 184, 107], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const btnShadowB = interpolate(btnFrame, [0, 37.5, 75], [107, 108, 107], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const btnShadowA = interpolate(btnFrame, [0, 37.5, 75], [0.5, 0.9, 0.5], {
-    easing: Easing.inOut(Easing.quad),
-  });
-
-  // Left Slot Timeline (staggered entrance, seamless exit)
-  const slotLeftOpacity = interpolate(frame, [0, 15, 60, 540, 585, 600], [0, 0, 1, 1, 0, 0], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const slotLeftY = interpolate(frame, [0, 15, 60, 540, 585, 600], [30, 30, 0, 0, 30, 30], {
-    easing: Easing.inOut(Easing.quad),
-  });
-
-  // Right Slot Timeline (staggered entrance, seamless exit)
-  const slotRightOpacity = interpolate(frame, [0, 25, 70, 530, 575, 600], [0, 0, 1, 1, 0, 0], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const slotRightY = interpolate(frame, [0, 25, 70, 530, 575, 600], [30, 30, 0, 0, 30, 30], {
-    easing: Easing.inOut(Easing.quad),
-  });
-
-  // Thumbnail Shimmering Overlay (120 frames cycle)
-  const shimmerOpacity = interpolate(frame % 120, [0, 60, 120], [0.4, 0.9, 0.4], {
-    easing: Easing.inOut(Easing.quad),
-  });
-
-  // CSS Styles built with Strict camelCase keys (no compiler crashing)
-  const stageStyle: React.CSSProperties = {
-    position: 'absolute',
-    width: ORIGINAL_WIDTH,
-    height: ORIGINAL_HEIGHT,
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-    transformOrigin: 'center center',
-    overflow: 'hidden',
-    background: 'radial-gradient(ellipse at 30% 20%, rgba(47, 243, 224, 0.12), transparent 50%), radial-gradient(ellipse at 80% 90%, rgba(255, 107, 107, 0.14), transparent 55%), linear-gradient(160deg, #04141a 0%, #071f23 50%, #0a0d1a 100%)',
-    boxShadow: '0 0 80px rgba(47, 243, 224, 0.15)',
-    fontFamily: "'Segoe UI', 'Arial', sans-serif",
+  // Blinking dot decor
+  const getBlinkOpacity = (index: number) => {
+    const delay = index * 6;
+    const f = (frame - delay + 36) % 36;
+    return interpolate(f, [0, 18, 36], [1, 0.2, 1], { easing: Easing.inOut(Easing.quad) });
   };
 
-  const auroraBase: React.CSSProperties = {
-    position: 'absolute',
-    borderRadius: '50%',
-    filter: 'blur(70px)',
-    opacity: 0.55,
-    mixBlendMode: 'screen',
+  // Title bounce and wiggle (seamless loop)
+  const wiggleY = interpolate(frame % 90, [0, 22.5, 67.5, 90], [0, -6, -4, 0], { easing: Easing.inOut(Easing.quad) });
+  const wiggleRot = interpolate(frame % 90, [0, 22.5, 67.5, 90], [0, -1, 1, 0], { easing: Easing.inOut(Easing.quad) });
+
+  const titleText = "THANKS FOR WATCHING";
+
+  // Video frames colors and glow calculation
+  const getFrameStyle = (offset: number) => {
+    const f = (frame + offset) % 72;
+    const glowRadius = interpolate(f, [0, 36, 72], [20, 45, 20], { easing: Easing.inOut(Easing.quad) });
+    const r = interpolate(f, [0, 36, 72], [255, 249, 255]);
+    const g = interpolate(f, [0, 36, 72], [255, 132, 255]);
+    const b = interpolate(f, [0, 36, 72], [255, 74, 255]);
+    const a = interpolate(f, [0, 36, 72], [0.25, 0.8, 0.25]);
+
+    return {
+      borderColor: `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, 1)`,
+      boxShadow: `0 0 ${glowRadius}px rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${a})`,
+    };
   };
 
-  const a1Style: React.CSSProperties = {
-    ...auroraBase,
-    width: '45%',
-    aspectRatio: '1',
-    background: '#2ff3e0',
-    top: '-10%',
-    left: '5%',
-    transform: `translate(${float1X}%, ${float1Y}%) scale(${float1Scale})`,
+  // Shine translate animation inside frames
+  const shineX = interpolate(frame % 90, [0, 54, 90], [-100, 200, 200], { easing: Easing.inOut(Easing.quad) });
+
+  // Center circle spin and pulse
+  const circleRot = interpolate(frame % 360, [0, 360], [0, 360]);
+  const revCircleRot = interpolate(frame % 360, [0, 360], [0, -360]);
+  const fCirclePulse = frame % 90;
+  const circleGlowRad = interpolate(fCirclePulse, [0, 45, 90], [25, 55, 25], { easing: Easing.inOut(Easing.quad) });
+  const circleGlowR = interpolate(fCirclePulse, [0, 45, 90], [255, 249, 255]);
+  const circleGlowG = interpolate(fCirclePulse, [0, 45, 90], [255, 132, 255]);
+  const circleGlowB = interpolate(fCirclePulse, [0, 45, 90], [255, 74, 255]);
+  const circleGlowA = interpolate(fCirclePulse, [0, 45, 90], [0.3, 0.9, 0.3]);
+  const circleShadow = `0 0 ${circleGlowRad}px rgba(${Math.round(circleGlowR)}, ${Math.round(circleGlowG)}, ${Math.round(circleGlowB)}, ${circleGlowA})`;
+
+  // Buttons jelly scales
+  const getButtonScale = (offset: number) => {
+    const f = (frame - offset + 72) % 72;
+    const x = interpolate(f, [0, 21.6, 43.2, 72], [1, 1.12, 0.95, 1], { easing: Easing.inOut(Easing.quad) });
+    const y = interpolate(f, [0, 21.6, 43.2, 72], [1, 0.88, 1.05, 1], { easing: Easing.inOut(Easing.quad) });
+    return { x, y };
   };
 
-  const a2Style: React.CSSProperties = {
-    ...auroraBase,
-    width: '40%',
-    aspectRatio: '1',
-    background: '#ff6b6b',
-    bottom: '-15%',
-    right: '8%',
-    transform: `translate(${float2X}%, ${float2Y}%) scale(${float2Scale})`,
-  };
+  const btnLeftScale = getButtonScale(48);
+  const btnRightScale = getButtonScale(54);
 
-  const a3Style: React.CSSProperties = {
-    ...auroraBase,
-    width: '30%',
-    aspectRatio: '1',
-    background: '#ffb86c',
-    top: '40%',
-    left: '40%',
-    transform: `translate(${float3X}%, ${float3Y}%) scale(${float3Scale})`,
-  };
+  // Subscribe scale and Y bounce
+  const subScale = interpolate(frame % 50, [0, 20, 35, 50], [1, 1.14, 0.97, 1], { easing: Easing.inOut(Easing.quad) });
+  const subY = interpolate(frame % 50, [0, 20, 35, 50], [0, -6, 0, 0], { easing: Easing.inOut(Easing.quad) });
 
-  const gridStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: 0,
-    left: '50%',
-    transform: 'translateX(-50%) perspective(400px) rotateX(62deg)',
-    width: '200%',
-    height: '55%',
-    backgroundImage: 'linear-gradient(rgba(47, 243, 224, 0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(47, 243, 224, 0.25) 1px, transparent 1px)',
-    backgroundSize: '50px 50px',
-    transformOrigin: 'bottom center',
-    WebkitMaskImage: 'linear-gradient(transparent, #000 70%)',
-    maskImage: 'linear-gradient(transparent, #000 70%)',
-    backgroundPositionY: `${gridY}px`,
-  };
+  // Cursor indicator
+  const cursorY = interpolate(frame % 60, [0, 30, 60], [0, -12, 0], { easing: Easing.inOut(Easing.quad) });
+  const cursorScale = interpolate(frame % 60, [0, 30, 60], [1, 0.85, 1], { easing: Easing.inOut(Easing.quad) });
 
-  const panelStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${panelScale})`,
-    width: '58%',
-    padding: '43px 96px',
-    background: 'rgba(255, 255, 255, 0.06)',
-    border: '1px solid rgba(255, 255, 255, 0.18)',
-    borderRadius: '22px',
-    WebkitBackdropFilter: 'blur(14px)',
-    backdropFilter: 'blur(14px)',
-    boxShadow: '0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.25)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '55px',
-    opacity: panelOpacity,
-    overflow: 'hidden',
-  };
-
-  const sweepStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    borderRadius: '22px',
-    background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.18) 48%, transparent 60%)',
-    backgroundSize: '250% 100%',
-    backgroundPosition: `${sweepProgress}% 0`,
-    pointerEvents: 'none',
-  };
-
-  const avatarStyle: React.CSSProperties = {
-    flexShrink: 0,
-    width: '312px',
-    height: '312px',
-    borderRadius: '50%',
-    background: 'conic-gradient(from 0deg, #2ff3e0, #ffb86c, #ff6b6b, #2ff3e0)',
-    padding: '4px',
-    position: 'relative',
-    filter: `hue-rotate(${avatarHue}deg)`,
-    boxShadow: '0 0 30px rgba(47,243,224,0.5), 0 0 50px rgba(255,107,107,0.3)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  };
-
-  const avatarInnerStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: '4px',
-    borderRadius: '50%',
-    background: 'radial-gradient(circle at 35% 30%, #0d2a2e, #061417)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#fff',
-    fontSize: '58px',
-    textShadow: '0 0 12px #2ff3e0',
-  };
-
-  const ringStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: '-10px',
-    borderRadius: '50%',
-    border: '2px solid rgba(47,243,224,0.7)',
-    transform: `scale(${ringScale})`,
-    opacity: ringOpacity,
-    pointerEvents: 'none',
-  };
-
-  const infoStyle: React.CSSProperties = {
-    flex: 1,
-    position: 'relative',
-    zIndex: 2,
-  };
-
-  const h1Style: React.CSSProperties = {
-    color: '#fff',
-    fontSize: '50px',
-    fontWeight: 800,
-    letterSpacing: '1px',
-    lineHeight: 1.1,
-    marginBottom: '15px',
-    textShadow: '0 0 18px rgba(47,243,224,0.4)',
-  };
-
-  const subBtnStyle: React.CSSProperties = {
-    display: 'inline-block',
-    padding: '15px 45px',
-    background: 'linear-gradient(135deg, #ff6b6b, #ffb86c)',
-    color: '#1a0a0a',
-    fontWeight: 800,
-    letterSpacing: '2px',
-    fontSize: '26px',
-    borderRadius: '40px',
-    boxShadow: `0 0 ${btnShadowBlur}px rgba(${btnShadowR}, ${btnShadowG}, ${btnShadowB}, ${btnShadowA})`,
-    transform: `scale(${btnScale})`,
-    position: 'relative',
-  };
-
-  const slotBaseStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: '65px',
-    width: '500px',
-    height: '281px',
-    borderRadius: '12px',
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    WebkitBackdropFilter: 'blur(6px)',
-    backdropFilter: 'blur(6px)',
-    overflow: 'hidden',
-  };
-
-  const slotLeftStyle: React.CSSProperties = {
-    ...slotBaseStyle,
-    left: '96px',
-    opacity: slotLeftOpacity,
-    transform: `translateY(${slotLeftY}px)`,
-  };
-
-  const slotRightStyle: React.CSSProperties = {
-    ...slotBaseStyle,
-    right: '96px',
-    opacity: slotRightOpacity,
-    transform: `translateY(${slotRightY}px)`,
-  };
-
-  const slotShimmerStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    background: 'linear-gradient(135deg, rgba(47,243,224,0.18), rgba(255,107,107,0.18))',
-    opacity: shimmerOpacity,
-  };
-
-  const slotPlayStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%,-50%)',
-    width: '110px',
-    height: '110px',
-    borderRadius: '50%',
-    background: 'rgba(255,255,255,0.85)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#0a2a2e',
-    fontSize: '27px',
-    boxShadow: '0 0 14px rgba(255,255,255,0.6)',
-  };
-
-  const particlesContainerStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    overflow: 'hidden',
-    pointerEvents: 'none',
-  };
-
-  const vignetteStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none',
-    background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%)',
-  };
+  // Progress Bar Width
+  const progressWidthPct = (frame / 450) * 100;
 
   return (
-    <div style={stageStyle}>
-      {/* Background Aurora Blobs */}
-      <div style={a1Style} />
-      <div style={a2Style} />
-      <div style={a3Style} />
+    <div
+      style={{
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+        background: 'radial-gradient(circle at 50% 38%, #1a5f9e 0%, #0d3f6e 55%, #07294a 100%)',
+        fontFamily: "'Arial Black', Arial, sans-serif",
+      }}
+    >
+      {/* Canvas Grid Background */}
+      <canvas
+        ref={canvasRef}
+        width={ORIGINAL_WIDTH}
+        height={ORIGINAL_HEIGHT}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 1,
+        }}
+      />
 
-      {/* Retro Grid */}
-      <div style={gridStyle} />
-
-      {/* Floating Particles Stream */}
-      <div style={particlesContainerStyle}>
-        {PARTICLES.map((p) => {
-          const pFrame = (frame + p.delay) % p.duration;
-          const progress = pFrame / p.duration;
-          const yTranslation = interpolate(progress, [0, 1], [1100, -200], {
-            easing: Easing.linear,
-          });
-          const op = interpolate(progress, [0, 0.1, 0.9, 1], [0, 1, 0.8, 0], {
-            easing: Easing.linear,
-          });
-
-          let pShadow = '0 0 8px #ff6b6b';
-          if (p.colorType === 1) pShadow = '0 0 8px #ffb86c';
-          if (p.colorType === 2) pShadow = '0 0 8px #2ff3e0';
-
-          const dotStyle: React.CSSProperties = {
-            position: 'absolute',
-            width: '4px',
-            height: '4px',
+      {/* Blobs & Corners */}
+      {/* Top Left */}
+      <div
+        style={{
+          position: 'absolute',
+          zIndex: 2,
+          top: -110,
+          left: -110,
+          transform: `translate(${txA}px, ${tyA}px) rotate(${rotA}deg)`,
+        }}
+      >
+        <div
+          style={{
             borderRadius: '50%',
-            background: '#fff',
-            left: `${p.left}%`,
-            top: `${yTranslation}px`,
-            opacity: op,
-            transform: `scale(${p.scale})`,
-            boxShadow: pShadow,
-          };
+            width: 240,
+            height: 240,
+            background: 'radial-gradient(circle at 35% 35%, #ff9248, #f3722c)',
+            boxShadow: '0 0 60px rgba(243,114,44,.7)',
+          }}
+        />
+      </div>
 
-          return <div key={p.id} style={dotStyle} />;
+      {/* Top Right with Ring */}
+      <div
+        style={{
+          position: 'absolute',
+          zIndex: 2,
+          top: -90,
+          right: -90,
+          transform: `translate(${txB}px, ${tyB}px) rotate(${rotB}deg)`,
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            top: -30,
+            right: -30,
+            width: 300,
+            height: 300,
+            border: '16px solid #f9844a',
+            borderRadius: '50%',
+            opacity: 0.9,
+          }}
+        />
+        <div
+          style={{
+            borderRadius: '50%',
+            width: 240,
+            height: 240,
+            background: 'radial-gradient(circle at 35% 35%, #3b94d4, #1f6bb0)',
+          }}
+        />
+      </div>
+
+      {/* Bottom Left */}
+      <div
+        style={{
+          position: 'absolute',
+          zIndex: 2,
+          bottom: -110,
+          left: -110,
+          transform: `translate(${txB}px, ${tyB}px) rotate(${rotB}deg)`,
+        }}
+      >
+        <div
+          style={{
+            borderRadius: '50%',
+            width: 240,
+            height: 240,
+            background: 'radial-gradient(circle at 35% 35%, #3b94d4, #1f6bb0)',
+          }}
+        />
+      </div>
+
+      {/* Bottom Right */}
+      <div
+        style={{
+          position: 'absolute',
+          zIndex: 2,
+          bottom: -110,
+          right: -110,
+          transform: `translate(${txA}px, ${tyA}px) rotate(${rotA}deg)`,
+        }}
+      >
+        <div
+          style={{
+            borderRadius: '50%',
+            width: 240,
+            height: 240,
+            background: 'radial-gradient(circle at 35% 35%, #ff9248, #f3722c)',
+            boxShadow: '0 0 60px rgba(243,114,44,.7)',
+          }}
+        />
+      </div>
+
+      {/* Decor Dots */}
+      <div style={{ position: 'absolute', zIndex: 4, display: 'flex', gap: 6, top: 60, left: '38%' }}>
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            style={{
+              width: 5,
+              height: 24,
+              background: '#f3722c',
+              transform: 'skewX(-20deg)',
+              opacity: getBlinkOpacity(i),
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ position: 'absolute', zIndex: 4, display: 'flex', gap: 6, bottom: 80, right: '36%' }}>
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            style={{
+              width: 5,
+              height: 24,
+              background: '#f3722c',
+              transform: 'skewX(-20deg)',
+              opacity: getBlinkOpacity(i),
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Main Title */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '6%',
+          width: '100%',
+          textAlign: 'center',
+          zIndex: 6,
+          fontSize: 104,
+          fontWeight: 900,
+          fontStyle: 'italic',
+          color: '#fff',
+          letterSpacing: 2,
+          textTransform: 'uppercase',
+          textShadow: '4px 4px 0 #f3722c, -1px -1px 0 #277fc4, 0 0 30px rgba(255,255,255,.4)',
+          WebkitTextStroke: '1px #0b3a66',
+          transform: `translateY(${wiggleY}px) rotate(${wiggleRot}deg)`,
+        }}
+      >
+        {titleText.split('').map((char, i) => {
+          const delay = i * 2;
+          const f = (frame - delay + 7500) % 75;
+          const bounceY = interpolate(f, [0, 37.5, 75], [0, -10, 0], { easing: Easing.inOut(Easing.quad) });
+          return (
+            <span
+              key={i}
+              style={{
+                display: 'inline-block',
+                transform: `translateY(${bounceY}px)`,
+              }}
+            >
+              {char === ' ' ? '\u00A0' : char}
+            </span>
+          );
         })}
       </div>
 
-      {/* Center Glass Panel */}
-      <div style={panelStyle}>
-        <div style={sweepStyle} />
-        <div style={avatarStyle}>
-          <div style={avatarInnerStyle}>▶</div>
-          <span style={ringStyle} />
+      {/* Middle Content Row */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 346,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 1690,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          zIndex: 6,
+        }}
+      >
+        {/* Left Video Frame */}
+        <div
+          style={{
+            width: 558,
+            height: 270,
+            border: '4px dashed #fff',
+            borderRadius: 12,
+            background: 'rgba(255,255,255,.07)',
+            position: 'relative',
+            overflow: 'hidden',
+            ...getFrameStyle(0),
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'linear-gradient(120deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%)',
+              transform: `translateX(${shineX}%)`,
+            }}
+          />
         </div>
-        <div style={infoStyle}>
-          <h1 style={h1Style}>
-            Suka Video Ini?
-            <br />
-            <span style={{ color: '#2ff3e0' }}>Yuk Subscribe!</span>
-          </h1>
-          <span style={subBtnStyle}>SUBSCRIBE</span>
+
+        {/* Center Circle Play Button */}
+        <div
+          style={{
+            width: 216,
+            height: 216,
+            border: '4px dashed #fff',
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,.08)',
+            position: 'relative',
+            boxShadow: circleShadow,
+            transform: `rotate(${circleRot}deg)`,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 58,
+              color: '#f9844a',
+              textShadow: '0 0 15px #f9844a',
+              transform: `rotate(${revCircleRot}deg)`,
+            }}
+          >
+            ▶
+          </div>
+        </div>
+
+        {/* Right Video Frame */}
+        <div
+          style={{
+            width: 558,
+            height: 270,
+            border: '4px dashed #fff',
+            borderRadius: 12,
+            background: 'rgba(255,255,255,.07)',
+            position: 'relative',
+            overflow: 'hidden',
+            ...getFrameStyle(18),
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'linear-gradient(120deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%)',
+              transform: `translateX(${shineX}%)`,
+            }}
+          />
         </div>
       </div>
 
-      {/* Bottom Thumbnail Slots */}
-      <div style={slotLeftStyle}>
-        <div style={slotShimmerStyle} />
-        <div style={slotPlayStyle}>▶</div>
+      {/* Slanted Buttons */}
+      {/* Watch Next */}
+      <div
+        style={{
+          position: 'absolute',
+          zIndex: 7,
+          color: '#fff',
+          fontWeight: 900,
+          fontStyle: 'italic',
+          fontSize: 29,
+          textTransform: 'uppercase',
+          padding: '10px 26px',
+          borderRadius: '8px 22px 8px 22px',
+          background: 'linear-gradient(90deg, #f3722c, #f9844a)',
+          boxShadow: '0 0 25px rgba(243,114,44,.6)',
+          bottom: '13%',
+          left: '5%',
+          transformOrigin: 'center center',
+          transform: `skewX(-8deg) scale(${btnLeftScale.x}, ${btnLeftScale.y})`,
+        }}
+      >
+        <span style={{ display: 'inline-block', transform: 'skewX(8deg)' }}>
+          Watch Next
+        </span>
       </div>
 
-      <div style={slotRightStyle}>
-        <div style={slotShimmerStyle} />
-        <div style={slotPlayStyle}>▶</div>
+      {/* Recommended */}
+      <div
+        style={{
+          position: 'absolute',
+          zIndex: 7,
+          color: '#fff',
+          fontWeight: 900,
+          fontStyle: 'italic',
+          fontSize: 29,
+          textTransform: 'uppercase',
+          padding: '10px 26px',
+          borderRadius: '8px 22px 8px 22px',
+          background: 'linear-gradient(90deg, #f3722c, #f9844a)',
+          boxShadow: '0 0 25px rgba(243,114,44,.6)',
+          bottom: '13%',
+          right: '5%',
+          transformOrigin: 'center center',
+          transform: `skewX(-8deg) scale(${btnRightScale.x}, ${btnRightScale.y})`,
+        }}
+      >
+        <span style={{ display: 'inline-block', transform: 'skewX(8deg)' }}>
+          Recommended
+        </span>
       </div>
 
-      {/* Screen Vignette */}
-      <div style={vignetteStyle} />
+      {/* Subscribe Call to Action */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '4%',
+          left: '50%',
+          zIndex: 7,
+          color: '#fff',
+          fontSize: 61,
+          fontWeight: 900,
+          fontStyle: 'italic',
+          letterSpacing: 3,
+          textTransform: 'uppercase',
+          textShadow: '3px 3px 0 #f3722c, 0 0 25px rgba(243,114,44,.8)',
+          transformOrigin: 'left center',
+          transform: `translateX(-50%) skewX(-8deg) scale(${subScale}) translateY(${subY}px)`,
+        }}
+      >
+        Subscribe
+      </div>
+
+      {/* Interactive Cursor Simulation */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '9%',
+          left: '50%',
+          zIndex: 8,
+          fontSize: 46,
+          color: '#fff',
+          filter: 'drop-shadow(0 0 8px #f9844a)',
+          transformOrigin: 'center center',
+          transform: `translateX(40%) translateY(${cursorY}px) scale(${cursorScale})`,
+        }}
+      >
+        👆
+      </div>
+
+      {/* Progress bar at the bottom */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          height: 5,
+          background: '#f9844a',
+          boxShadow: '0 0 12px #f9844a',
+          zIndex: 10,
+          width: `${progressWidthPct}%`,
+        }}
+      />
     </div>
   );
 };
 
-export default AuroraGlassEndscreen;
+export default EndScreenPro;
 // END_OF_FILE
