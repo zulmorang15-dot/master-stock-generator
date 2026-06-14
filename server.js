@@ -2698,9 +2698,14 @@ async function runPreviewRenderBackground(itemId) {
     const itemsFresh = JSON.parse(dataFresh);
     const itemFresh = itemsFresh.find(i => i.id === itemId);
     
-    itemFresh.statusConvertTsx = 'failed';
-    saveOrUpdateItem(itemFresh);
-    addTaskLog(itemId, `Gagal merender preview: ${err.message}`, "error");
+    // Only mark as failed if this render is still the active one (prevents race condition with retries)
+    if (itemFresh && itemFresh.statusConvertTsx === 'processing-preview') {
+      itemFresh.statusConvertTsx = 'failed';
+      saveOrUpdateItem(itemFresh);
+      addTaskLog(itemId, `Gagal merender preview: ${err.message}`, "error");
+    } else {
+      console.log(`⚠️ Skipping status update for ${itemId}: status is ${itemFresh?.statusConvertTsx}, not processing-preview`);
+    }
   } finally {
     delete activePreviewRenders[itemId];
     
