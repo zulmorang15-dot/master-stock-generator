@@ -1487,6 +1487,10 @@ async function waitForRender(id, renderType, jobId) {
         addLog(jobId, `Status render: ${statusResult.status} (${statusResult.progress || 'menunggu runner'})...`, 'info');
       }
     } catch (err) {
+      // Re-throw workflow failures immediately instead of looping forever
+      if (err.message && (err.message.includes('fail') || err.message.includes('failure') || err.message.includes('Artifact') || err.message.includes('cloud-link'))) {
+        throw err;
+      }
       addLog(jobId, `Informasi status render: ${err.message}`, 'info');
     }
 
@@ -2181,6 +2185,10 @@ async function waitForRenderSingle(id, renderType, signal) {
         addTaskLog(id, `Status render GitHub: ${statusResult.status} (${statusResult.progress || 'menunggu runner'})...`, 'info');
       }
     } catch (err) {
+      // Re-throw workflow failures immediately instead of looping forever
+      if (err.message && (err.message.includes('Workflow failed') || err.message.includes('fail') || err.message.includes('failure') || err.message === 'Cancelled by user')) {
+        throw err;
+      }
       addTaskLog(id, `Informasi status render: ${err.message}`, 'info');
     }
 

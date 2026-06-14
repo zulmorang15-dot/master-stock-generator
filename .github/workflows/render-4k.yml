@@ -105,7 +105,7 @@ jobs:
             --props=temp-props.json \
             --codec=prores \
             --pixel-format=$PIXEL_FORMAT \
-            --gl=swiftshader \
+            --gl=angle \
             --muted \
             --log=verbose
 
