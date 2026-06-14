@@ -64,7 +64,7 @@ jobs:
               --props=temp-props.json \
               --codec=h264 \
               --scale=0.5 \
-              --gl=egl \
+              --gl=swangle \
               --muted \
               --log=verbose
           else
