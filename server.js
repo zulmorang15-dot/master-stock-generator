@@ -1427,50 +1427,62 @@ async function runAbortable(promise, signal) {
 }
 
 // Helper: Save or update item in database file
-let dbWriteTimeout = null;
-let pendingWrites = new Map();
-
+// Helper: Save or update item in database file synchronously
 function saveOrUpdateItem(item) {
   const dbPath = path.join(__dirname, "saved-items.json");
-
-  // Update in-memory pending writes
-  pendingWrites.set(item.id, item);
-
-  // Debounce disk writes (write once per second max to reduce I/O)
-  clearTimeout(dbWriteTimeout);
-  dbWriteTimeout = setTimeout(() => {
-    try {
+  try {
+    let items = [];
+    if (fs.existsSync(dbPath)) {
       const data = fs.readFileSync(dbPath, "utf-8");
-      let items = JSON.parse(data);
-
-      // Apply all pending writes
-      pendingWrites.forEach((pendingItem, id) => {
-        const index = items.findIndex(i => i.id === id);
-        if (index !== -1) {
-          items[index] = { ...items[index], ...pendingItem };
-          if (taskLogs[id]) {
-            items[index].logs = taskLogs[id];
-            if (taskLogs[id].length > 0) {
-              items[index].lastLogMessage = taskLogs[id][taskLogs[id].length - 1].message;
-            }
-          }
-        } else {
-          if (taskLogs[id]) {
-            pendingItem.logs = taskLogs[id];
-            if (taskLogs[id].length > 0) {
-              pendingItem.lastLogMessage = taskLogs[id][taskLogs[id].length - 1].message;
-            }
-          }
-          items.push(pendingItem);
-        }
-      });
-
-      fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
-      pendingWrites.clear();
-    } catch (e) {
-      console.error("Failed to write database:", e);
+      items = JSON.parse(data);
     }
-  }, 1000);
+
+    const index = items.findIndex(i => i.id === item.id);
+    if (index !== -1) {
+      // If the user modified the title/keywords on the dashboard (disk edits),
+      // we preserve them in `item` to avoid overwriting them with stale in-memory values.
+      // We know `item` has the correct title if `item._isGeneratingSeo` is true.
+      if (items[index].judul !== item.judul && !item._isGeneratingSeo) {
+        item.judul = items[index].judul;
+      }
+      if (items[index].keywords !== item.keywords && !item._isGeneratingSeo) {
+        item.keywords = items[index].keywords;
+      }
+
+      // If the user manually updated video config on the dashboard, we preserve it.
+      if (items[index]._userSetVideoConfig) {
+        item.loop = items[index].loop;
+        item.transparent = items[index].transparent;
+        item.animationDuration = items[index].animationDuration;
+        item.fps = items[index].fps;
+        item.durationInFrames = items[index].durationInFrames;
+        item._userSetVideoConfig = true;
+      }
+
+      // Merge the item updates
+      items[index] = { ...items[index], ...item };
+
+      // Sync logs if we're actively tracking them in memory
+      if (taskLogs[item.id]) {
+        items[index].logs = taskLogs[item.id];
+        if (taskLogs[item.id].length > 0) {
+          items[index].lastLogMessage = taskLogs[item.id][taskLogs[item.id].length - 1].message;
+        }
+      }
+    } else {
+      if (taskLogs[item.id]) {
+        item.logs = taskLogs[item.id];
+        if (taskLogs[item.id].length > 0) {
+          item.lastLogMessage = taskLogs[item.id][taskLogs[item.id].length - 1].message;
+        }
+      }
+      items.push(item);
+    }
+
+    fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+  } catch (e) {
+    console.error("Failed to write database synchronously:", e);
+  }
 }
 
 // Helper: Add logs for SSE task processing (per item)
@@ -2159,7 +2171,9 @@ async function executeSingleTask(itemId) {
       item.shutterstockCategory2 = shutterCat2;
 
       item.seoAiUsed = item.aiModel || 'auto';
+      item._isGeneratingSeo = true;
       saveOrUpdateItem(item);
+      delete item._isGeneratingSeo;
 
       addTaskLog(itemId, `Metadata SEO berhasil disesuaikan oleh AI. Judul: "${seoData.judul}"`, "success");
     }
@@ -3312,14 +3326,18 @@ async function executeSingleSeoTask(id, aiModel) {
     item.logs.push({ message: `✅ Regenerasi SEO sukses! Judul: "${item.judul}"`, type: "success", time: finishTime });
     item.lastLogMessage = "Regenerasi SEO sukses.";
     
+    item._isGeneratingSeo = true;
     saveOrUpdateItem(item);
+    delete item._isGeneratingSeo;
     addTaskLog(id, `✅ Regenerasi SEO sukses! Judul: "${item.judul}"`, "success");
   } catch (err) {
     console.error(`[SeoQueue] Gagal memproses ${id}:`, err.message);
     const errTime = new Date().toLocaleTimeString('id-ID');
     item.logs.push({ message: `❌ Gagal regenerasi SEO: ${err.message}`, type: "error", time: errTime });
     item.lastLogMessage = "Gagal regenerasi SEO.";
+    item._isGeneratingSeo = true;
     saveOrUpdateItem(item);
+    delete item._isGeneratingSeo;
     addTaskLog(id, `❌ Gagal regenerasi SEO: ${err.message}`, "error");
   } finally {
     activeSeoGenerations[id] = false;
@@ -4263,7 +4281,9 @@ app.post("/api/regenerate-seo/:id", async (req, res) => {
 
     item.seoAiUsed = aiModel || 'auto';
     
+    item._isGeneratingSeo = true;
     saveOrUpdateItem(item);
+    delete item._isGeneratingSeo;
     
     addTaskLog(id, `Judul & keywords berhasil di-regenerate!`, "success");
     
