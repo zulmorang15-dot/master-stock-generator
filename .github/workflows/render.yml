@@ -58,12 +58,12 @@ jobs:
       - name: Execute Remotion Render
         run: |
           if [ "${{ github.event.client_payload.item.renderType }}" = "preview" ]; then
-            echo "=== Rendering MP4 Preview (skala 0.5) ==="
+            echo "=== Rendering MP4 Preview (skala 0.3) ==="
             xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npx remotion render Composition \
               "out/${{ github.event.client_payload.item.id }}.mp4" \
               --props=temp-props.json \
               --codec=h264 \
-              --scale=0.5 \
+              --scale=0.3 \
               --gl=swangle \
               --muted \
               --log=verbose

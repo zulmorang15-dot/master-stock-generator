@@ -1243,7 +1243,7 @@ app.post("/api/render-preview", async (req, res) => {
 
     // 3. Jalankan render lokal
     const previewFile = path.join("public", "previews", `${item.id}.mp4`);
-    const cmd = `npx remotion render Composition "${previewFile}" --scale=0.5 --props="${tempPropsFile}" --muted`;
+    const cmd = `npx remotion render Composition "${previewFile}" --scale=0.3 --props="${tempPropsFile}" --muted`;
     console.log(`Running CLI: ${cmd}`);
 
     execSync(cmd, { stdio: "inherit" });

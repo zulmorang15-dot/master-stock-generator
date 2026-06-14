@@ -86,14 +86,14 @@ jobs:
           echo "=== Props being used ==="
           cat temp-props.json
 
-      - name: Render Preview MP4 (scale 0.5)
+      - name: Render Preview MP4 (scale 0.3)
         run: |
           echo "=== Rendering preview for composition: ${{ github.event.inputs.composition_id }} ==="
           xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npx remotion render Composition \
             "out/${{ github.event.inputs.composition_id }}-preview.mp4" \
             --props=temp-props.json \
             --codec=h264 \
-            --scale=0.5 \
+            --scale=0.3 \
             --gl=swangle \
             --muted \
             --log=verbose
