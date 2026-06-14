@@ -27,6 +27,11 @@ progress.md
 *.csv
 syntx-screenshot.png
 
+# Local scratch/test artifacts
+scratch/
+server.log
+test-e2e-workflow.js
+
 # Debug/probe scripts
 debug-*.js
 deep-search-*.js

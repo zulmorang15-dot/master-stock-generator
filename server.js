@@ -110,6 +110,77 @@ let NINEROUTER_API_KEY = process.env.NINEROUTER_API_KEY || "";
 let NINEROUTER_BASE_URL = process.env.NINEROUTER_BASE_URL || "http://localhost:20128/v1";
 let NINEROUTER_MODEL = process.env.NINEROUTER_MODEL || "9router";
 
+// ══════════════════════════════════════════════════════════════
+// PRODUCTION ENHANCEMENTS: AI Response Cache & Retry Logic
+// ══════════════════════════════════════════════════════════════
+
+// Simple in-memory cache for AI responses (TTL: 1 hour)
+const aiResponseCache = new Map();
+const AI_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+function getCacheKey(prompt, model) {
+  const hash = require('crypto').createHash('md5').update(prompt + model).digest('hex');
+  return `${model}:${hash.substring(0, 16)}`;
+}
+
+function getCachedResponse(prompt, model) {
+  const key = getCacheKey(prompt, model);
+  const cached = aiResponseCache.get(key);
+  if (cached && Date.now() - cached.timestamp < AI_CACHE_TTL) {
+    console.log(`💾 Cache HIT for ${model}: ${key}`);
+    return cached.response;
+  }
+  if (cached) {
+    aiResponseCache.delete(key); // expired
+  }
+  return null;
+}
+
+function setCachedResponse(prompt, model, response) {
+  const key = getCacheKey(prompt, model);
+  aiResponseCache.set(key, {
+    response,
+    timestamp: Date.now()
+  });
+  // Limit cache size to 100 entries (LRU-style)
+  if (aiResponseCache.size > 100) {
+    const firstKey = aiResponseCache.keys().next().value;
+    aiResponseCache.delete(firstKey);
+  }
+}
+
+// Generic retry helper with exponential backoff
+async function withRetry(fn, options = {}) {
+  const {
+    maxRetries = 3,
+    initialDelay = 1000,
+    maxDelay = 10000,
+    backoffMultiplier = 2,
+    shouldRetry = (error) => true,
+    onRetry = (error, attempt) => {}
+  } = options;
+
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === maxRetries || !shouldRetry(error)) {
+        throw error;
+      }
+
+      const delay = Math.min(initialDelay * Math.pow(backoffMultiplier, attempt), maxDelay);
+      onRetry(error, attempt + 1);
+      console.log(`⚠️ Retry ${attempt + 1}/${maxRetries} after ${delay}ms: ${error.message?.substring(0, 100)}`);
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError;
+}
+
 
 
 // Helper: deteksi apakah error adalah rate limit / quota exceeded
@@ -131,7 +202,15 @@ function isRateLimitError(err) {
 // Smart AI Call dengan auto-fallback: Groq -> Syntx.ai (Claude) -> Gemini -> DeepSeek -> Nvidia -> OpenRouter
 // Syntx.ai dinaikan ke posisi ke-2 karena gratis tak terbatas dan handal
 async function callAIWithFallback(prompt, options = {}) {
-  const { preferModel, validator, taskId } = options;
+  const { preferModel, validator, taskId, skipCache = false } = options;
+
+  // Check cache first (unless skipCache is true)
+  if (!skipCache && !validator) { // Don't cache validated responses (e.g. TSX) as they're unique
+    const cached = getCachedResponse(prompt, preferModel || 'auto');
+    if (cached) {
+      return cached;
+    }
+  }
 
   // Helper local untuk logging detail
   const log = (msg, type = 'info') => {
@@ -342,47 +421,90 @@ async function callAIWithFallback(prompt, options = {}) {
   throw new Error(`Semua provider AI gagal: ${JSON.stringify(errors)}`);
 }
 
-// 9Router API Call Helper (OpenAI-compatible)
-async function callNineRouter(prompt, model = NINEROUTER_MODEL) {
-  try {
-    const url = `${NINEROUTER_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
-    console.log(`📡 Mengirim request ke 9Router (URL: ${url}, model: ${model})...`);
-    
-    const headers = {
-      "Content-Type": "application/json"
-    };
-    if (NINEROUTER_API_KEY) {
-      headers["Authorization"] = `Bearer ${NINEROUTER_API_KEY}`;
-      console.log("🔑 API Key 9Router ada:", NINEROUTER_API_KEY.substring(0, 10) + "...");
-    }
+// Wrap callAIWithFallback with retry logic for production resilience
+async function callAIWithRetry(prompt, options = {}) {
+  const shouldRetry = (error) => {
+    // Retry on network errors, timeouts, but not on validation failures
+    return !error.message?.includes('tidak lolos validasi') &&
+           !error.message?.includes('invalid response');
+  };
 
-    const response = await axios.post(
-      url,
-      {
-        model: model,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ]
-      },
-      {
-        headers: headers,
-        timeout: 90000 // 9Router may run slow for complex combo queries, give it 90s
+  return withRetry(
+    async () => {
+      const result = await callAIWithFallback(prompt, options);
+
+      // Cache successful responses (if not skipped)
+      if (result && !options.skipCache && !options.validator) {
+        setCachedResponse(prompt, options.preferModel || 'auto', result);
       }
-    );
 
-    if (!response.data.choices || !response.data.choices[0]) {
-      throw new Error("Respons 9Router tidak valid: " + JSON.stringify(response.data));
+      return result;
+    },
+    {
+      maxRetries: 2,
+      initialDelay: 2000,
+      shouldRetry,
+      onRetry: (error, attempt) => {
+        const log = options.logger || console.log;
+        log(`🔄 Retrying AI call (attempt ${attempt}/2): ${error.message?.substring(0, 100)}`);
+      }
     }
+  );
+}
 
-    console.log("✅ Respon 9Router berhasil diterima!");
-    return response.data.choices[0].message.content;
-  } catch (error) {
-    console.error("❌ 9Router Error:", error.response?.data || error.message);
-    throw error;
-  }
+// 9Router API Call Helper (OpenAI-compatible) with retry
+async function callNineRouter(prompt, model = NINEROUTER_MODEL) {
+  return withRetry(
+    async () => {
+      const url = `${NINEROUTER_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
+      console.log(`📡 Mengirim request ke 9Router (URL: ${url}, model: ${model})...`);
+
+      const headers = {
+        "Content-Type": "application/json"
+      };
+      if (NINEROUTER_API_KEY) {
+        headers["Authorization"] = `Bearer ${NINEROUTER_API_KEY}`;
+        console.log("🔑 API Key 9Router ada:", NINEROUTER_API_KEY.substring(0, 10) + "...");
+      }
+
+      const response = await axios.post(
+        url,
+        {
+          model: model,
+          messages: [
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          stream: false // Explicitly disable streaming for consistency
+        },
+        {
+          headers: headers,
+          timeout: 90000 // 9Router may run slow for complex combo queries, give it 90s
+        }
+      );
+
+      if (!response.data.choices || !response.data.choices[0]) {
+        throw new Error("Respons 9Router tidak valid: " + JSON.stringify(response.data));
+      }
+
+      console.log("✅ Respon 9Router berhasil diterima!");
+      return response.data.choices[0].message.content;
+    },
+    {
+      maxRetries: 2,
+      initialDelay: 3000,
+      shouldRetry: (error) => {
+        // Retry on network errors and timeouts, but not on 4xx client errors
+        const status = error?.response?.status;
+        return !status || status >= 500 || error.code === 'ECONNABORTED';
+      },
+      onRetry: (error, attempt) => {
+        console.error(`🔄 Retrying 9Router (attempt ${attempt}/2):`, error.message?.substring(0, 100));
+      }
+    }
+  );
 }
 
 
@@ -1216,8 +1338,53 @@ let isProcessingRender4k = false;
 
 // SEO background queue state
 const seoQueue = []; // Array of objects: { id, aiModel }
-let isProcessingSeo = false;
+const MAX_CONCURRENT_SEO = 2; // Allow 2 parallel SEO generations
+let activeSeoCount = 0;
 
+// Health check endpoint for monitoring
+app.get("/api/health", (req, res) => {
+  try {
+    let itemsCount = 0;
+    try {
+      const data = fs.readFileSync(dbPath, "utf-8");
+      itemsCount = JSON.parse(data).length;
+    } catch (e) {
+      itemsCount = -1;
+    }
+
+    const health = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: Math.floor(process.uptime()),
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB'
+      },
+      queue: {
+        taskQueue: taskQueue.length,
+        activeTasks: activeTasks.size,
+        seoQueue: seoQueue.length,
+        activeSeo: activeSeoCount,
+        render4kQueue: render4kQueue.length
+      },
+      cache: {
+        aiResponses: aiResponseCache.size
+      },
+      database: {
+        itemsCount
+      }
+    };
+
+    if (health.queue.taskQueue > 20) {
+      health.status = 'degraded';
+      health.warnings = ['Task queue backlog detected'];
+    }
+
+    res.json(health);
+  } catch (error) {
+    res.status(500).json({ status: 'unhealthy', error: error.message });
+  }
+});
 
 // Sequential Git operator lock (Mutex) to prevent local commit/push conflicts
 let gitMutex = Promise.resolve();
@@ -1244,17 +1411,38 @@ async function runAbortable(promise, signal) {
 }
 
 // Helper: Save or update item in database file
+let dbWriteTimeout = null;
+let pendingWrites = new Map();
+
 function saveOrUpdateItem(item) {
   const dbPath = path.join(__dirname, "saved-items.json");
-  const data = fs.readFileSync(dbPath, "utf-8");
-  let items = JSON.parse(data);
-  const index = items.findIndex(i => i.id === item.id);
-  if (index !== -1) {
-    items[index] = { ...items[index], ...item };
-  } else {
-    items.push(item);
-  }
-  fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+
+  // Update in-memory pending writes
+  pendingWrites.set(item.id, item);
+
+  // Debounce disk writes (write once per second max to reduce I/O)
+  clearTimeout(dbWriteTimeout);
+  dbWriteTimeout = setTimeout(() => {
+    try {
+      const data = fs.readFileSync(dbPath, "utf-8");
+      let items = JSON.parse(data);
+
+      // Apply all pending writes
+      pendingWrites.forEach((pendingItem, id) => {
+        const index = items.findIndex(i => i.id === id);
+        if (index !== -1) {
+          items[index] = { ...items[index], ...pendingItem };
+        } else {
+          items.push(pendingItem);
+        }
+      });
+
+      fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+      pendingWrites.clear();
+    } catch (e) {
+      console.error("Failed to write database:", e);
+    }
+  }, 1000);
 }
 
 // Helper: Add logs for SSE task processing (per item)
@@ -3089,20 +3277,19 @@ async function executeSingleSeoTask(id, aiModel) {
 }
 
 async function processSeoQueue() {
-  if (isProcessingSeo) return;
-  if (seoQueue.length === 0) return;
+  // Updated to support concurrent processing
+  while (seoQueue.length > 0 && activeSeoCount < MAX_CONCURRENT_SEO) {
+    const task = seoQueue.shift();
+    console.log(`[SeoQueue] Processing item: ${task.id}. Active: ${activeSeoCount + 1}/${MAX_CONCURRENT_SEO}, Remaining: ${seoQueue.length}`);
 
-  isProcessingSeo = true;
-  const task = seoQueue.shift();
-  console.log(`[SeoQueue] Processing next item: ${task.id}. Remaining: ${seoQueue.length}`);
-
-  try {
-    await executeSingleSeoTask(task.id, task.aiModel);
-  } catch (err) {
-    console.error(`[SeoQueue] Fatal error executing task ${task.id}:`, err);
-  } finally {
-    isProcessingSeo = false;
-    setTimeout(processSeoQueue, 1000);
+    activeSeoCount++;
+    executeSingleSeoTask(task.id, task.aiModel).finally(() => {
+      activeSeoCount--;
+      // Continue processing if there are more items
+      if (seoQueue.length > 0) {
+        setTimeout(processSeoQueue, 100);
+      }
+    });
   }
 }
 
