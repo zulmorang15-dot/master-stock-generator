@@ -1,23 +1,17 @@
 import React, { useRef, useEffect } from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 import * as THREE from 'three';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const CyberpunkEsportsEndscreen: React.FC = () => {
+const CyberpunkEsportsYouTubeEndscreen: React.FC = () => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
-
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const composerRef = useRef<EffectComposer | null>(null);
   const gridHelperRef = useRef<THREE.GridHelper | null>(null);
   const gridHelperMagentaRef = useRef<THREE.GridHelper | null>(null);
   const ringsGroupRef = useRef<THREE.Group | null>(null);
@@ -25,12 +19,14 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
   const pointLightCyanRef = useRef<THREE.PointLight | null>(null);
   const pointLightMagentaRef = useRef<THREE.PointLight | null>(null);
 
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+
   useEffect(() => {
     if (!canvasRef.current) return;
 
     const scene = new THREE.Scene();
-    sceneRef.current = scene;
     scene.fog = new THREE.FogExp2(0x01020a, 0.004);
+    sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(60, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 1000);
     camera.position.set(0, 15, 60);
@@ -43,19 +39,6 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
     renderer.toneMapping = THREE.ReinhardToneMapping;
     renderer.toneMappingExposure = 1.5;
     rendererRef.current = renderer;
-
-    const renderScene = new RenderPass(scene, camera);
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT),
-      2.5,
-      0.6,
-      0.1
-    );
-
-    const composer = new EffectComposer(renderer);
-    composer.addPass(renderScene);
-    composer.addPass(bloomPass);
-    composerRef.current = composer;
 
     const gridHelper = new THREE.GridHelper(300, 100, 0x00ffff, 0x002244);
     gridHelper.position.y = -20;
@@ -78,8 +61,8 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
 
     for (let i = 0; i < 5; i++) {
       const ring = new THREE.Mesh(ringGeom, i % 2 === 0 ? matCyan : matMagenta);
-      ring.rotation.x = (i * 0.3) % Math.PI;
-      ring.rotation.y = (i * 0.5) % Math.PI;
+      ring.rotation.x = (i * 0.5) % Math.PI;
+      ring.rotation.y = (i * 0.7) % Math.PI;
       ring.scale.setScalar(1 + (i * 0.5));
       ring.position.z = -50 - (i * 20);
       ringsGroup.add(ring);
@@ -92,9 +75,9 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
     const particlePositions = new Float32Array(particleCount * 3);
 
     for (let i = 0; i < particleCount * 3; i += 3) {
-      particlePositions[i] = ((i / 3) * 0.12345 % 1 - 0.5) * 200;
-      particlePositions[i + 1] = ((i / 3) * 0.67890 % 1 - 0.5) * 100;
-      particlePositions[i + 2] = ((i / 3) * 0.54321 % 1 - 0.5) * 200;
+      particlePositions[i] = ((i / 3) % 100 - 50) * 4;
+      particlePositions[i + 1] = (((i / 3) * 7) % 100 - 50);
+      particlePositions[i + 2] = (((i / 3) * 13) % 200 - 100);
     }
 
     particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
@@ -134,17 +117,17 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!sceneRef.current || !cameraRef.current || !composerRef.current) return;
-
     const scene = sceneRef.current;
     const camera = cameraRef.current;
-    const composer = composerRef.current;
+    const renderer = rendererRef.current;
     const gridHelper = gridHelperRef.current;
     const gridHelperMagenta = gridHelperMagentaRef.current;
     const ringsGroup = ringsGroupRef.current;
     const particles = particlesRef.current;
     const pointLightCyan = pointLightCyanRef.current;
     const pointLightMagenta = pointLightMagentaRef.current;
+
+    if (!scene || !camera || !renderer) return;
 
     const elapsedTime = frame / fps;
 
@@ -155,24 +138,24 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
     if (gridHelper) {
       gridHelper.position.z = (elapsedTime * 15) % 6;
     }
+
     if (gridHelperMagenta) {
       gridHelperMagenta.position.z = (elapsedTime * 15) % 30;
     }
 
     if (ringsGroup) {
-      ringsGroup.rotation.z = elapsedTime * 0.1 * fps / 60;
-      ringsGroup.rotation.y = elapsedTime * 0.05 * fps / 60;
+      ringsGroup.rotation.z = (elapsedTime * 0.1) % (Math.PI * 2);
+      ringsGroup.rotation.y = (elapsedTime * 0.05) % (Math.PI * 2);
 
       ringsGroup.children.forEach((ring, index) => {
-        const mesh = ring as THREE.Mesh;
-        mesh.rotation.x = (elapsedTime * 0.2 * (index % 2 === 0 ? 1 : -1) * fps / 60);
+        ring.rotation.x = (elapsedTime * 0.2 * (index % 2 === 0 ? 1 : -1)) % (Math.PI * 2);
       });
     }
 
     if (particles) {
       const positions = particles.geometry.attributes.position.array as Float32Array;
       const delta = 1 / fps;
-      for (let i = 2; i < 2000 * 3; i += 3) {
+      for (let i = 2; i < positions.length; i += 3) {
         positions[i] += 20 * delta;
         if (positions[i] > 80) {
           positions[i] = -150;
@@ -184,124 +167,160 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
     if (pointLightCyan) {
       pointLightCyan.intensity = 5 + Math.sin(elapsedTime * 3) * 2;
     }
+
     if (pointLightMagenta) {
       pointLightMagenta.intensity = 5 + Math.cos(elapsedTime * 2.5) * 2;
     }
 
-    composer.render();
+    renderer.render(scene, camera);
   }, [frame, fps]);
 
   const localFrame = frame % (fps * 15);
 
-  const scanlineProgress1 = interpolate(
+  const scanlineProgress = interpolate(
     localFrame,
-    [0, fps * 4, fps * 4 + 1],
-    [0, 500, 0],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-  );
-
-  const scanlineProgress2 = interpolate(
-    localFrame,
-    [fps * 1, fps * 5, fps * 5 + 1],
-    [0, 500, 0],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+    [0, fps * 4],
+    [0, 500],
+    {
+      extrapolateRight: 'wrap'
+    }
   );
 
   const ringOuterRotation = interpolate(
     localFrame,
-    [0, fps * 15],
+    [0, fps * 8],
     [0, 360],
-    { extrapolateRight: 'wrap' }
+    {
+      extrapolateRight: 'wrap'
+    }
   );
 
   const ringInnerRotation = interpolate(
     localFrame,
-    [0, fps * 15],
+    [0, fps * 12],
     [0, -360],
-    { extrapolateRight: 'wrap' }
+    {
+      extrapolateRight: 'wrap'
+    }
   );
 
-  const coreGlowScale = interpolate(
-    localFrame % (fps * 2),
-    [0, fps * 2],
-    [0.9, 1.1],
-    { easing: Easing.inOut(Easing.ease) }
+  const coreScale = interpolate(
+    localFrame,
+    [0, fps * 1, fps * 2],
+    [0.9, 1.1, 0.9],
+    {
+      extrapolateRight: 'wrap',
+      easing: Easing.inOut(Easing.ease)
+    }
   );
 
-  const coreGlowOpacity = interpolate(
-    localFrame % (fps * 2),
-    [0, fps * 2],
-    [0.8, 1],
-    { easing: Easing.inOut(Easing.ease) }
+  const coreOpacity = interpolate(
+    localFrame,
+    [0, fps * 1, fps * 2],
+    [0.8, 1, 0.8],
+    {
+      extrapolateRight: 'wrap',
+      easing: Easing.inOut(Easing.ease)
+    }
   );
 
-  const coreGlowBrightness = interpolate(
-    localFrame % (fps * 2),
-    [0, fps * 2],
-    [1, 1.5],
-    { easing: Easing.inOut(Easing.ease) }
+  const coreBrightness = interpolate(
+    localFrame,
+    [0, fps * 1, fps * 2],
+    [1, 1.5, 1],
+    {
+      extrapolateRight: 'wrap',
+      easing: Easing.inOut(Easing.ease)
+    }
   );
 
-  const coreTargetAnimFrame = localFrame % fps;
-  const coreTargetScale = interpolate(
-    coreTargetAnimFrame,
+  const targetScale = interpolate(
+    localFrame % fps,
     [0, fps],
     [0, 3],
-    { easing: Easing.out(Easing.ease) }
+    {
+      extrapolateRight: 'wrap',
+      easing: Easing.out(Easing.ease)
+    }
   );
-  const coreTargetOpacity = interpolate(
-    coreTargetAnimFrame,
+
+  const targetOpacity = interpolate(
+    localFrame % fps,
     [0, fps],
     [1, 0],
-    { easing: Easing.out(Easing.ease) }
+    {
+      extrapolateRight: 'wrap',
+      easing: Easing.out(Easing.ease)
+    }
   );
 
-  const streak1Progress = interpolate(
-    localFrame % (fps * 1.5),
+  const streak1X = interpolate(
+    localFrame,
     [0, fps * 1.5],
     [0, ORIGINAL_WIDTH + 1000],
-    { easing: Easing.inOut(Easing.quad) }
+    {
+      extrapolateRight: 'wrap',
+      easing: Easing.inOut(Easing.quad)
+    }
   );
+
   const streak1Opacity = interpolate(
-    localFrame % (fps * 1.5),
+    localFrame,
     [0, fps * 0.2, fps * 1.3, fps * 1.5],
     [0, 1, 1, 0],
-    { easing: Easing.inOut(Easing.quad) }
+    {
+      extrapolateRight: 'wrap'
+    }
   );
 
-  const streak2Progress = interpolate(
-    (localFrame - fps * 1.2 + fps * 15) % (fps * 15) % (fps * 2.0),
+  const streak2X = interpolate(
+    (localFrame - fps * 1.2 + fps * 15) % (fps * 15),
     [0, fps * 2.0],
     [0, ORIGINAL_WIDTH + 1000],
-    { easing: Easing.inOut(Easing.quad) }
-  );
-  const streak2Opacity = interpolate(
-    (localFrame - fps * 1.2 + fps * 15) % (fps * 15) % (fps * 2.0),
-    [0, fps * 0.2, fps * 1.8, fps * 2.0],
-    [0, 1, 1, 0],
-    { easing: Easing.inOut(Easing.quad) }
+    {
+      extrapolateRight: 'wrap',
+      easing: Easing.inOut(Easing.quad)
+    }
   );
 
-  const streak3Progress = interpolate(
-    (localFrame - fps * 0.5 + fps * 15) % (fps * 15) % (fps * 1.2),
+  const streak2Opacity = interpolate(
+    (localFrame - fps * 1.2 + fps * 15) % (fps * 15),
+    [0, fps * 0.3, fps * 1.7, fps * 2.0],
+    [0, 1, 1, 0],
+    {
+      extrapolateRight: 'wrap'
+    }
+  );
+
+  const streak3X = interpolate(
+    (localFrame - fps * 0.5 + fps * 15) % (fps * 15),
     [0, fps * 1.2],
     [0, ORIGINAL_WIDTH + 1000],
-    { easing: Easing.inOut(Easing.quad) }
-  );
-  const streak3Opacity = interpolate(
-    (localFrame - fps * 0.5 + fps * 15) % (fps * 15) % (fps * 1.2),
-    [0, fps * 0.15, fps * 1.05, fps * 1.2],
-    [0, 1, 1, 0],
-    { easing: Easing.inOut(Easing.quad) }
+    {
+      extrapolateRight: 'wrap',
+      easing: Easing.inOut(Easing.quad)
+    }
   );
 
-  const placeholderGlowCycle = localFrame % (fps * 2 + Math.floor(fps * 1));
-  const placeholderGlowIntensity = interpolate(
-    placeholderGlowCycle % (fps * 0.1),
-    [0, fps * 0.1],
-    [0.4, 0.8],
-    { easing: Easing.inOut(Easing.ease) }
+  const streak3Opacity = interpolate(
+    (localFrame - fps * 0.5 + fps * 15) % (fps * 15),
+    [0, fps * 0.15, fps * 1.05, fps * 1.2],
+    [0, 1, 1, 0],
+    {
+      extrapolateRight: 'wrap'
+    }
   );
+
+  const placeholderPulse = interpolate(
+    localFrame % (fps * 0.1),
+    [0, fps * 0.1],
+    [0, 1],
+    {
+      extrapolateRight: 'wrap'
+    }
+  );
+
+  const boxShadowIntensity = placeholderPulse > 0.5 ? 0.8 : 0.4;
 
   return (
     <div
@@ -349,18 +368,70 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
             left: 100,
             background: 'rgba(1, 4, 15, 0.7)',
             border: '3px solid #00ffff',
-            boxShadow: `0 0 ${40 + placeholderGlowIntensity * 30}px rgba(0, 255, 255, ${placeholderGlowIntensity}), inset 0 0 ${50 + placeholderGlowIntensity * 30}px rgba(0, 255, 255, ${placeholderGlowIntensity * 0.5})`,
+            boxShadow: `0 0 ${boxShadowIntensity === 0.8 ? '70px' : '40px'} rgba(0, 255, 255, ${boxShadowIntensity}), inset 0 0 ${boxShadowIntensity === 0.8 ? '80px' : '50px'} rgba(0, 255, 255, ${boxShadowIntensity * 0.5})`,
             backdropFilter: 'blur(8px)',
             overflow: 'hidden'
           }}
         >
-          <div style={{ position: 'absolute', top: -4, left: -4, width: 40, height: 40, border: '4px solid #fff', borderRight: 'none', borderBottom: 'none', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
-          <div style={{ position: 'absolute', top: -4, right: -4, width: 40, height: 40, border: '4px solid #fff', borderLeft: 'none', borderBottom: 'none', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
-          <div style={{ position: 'absolute', bottom: -4, left: -4, width: 40, height: 40, border: '4px solid #fff', borderRight: 'none', borderTop: 'none', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
-          <div style={{ position: 'absolute', bottom: -4, right: -4, width: 40, height: 40, border: '4px solid #fff', borderLeft: 'none', borderTop: 'none', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
-          
           <div
             style={{
+              position: 'absolute',
+              width: 40,
+              height: 40,
+              top: -4,
+              left: -4,
+              border: '4px solid #fff',
+              boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+              zIndex: 2,
+              borderRight: 'none',
+              borderBottom: 'none'
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 40,
+              height: 40,
+              top: -4,
+              right: -4,
+              border: '4px solid #fff',
+              boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+              zIndex: 2,
+              borderLeft: 'none',
+              borderBottom: 'none'
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 40,
+              height: 40,
+              bottom: -4,
+              left: -4,
+              border: '4px solid #fff',
+              boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+              zIndex: 2,
+              borderRight: 'none',
+              borderTop: 'none'
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 40,
+              height: 40,
+              bottom: -4,
+              right: -4,
+              border: '4px solid #fff',
+              boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+              zIndex: 2,
+              borderLeft: 'none',
+              borderTop: 'none'
+            }}
+          />
+          <div
+            style={{
+              content: '',
               position: 'absolute',
               top: 0,
               left: 0,
@@ -371,7 +442,6 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
               zIndex: 0
             }}
           />
-          
           <div
             style={{
               position: 'absolute',
@@ -380,7 +450,7 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
               background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.4), transparent)',
               top: -100,
               zIndex: 1,
-              transform: `translateY(${scanlineProgress1}px)`
+              transform: `translateY(${scanlineProgress}px)`
             }}
           />
         </div>
@@ -394,18 +464,70 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
             right: 100,
             background: 'rgba(1, 4, 15, 0.7)',
             border: '3px solid #00ffff',
-            boxShadow: `0 0 ${40 + placeholderGlowIntensity * 30}px rgba(0, 255, 255, ${placeholderGlowIntensity}), inset 0 0 ${50 + placeholderGlowIntensity * 30}px rgba(0, 255, 255, ${placeholderGlowIntensity * 0.5})`,
+            boxShadow: `0 0 ${boxShadowIntensity === 0.8 ? '70px' : '40px'} rgba(0, 255, 255, ${boxShadowIntensity}), inset 0 0 ${boxShadowIntensity === 0.8 ? '80px' : '50px'} rgba(0, 255, 255, ${boxShadowIntensity * 0.5})`,
             backdropFilter: 'blur(8px)',
             overflow: 'hidden'
           }}
         >
-          <div style={{ position: 'absolute', top: -4, left: -4, width: 40, height: 40, border: '4px solid #fff', borderRight: 'none', borderBottom: 'none', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
-          <div style={{ position: 'absolute', top: -4, right: -4, width: 40, height: 40, border: '4px solid #fff', borderLeft: 'none', borderBottom: 'none', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
-          <div style={{ position: 'absolute', bottom: -4, left: -4, width: 40, height: 40, border: '4px solid #fff', borderRight: 'none', borderTop: 'none', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
-          <div style={{ position: 'absolute', bottom: -4, right: -4, width: 40, height: 40, border: '4px solid #fff', borderLeft: 'none', borderTop: 'none', boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff', zIndex: 2 }} />
-          
           <div
             style={{
+              position: 'absolute',
+              width: 40,
+              height: 40,
+              top: -4,
+              left: -4,
+              border: '4px solid #fff',
+              boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+              zIndex: 2,
+              borderRight: 'none',
+              borderBottom: 'none'
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 40,
+              height: 40,
+              top: -4,
+              right: -4,
+              border: '4px solid #fff',
+              boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+              zIndex: 2,
+              borderLeft: 'none',
+              borderBottom: 'none'
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 40,
+              height: 40,
+              bottom: -4,
+              left: -4,
+              border: '4px solid #fff',
+              boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+              zIndex: 2,
+              borderRight: 'none',
+              borderTop: 'none'
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: 40,
+              height: 40,
+              bottom: -4,
+              right: -4,
+              border: '4px solid #fff',
+              boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+              zIndex: 2,
+              borderLeft: 'none',
+              borderTop: 'none'
+            }}
+          />
+          <div
+            style={{
+              content: '',
               position: 'absolute',
               top: 0,
               left: 0,
@@ -416,7 +538,6 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
               zIndex: 0
             }}
           />
-          
           <div
             style={{
               position: 'absolute',
@@ -425,7 +546,7 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
               background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.4), transparent)',
               top: -100,
               zIndex: 1,
-              transform: `translateY(${scanlineProgress2}px)`
+              transform: `translateY(${scanlineProgress}px)`
             }}
           />
         </div>
@@ -456,7 +577,6 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
               transform: `rotate(${ringOuterRotation}deg)`
             }}
           />
-
           <div
             style={{
               position: 'absolute',
@@ -468,7 +588,6 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
               transform: `rotate(${ringInnerRotation}deg)`
             }}
           />
-
           <div
             style={{
               position: 'absolute',
@@ -477,12 +596,11 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
               borderRadius: '50%',
               background: 'radial-gradient(circle at center, #ffffff 0%, #00ffff 40%, transparent 70%)',
               boxShadow: '0 0 80px #00ffff, 0 0 120px #00ffff',
-              transform: `scale(${coreGlowScale})`,
-              opacity: coreGlowOpacity,
-              filter: `brightness(${coreGlowBrightness})`
+              transform: `scale(${coreScale})`,
+              opacity: coreOpacity,
+              filter: `brightness(${coreBrightness})`
             }}
           />
-
           <div
             style={{
               position: 'absolute',
@@ -491,8 +609,8 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
               borderRadius: '50%',
               border: '6px solid #fff',
               boxShadow: '0 0 20px #fff',
-              transform: `scale(${coreTargetScale})`,
-              opacity: coreTargetOpacity
+              transform: `scale(${targetScale})`,
+              opacity: targetOpacity
             }}
           />
         </div>
@@ -510,7 +628,7 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
             zIndex: 5,
             opacity: streak1Opacity,
             mixBlendMode: 'screen',
-            transform: `translateX(${streak1Progress}px)`
+            transform: `translateX(${streak1X}px)`
           }}
         />
 
@@ -527,7 +645,7 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
             zIndex: 5,
             opacity: streak2Opacity,
             mixBlendMode: 'screen',
-            transform: `translateX(${streak2Progress}px)`
+            transform: `translateX(${streak2X}px)`
           }}
         />
 
@@ -544,7 +662,7 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
             zIndex: 5,
             opacity: streak3Opacity,
             mixBlendMode: 'screen',
-            transform: `translateX(${streak3Progress}px)`
+            transform: `translateX(${streak3X}px)`
           }}
         />
       </div>
@@ -563,5 +681,5 @@ const CyberpunkEsportsEndscreen: React.FC = () => {
   );
 };
 
-export default CyberpunkEsportsEndscreen;
+export default CyberpunkEsportsYouTubeEndscreen;
 // END_OF_FILE
