@@ -1411,10 +1411,16 @@ app.get("/api/export-csv", (req, res) => {
 // POST: Simpan atau update baris
 app.post("/api/save-item", (req, res) => {
   try {
-    const { item } = req.body;
+    let { item } = req.body;
     if (!item || !item.id) {
       return res.status(400).json({ error: "Item atau ID tidak valid" });
     }
+
+    // Jalankan sanitasi keywords & judul untuk menjamin kepatuhan pada format microstock
+    if (item.judul || item.keywords) {
+      item = sanitizeKeywordsAndTitle(item);
+    }
+
     const dbPath = path.join(__dirname, "saved-items.json");
     const data = fs.readFileSync(dbPath, "utf-8");
     let items = JSON.parse(data);
@@ -4995,7 +5001,13 @@ app.post("/api/export-csv/adobe", (req, res) => {
     const filename = `${item.id}-4k.mov`;
     const title = item.judul || "Stock Video Loop";
     const keywords = item.keywords || "";
-    const category = mapAdobeCategory(item.kategori);
+    
+    // Prefer normalized adobeCategory from DB, map category string if empty, or map numeric category ID
+    let category = item.adobeCategory || "";
+    if (!category || !/^\d+$/.test(category)) {
+      category = mapAdobeCategory(category || item.kategori);
+    }
+    
     const releases = ""; // No releases by default
 
     csvContent += `${escapeCsvField(filename)},${escapeCsvField(title)},${escapeCsvField(keywords)},${category},${escapeCsvField(releases)}\n`;
@@ -5030,7 +5042,13 @@ app.post("/api/export-csv/shutterstock", (req, res) => {
     const filename = `${item.id}-4k.mov`;
     const description = item.deskripsi || item.judul || "Stock Video Loop";
     const keywords = item.keywords || "";
-    const category = mapShutterstockCategory(item.kategori);
+    
+    // Combine normalized categories from DB if available, else map kategori
+    let category = [item.shutterstockCategory, item.shutterstockCategory2].filter(Boolean).join(",");
+    if (!category) {
+      category = mapShutterstockCategory(item.kategori);
+    }
+    
     const editorial = "no";
     const matureContent = "no";
     const illustration = "yes";
