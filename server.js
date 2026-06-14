@@ -66,14 +66,22 @@ if (!fs.existsSync(dbPath)) {
         item.logs.push({ message: 'Server terhenti tak terduga (di-restart).', type: 'error', time: new Date().toLocaleTimeString('id-ID') });
         changed = true;
       }
-      if (item.statusRender4k === 'processing') {
-        item.statusRender4k = 'failed';
+      if (item.statusRender4k === 'queued' || item.statusRender4k === 'processing') {
+        item.statusRender4k = 'queued';
+        item.lastLogMessage = 'Server di-restart. Antrean render 4K dimasukkan kembali.';
+        if (!item.logs) item.logs = [];
+        item.logs.push({ message: 'Server di-restart. Antrean render 4K dimasukkan kembali.', type: 'info', time: new Date().toLocaleTimeString('id-ID') });
+        render4kQueue.push(item.id);
         changed = true;
       }
     });
     if (changed) {
       fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
       console.log("🧹 Berhasil membersihkan status gantung dari sesi sebelumnya.");
+    }
+    if (render4kQueue.length > 0) {
+      console.log(`🔌 Memulihkan ${render4kQueue.length} task render 4K ke dalam antrean.`);
+      processRender4kQueue();
     }
   } catch (e) {
     console.error("Gagal melakukan startup database cleanup:", e);
@@ -1635,6 +1643,8 @@ const taskSseClients = {}; // { itemId: Array of SSE response objects }
 const activeSeoGenerations = {}; // { itemId: boolean }
 const activePreviewRenders = {}; // { itemId: boolean }
 const active4kRenders = {}; // { itemId: boolean }
+const render4kQueue = [];
+let isProcessingRender4k = false;
 
 
 // Sequential Git operator lock (Mutex) to prevent local commit/push conflicts
@@ -3200,6 +3210,70 @@ async function run4kRenderBackground(itemId) {
   }
 }
 
+async function processRender4kQueue() {
+  if (isProcessingRender4k) return;
+  if (render4kQueue.length === 0) return;
+
+  isProcessingRender4k = true;
+  const itemId = render4kQueue.shift();
+  console.log(`[Render4KQueue] Processing next item: ${itemId}. Remaining: ${render4kQueue.length}`);
+
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    if (!fs.existsSync(dbPath)) {
+      console.error("[Render4KQueue] Database not found");
+      isProcessingRender4k = false;
+      setTimeout(processRender4kQueue, 1000);
+      return;
+    }
+
+    const data = fs.readFileSync(dbPath, "utf-8");
+    const items = JSON.parse(data);
+    const item = items.find(i => i.id === itemId);
+
+    if (!item) {
+      console.log(`[Render4KQueue] Item ${itemId} tidak ditemukan di database.`);
+      isProcessingRender4k = false;
+      setTimeout(processRender4kQueue, 1000);
+      return;
+    }
+
+    if (!item.promptCode) {
+      addTaskLog(itemId, "Gagal memproses antrean render 4K: Kode TSX kosong.", "error");
+      item.statusRender4k = 'failed';
+      saveOrUpdateItem(item);
+      isProcessingRender4k = false;
+      setTimeout(processRender4kQueue, 1000);
+      return;
+    }
+
+    // Update status to processing
+    item.statusRender4k = 'processing';
+    saveOrUpdateItem(item);
+
+    // Call the background render function and wait for it to finish!
+    await run4kRenderBackground(itemId);
+  } catch (err) {
+    console.error(`[Render4KQueue] Error rendering ${itemId}:`, err);
+    try {
+      const dbPath = path.join(__dirname, "saved-items.json");
+      const data = fs.readFileSync(dbPath, "utf-8");
+      const items = JSON.parse(data);
+      const item = items.find(i => i.id === itemId);
+      if (item) {
+        item.statusRender4k = 'failed';
+        saveOrUpdateItem(item);
+        addTaskLog(itemId, `Gagal memproses render 4K: ${err.message}`, "error");
+      }
+    } catch (e) {}
+  } finally {
+    isProcessingRender4k = false;
+    // Process next item in the queue
+    setTimeout(processRender4kQueue, 1000);
+  }
+}
+
+
 // POST: Trigger render Preview
 app.post("/api/trigger-preview/:id", async (req, res) => {
   const { id } = req.params;
@@ -3251,19 +3325,27 @@ app.post("/api/trigger-4k/:id", async (req, res) => {
       return res.status(400).json({ error: "Item tidak memiliki kode TSX untuk dirender" });
     }
 
-    if (item.statusRender4k === 'processing') {
-      return res.status(400).json({ error: "Render 4K sedang berjalan" });
+    if (item.statusRender4k === 'processing' || item.statusRender4k === 'queued' || render4kQueue.includes(id)) {
+      return res.status(400).json({ error: "Render 4K sedang berjalan atau dalam antrean" });
     }
 
-    item.statusRender4k = 'processing';
+    item.statusRender4k = 'queued';
+    if (!item.logs) item.logs = [];
+    const timeStr = new Date().toLocaleTimeString('id-ID');
+    item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+    item.logs.push({ message: `📥 Ditambahkan ke antrean Render 4K di server.`, type: "info", time: timeStr });
+    item.lastLogMessage = "Mengantre untuk render 4K...";
+    
     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
 
-    // Jalankan background task asinkron
-    run4kRenderBackground(id).catch(err => {
-      console.error(`Error in run4kRenderBackground for ${id}:`, err);
-    });
+    if (!render4kQueue.includes(id)) {
+      render4kQueue.push(id);
+    }
 
-    res.json({ success: true, message: "Render 4K dimulai di background" });
+    // Jalankan background processor (jika belum aktif)
+    processRender4kQueue();
+
+    res.json({ success: true, message: "Render 4K dimasukkan ke antrean background" });
   } catch (error) {
     console.error(`❌ Gagal di trigger-4k untuk ${id}:`, error.message);
     res.status(500).json({ error: error.message });
@@ -3511,78 +3593,47 @@ app.post("/api/batch-trigger-4k", async (req, res) => {
 
   const results = [];
   const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    return res.status(500).json({ error: "Gagal membaca database" });
+  }
 
+  const enqueuedIds = [];
   for (const id of ids) {
-    try {
-      const data = fs.readFileSync(dbPath, "utf-8");
-      const items = JSON.parse(data);
-      const item = items.find(i => i.id === id);
-
-      if (!item) {
-        results.push({ id, success: false, error: `Item ${id} tidak ditemukan` });
-        continue;
-      }
-      if (!item.promptCode) {
-        results.push({ id, success: false, error: `Item ${id} tidak memiliki TSX code` });
-        continue;
-      }
-
-      // Update status ke processing
-      item.statusRender4k = 'processing';
-      fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
-
-      // Tulis TSX
-      fs.writeFileSync("src/Composition.tsx", item.promptCode);
-
-      // Commit & Push
-      execSync("git add src/Composition.tsx", { stdio: "inherit" });
-      try {
-        execSync(`git commit -m "Render 4K Batch: ${id}"`, { stdio: "inherit" });
-      } catch (e) {
-        console.log(`ℹ️ Tidak ada perubahan kode baru untuk ${id}.`);
-      }
-      execSync("git push origin main", { stdio: "inherit" });
-
-      const sha = execSync("git rev-parse HEAD").toString().trim();
-
-      // Trigger workflow dispatch
-      const workflowFile = "render-4k.yml";
-      await axios.post(
-        `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/actions/workflows/${workflowFile}/dispatches`,
-        {
-          ref: "main",
-          inputs: {
-            composition_id: id,
-            duration_frames: String(Number(item.durationInFrames) || 150),
-            fps: String(item.fps || 30),
-            judul: item.judul || "Stock Video",
-            keywords: item.keywords || "motion, abstract, loop"
-          }
-        },
-        {
-          headers: {
-            Authorization: "token " + GITHUB_TOKEN,
-            Accept: "application/vnd.github.v3+json"
-          }
-        }
-      );
-
-      const trackingKey = `${id}_4k`;
-      gitRuns[trackingKey] = {
-        sha,
-        status: "triggered",
-        runId: null,
-        triggeredAt: Date.now(),
-        workflowFile
-      };
-
-      results.push({ id, success: true, sha });
-      console.log(`✅ 4K batch trigger berhasil untuk: ${id}`);
-
-    } catch (err) {
-      console.error(`❌ Gagal batch-trigger-4k untuk ${id}:`, err.message);
-      results.push({ id, success: false, error: err.message });
+    const item = items.find(i => i.id === id);
+    if (!item) {
+      results.push({ id, success: false, error: "Item tidak ditemukan" });
+      continue;
     }
+    if (!item.promptCode) {
+      results.push({ id, success: false, error: "Kode TSX kosong" });
+      continue;
+    }
+    if (item.statusRender4k === 'processing' || item.statusRender4k === 'queued' || render4kQueue.includes(id)) {
+      results.push({ id, success: false, error: "Sedang berjalan atau mengantre" });
+      continue;
+    }
+
+    item.statusRender4k = 'queued';
+    if (!item.logs) item.logs = [];
+    
+    const timeStr = new Date().toLocaleTimeString('id-ID');
+    item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+    item.logs.push({ message: `📥 Ditambahkan ke antrean Render 4K batch di server.`, type: "info", time: timeStr });
+    item.lastLogMessage = "Mengantre untuk render 4K...";
+    
+    render4kQueue.push(id);
+    enqueuedIds.push(id);
+    results.push({ id, success: true });
+  }
+
+  if (enqueuedIds.length > 0) {
+    fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+    // Start background processor
+    processRender4kQueue();
   }
 
   res.json({ results });

@@ -2433,7 +2433,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       // Auto-poll atau start SSE stream untuk item yang masih diproses
       cachedItems.forEach(item => {
         const status = item.statusConvertTsx || 'queued';
-        const isRunning = status === 'processing-preview' || status === 'processing-tsx' || status === 'queued' || item.statusRender4k === 'processing';
+        const isRunning = status === 'processing-preview' || status === 'processing-tsx' || status === 'queued' || item.statusRender4k === 'processing' || item.statusRender4k === 'queued';
         if (isRunning) {
           startTaskLogStream(item.id);
         }
@@ -2945,7 +2945,9 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     } else if (status === 'processing-preview') {
       statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render Preview</span>`;
     } else if (status === 'success') {
-      if (item.statusRender4k === 'processing') {
+      if (item.statusRender4k === 'queued') {
+        statusBadge = `<span class="status-badge badge-queued"><span class="spin">⏳</span> Antrean 4K</span>`;
+      } else if (item.statusRender4k === 'processing') {
         statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render 4K...</span>`;
       } else if (item.statusRender4k === 'success') {
         statusBadge = `<span class="status-badge badge-success">✅ Selesai 4K</span>`;
@@ -3199,7 +3201,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const isSeoRunning = !!activeSeoGenerations[item.id];
     const isTsxRunning = item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx';
     const isPreviewRunning = item.statusConvertTsx === 'processing-preview';
-    const is4kRunning = item.statusRender4k === 'processing';
+    const is4kRunning = item.statusRender4k === 'processing' || item.statusRender4k === 'queued';
     const isAnyRunning = isSeoRunning || isTsxRunning || isPreviewRunning || is4kRunning;
 
     const aiSelect = `
