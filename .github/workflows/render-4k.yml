@@ -27,6 +27,12 @@ on:
         required: false
         default: 'motion, abstract, loop'
         type: string
+      transparent:
+        description: 'Whether background is transparent'
+        required: false
+        default: 'false'
+        type: string
+
 
 jobs:
   render-4k:
@@ -83,10 +89,16 @@ jobs:
       - name: Render 4K ProRes MOV
         run: |
           echo "=== Rendering 4K ProRes for composition: ${{ github.event.inputs.composition_id }} ==="
+          PIXEL_FORMAT="yuv422p10le"
+          if [ "${{ github.event.inputs.transparent }}" = "true" ]; then
+            PIXEL_FORMAT="yuva444p10le"
+            echo "=== Transparent background requested. Using yuva444p10le. ==="
+          fi
           npx remotion render Composition \
             "out/${{ github.event.inputs.composition_id }}-4k.mov" \
             --props=temp-props.json \
             --codec=prores \
+            --pixel-format=$PIXEL_FORMAT \
             --muted \
             --log=verbose
 

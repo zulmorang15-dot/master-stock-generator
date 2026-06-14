@@ -1326,6 +1326,8 @@
       <button class="btn-batch-seo" id="btnBatchSeo" onclick="triggerBatchSEO()">✨ Gen Judul Terpilih</button>
       <button class="btn-batch-4k" id="btnBatch4k" onclick="triggerBatch4K()">🚀 Gen 4K Terpilih</button>
       <button class="btn-batch-download" id="btnBatchDownload" onclick="triggerBatchDownload()" style="background: linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; padding:6px 12px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer;">📥 Batch Download (MOV)</button>
+      <button class="btn-batch-download" id="btnBatchAdobeCsv" onclick="triggerExportCsv('adobe')" style="background: linear-gradient(135deg, var(--purple), #7c3aed); border:none; color:#fff; padding:6px 12px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer;">📥 CSV Adobe Stock</button>
+      <button class="btn-batch-download" id="btnBatchShutterstockCsv" onclick="triggerExportCsv('shutterstock')" style="background: linear-gradient(135deg, var(--cyan), #0891b2); border:none; color:#fff; padding:6px 12px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer;">📥 CSV Shutterstock</button>
       <button class="btn-batch-del" id="btnBatchDelete" onclick="triggerBatchDelete()">🗑 Batch Hapus</button>
     </div>
     <!-- ═══════════ BATCH STATUS BANNER ═══════════ -->
@@ -2535,6 +2537,8 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const btnTsx = document.getElementById('btnBatchTsx');
     const btn4k = document.getElementById('btnBatch4k');
     const btnDownload = document.getElementById('btnBatchDownload');
+    const btnAdobeCsv = document.getElementById('btnBatchAdobeCsv');
+    const btnShutterstockCsv = document.getElementById('btnBatchShutterstockCsv');
     const btnDel = document.getElementById('btnBatchDelete');
     const count = batchSelected.size;
     bar.classList.toggle('visible', count > 0 && batchModeActive);
@@ -2545,6 +2549,8 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     if (btnTsx) btnTsx.disabled = disabled;
     if (btn4k) btn4k.disabled = disabled;
     if (btnDownload) btnDownload.disabled = disabled;
+    if (btnAdobeCsv) btnAdobeCsv.disabled = disabled;
+    if (btnShutterstockCsv) btnShutterstockCsv.disabled = disabled;
     if (btnDel) btnDel.disabled = disabled;
   }
 
@@ -2589,6 +2595,50 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     } finally {
       btn.disabled = false;
       btn.textContent = '📥 Batch Download (MOV)';
+      updateBatchBar();
+    }
+  }
+
+  async function triggerExportCsv(type) {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+
+    const btnId = type === 'adobe' ? 'btnBatchAdobeCsv' : 'btnBatchShutterstockCsv';
+    const btn = document.getElementById(btnId);
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Mengekspor...';
+
+    try {
+      showToast(`📥 Mengekspor CSV metadata untuk ${type === 'adobe' ? 'Adobe Stock' : 'Shutterstock'}...`, 'info');
+      
+      const resp = await fetch(`/api/export-csv/${type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+
+      if (!resp.ok) {
+        throw new Error(await resp.text());
+      }
+
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = type === 'adobe' ? 'adobe_stock_upload.csv' : 'shutterstock_upload.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      showToast('✅ CSV metadata berhasil diunduh!', 'success');
+      clearBatchSelection();
+    } catch(err) {
+      showToast('❌ Gagal mengekspor CSV: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
       updateBatchBar();
     }
   }

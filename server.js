@@ -3096,6 +3096,91 @@ async function runPreviewRenderBackground(itemId) {
   }
 }
 
+// Helper function to compare visual similarity of first and last frames of a composition
+async function comparePngs(path1, path2) {
+  let browser;
+  try {
+    const { chromium } = require("playwright");
+    // Read files as base64
+    const img1Base64 = fs.readFileSync(path1).toString("base64");
+    const img2Base64 = fs.readFileSync(path2).toString("base64");
+
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    // Use page.evaluate to compare the images using canvas
+    const result = await page.evaluate(async ({ img1, img2 }) => {
+      return new Promise((resolve, reject) => {
+        const loadImage = (base64) => {
+          return new Promise((res, rej) => {
+            const img = new Image();
+            img.onload = () => res(img);
+            img.onerror = rej;
+            img.src = "data:image/png;base64," + base64;
+          });
+        };
+
+        Promise.all([loadImage(img1), loadImage(img2)]).then(([i1, i2]) => {
+          const w = i1.width;
+          const h = i1.height;
+          
+          const canvas1 = document.createElement("canvas");
+          canvas1.width = w;
+          canvas1.height = h;
+          const ctx1 = canvas1.getContext("2d");
+          ctx1.drawImage(i1, 0, 0);
+          const data1 = ctx1.getImageData(0, 0, w, h).data;
+
+          const canvas2 = document.createElement("canvas");
+          canvas2.width = w;
+          canvas2.height = h;
+          const ctx2 = canvas2.getContext("2d");
+          ctx2.drawImage(i2, 0, 0);
+          const data2 = ctx2.getImageData(0, 0, w, h).data;
+
+          let diffPixels = 0;
+          let totalDiff = 0;
+          const totalPixels = w * h;
+
+          for (let i = 0; i < data1.length; i += 4) {
+            const rDiff = Math.abs(data1[i] - data2[i]);
+            const gDiff = Math.abs(data1[i+1] - data2[i+1]);
+            const bDiff = Math.abs(data1[i+2] - data2[i+2]);
+            const aDiff = Math.abs(data1[i+3] - data2[i+3]);
+
+            const colorDiff = (rDiff + gDiff + bDiff + aDiff) / 4;
+            totalDiff += colorDiff;
+
+            if (rDiff > 15 || gDiff > 15 || bDiff > 15 || aDiff > 15) {
+              diffPixels++;
+            }
+          }
+
+          const percentDiff = (diffPixels / totalPixels) * 100;
+          const avgPercentDiff = (totalDiff / (totalPixels * 255)) * 100;
+          const similarity = 100 - avgPercentDiff;
+
+          resolve({
+            similarity: Number(similarity.toFixed(2)),
+            percentDiff: Number(percentDiff.toFixed(2)),
+            seamless: similarity >= 85 && percentDiff <= 15
+          });
+        }).catch(reject);
+      });
+    }, { img1: img1Base64, img2: img2Base64 });
+
+    return result;
+  } catch (err) {
+    console.error("Gagal melakukan perbandingan visual", err);
+    throw err;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
 // Helper untuk memproses Render 4K di background secara asinkron
 async function run4kRenderBackground(itemId) {
   active4kRenders[itemId] = true;
@@ -3124,12 +3209,65 @@ async function run4kRenderBackground(itemId) {
   addTaskLog(itemId, `🚀 Memulai proses Render 4K ProRes (Cloud)...`, "info");
 
   try {
-    addTaskLog(itemId, "Mengantrekan operasi Git Push untuk sinkronisasi kode ke GitHub...", "info");
-    
     await runGitTask(async () => {
-      addTaskLog(itemId, "Mulai menulis src/Composition.tsx dan git push...", "info");
+      addTaskLog(itemId, "Mulai menulis src/Composition.tsx...", "info");
       fs.writeFileSync("src/Composition.tsx", item.promptCode);
 
+      // --- AUTOMATED QC VISUAL LOOP CHECK ---
+      const frame0Path = path.join(__dirname, `out/temp-0-${itemId}.png`);
+      const frameLastPath = path.join(__dirname, `out/temp-last-${itemId}.png`);
+      const localProps = {
+        width: 1920,
+        height: 1080,
+        durationInFrames: Number(item.durationInFrames) || 300,
+        fps: Number(item.fps) || 30,
+        judul: item.judul || "Stock Video",
+        keywords: item.keywords || "motion, abstract, loop"
+      };
+      const localPropsPath = path.join(__dirname, `out/temp-props-${itemId}.json`);
+      const lastFrame = localProps.durationInFrames - 1;
+
+      addTaskLog(itemId, "Melakukan QC Visual Loop: Merender frame pertama dan terakhir secara lokal...", "info");
+      
+      let renderSuccess = false;
+      try {
+        fs.writeFileSync(localPropsPath, JSON.stringify(localProps, null, 2));
+        execSync(`npx remotion render Composition "${frame0Path}" --frame=0 --scale=0.1 --props="${localPropsPath}" --overwrite`, { stdio: 'inherit' });
+        execSync(`npx remotion render Composition "${frameLastPath}" --frame=${lastFrame} --scale=0.1 --props="${localPropsPath}" --overwrite`, { stdio: 'inherit' });
+        renderSuccess = true;
+      } catch (renderError) {
+        console.error("Gagal merender frame QC:", renderError);
+        addTaskLog(itemId, `⚠️ QC Loop Warning: Gagal merender frame preview lokal untuk QC: ${renderError.message}. Melanjutkan render...`, "warning");
+      }
+
+      if (renderSuccess) {
+        try {
+          addTaskLog(itemId, "QC Loop: Membandingkan kemiripan visual frame pertama dan terakhir...", "info");
+          const qcResult = await comparePngs(frame0Path, frameLastPath);
+          if (qcResult) {
+            if (qcResult.similarity >= 85) {
+              addTaskLog(itemId, `✅ QC Loop Sukses: Kemiripan visual frame pertama dan terakhir ${qcResult.similarity}%. Loop terdeteksi mulus/seamless.`, "success");
+            } else {
+              addTaskLog(itemId, `⚠️ QC Loop Warning: Kemiripan visual frame pertama dan terakhir hanya ${qcResult.similarity}%. Loop mungkin tidak seamless.`, "warning");
+            }
+          }
+        } catch (compareError) {
+          console.error("Gagal membandingkan visual QC:", compareError);
+          addTaskLog(itemId, `⚠️ QC Loop Warning: Gagal membandingkan visual: ${compareError.message}. Melanjutkan render...`, "warning");
+        }
+      }
+
+      // Cleanup temp QC files
+      try {
+        if (fs.existsSync(frame0Path)) fs.unlinkSync(frame0Path);
+        if (fs.existsSync(frameLastPath)) fs.unlinkSync(frameLastPath);
+        if (fs.existsSync(localPropsPath)) fs.unlinkSync(localPropsPath);
+      } catch (cleanupErr) {
+        console.error("Gagal membersihkan file temp QC:", cleanupErr.message);
+      }
+      // --- END OF AUTOMATED QC VISUAL LOOP CHECK ---
+
+      addTaskLog(itemId, "Mengantrekan operasi Git Push untuk sinkronisasi kode ke GitHub...", "info");
       execSync("git add src/Composition.tsx", { stdio: "inherit" });
       try {
         execSync(`git commit -m "Render 4K: ${itemId}"`, { stdio: "inherit" });
@@ -3154,7 +3292,8 @@ async function run4kRenderBackground(itemId) {
             duration_frames: String(item.durationInFrames || 300),
             fps: String(item.fps || 30),
             judul: item.judul || "Stock Video",
-            keywords: item.keywords || "motion, abstract, loop"
+            keywords: item.keywords || "motion, abstract, loop",
+            transparent: String(item.transparent || false)
           }
         },
         {
@@ -4752,6 +4891,110 @@ app.post("/api/trends/analyze", async (req, res) => {
 });
 
 
+
+// CSV helper function to escape fields per RFC 4180
+function escapeCsvField(val) {
+  if (val === undefined || val === null) return '';
+  let str = String(val);
+  // If field contains comma, quote, or newline, escape it
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    str = str.replace(/"/g, '""');
+    return `"${str}"`;
+  }
+  return str;
+}
+
+// Map user-defined categories to Adobe Stock categories (numeric)
+function mapAdobeCategory(categoryStr) {
+  const cat = String(categoryStr || '').toLowerCase();
+  if (cat.includes('tech')) return 19; // Technology
+  if (cat.includes('business')) return 3; // Business
+  if (cat.includes('science')) return 16; // Science
+  if (cat.includes('graphic') || cat.includes('abstract') || cat.includes('design')) return 8; // Graphic Resources
+  return 8; // Default to Graphic Resources
+}
+
+// Map user-defined categories to Shutterstock categories (string names)
+function mapShutterstockCategory(categoryStr) {
+  const cat = String(categoryStr || '').toLowerCase();
+  if (cat.includes('tech')) return 'Technology';
+  if (cat.includes('business') || cat.includes('finance')) return 'Business/Finance';
+  if (cat.includes('science')) return 'Science';
+  if (cat.includes('abstract') || cat.includes('graphic') || cat.includes('design')) return 'Abstract';
+  return 'Abstract'; // Default
+}
+
+// POST /api/export-csv/adobe -> Export selected compositions as Adobe Stock metadata CSV
+app.post("/api/export-csv/adobe", (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "Pilih setidaknya satu item untuk diekspor." });
+  }
+
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    if (fs.existsSync(dbPath)) {
+      items = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+    }
+  } catch (err) {
+    return res.status(500).json({ error: "Gagal membaca database lokal." });
+  }
+
+  const selectedItems = items.filter(item => ids.includes(item.id));
+  let csvContent = "Filename,Title,Keywords,Category,Releases\n";
+
+  selectedItems.forEach(item => {
+    const filename = `${item.id}-4k.mov`;
+    const title = item.judul || "Stock Video Loop";
+    const keywords = item.keywords || "";
+    const category = mapAdobeCategory(item.kategori);
+    const releases = ""; // No releases by default
+
+    csvContent += `${escapeCsvField(filename)},${escapeCsvField(title)},${escapeCsvField(keywords)},${category},${escapeCsvField(releases)}\n`;
+  });
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", "attachment; filename=adobe_stock_upload.csv");
+  return res.status(200).send(csvContent);
+});
+
+// POST /api/export-csv/shutterstock -> Export selected compositions as Shutterstock metadata CSV
+app.post("/api/export-csv/shutterstock", (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "Pilih setidaknya satu item untuk diekspor." });
+  }
+
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    if (fs.existsSync(dbPath)) {
+      items = JSON.parse(fs.readFileSync(dbPath, "utf-8"));
+    }
+  } catch (err) {
+    return res.status(500).json({ error: "Gagal membaca database lokal." });
+  }
+
+  const selectedItems = items.filter(item => ids.includes(item.id));
+  let csvContent = "Filename,Description,Keywords,Categories,Editorial,Mature content,illustration\n";
+
+  selectedItems.forEach(item => {
+    const filename = `${item.id}-4k.mov`;
+    const description = item.deskripsi || item.judul || "Stock Video Loop";
+    const keywords = item.keywords || "";
+    const category = mapShutterstockCategory(item.kategori);
+    const editorial = "no";
+    const matureContent = "no";
+    const illustration = "yes";
+
+    csvContent += `${escapeCsvField(filename)},${escapeCsvField(description)},${escapeCsvField(keywords)},${escapeCsvField(category)},${editorial},${matureContent},${illustration}\n`;
+  });
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", "attachment; filename=shutterstock_upload.csv");
+  return res.status(200).send(csvContent);
+});
 
 // GET /api/proxy-image -> Proxy gambar untuk menghindari CORS
 app.get("/api/proxy-image", async (req, res) => {
