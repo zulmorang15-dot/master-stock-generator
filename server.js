@@ -149,6 +149,22 @@ function setCachedResponse(prompt, model, response) {
   }
 }
 
+// Repair common AI-generated Remotion/TypeScript mistakes before compile.
+function repairGeneratedTsx(code) {
+  if (!code) return code;
+  let repaired = code;
+
+  // Remotion interpolate() option is `easing`, not `ease`.
+  repaired = repaired.replace(/([,{]\s*)ease\s*:/g, '$1easing:');
+
+  // Some models hallucinate CSS-like option casing or invalid aliases.
+  repaired = repaired.replace(/EasingEaseOut/g, 'Easing.out(Easing.quad)');
+  repaired = repaired.replace(/EasingEaseIn/g, 'Easing.in(Easing.quad)');
+  repaired = repaired.replace(/EasingEaseInOut/g, 'Easing.inOut(Easing.quad)');
+
+  return repaired;
+}
+
 // Generic retry helper with exponential backoff
 async function withRetry(fn, options = {}) {
   const {
@@ -1949,6 +1965,7 @@ All style keys in JSX style objects (e.g., style={{ ... }}) MUST be camelCased. 
 **BANNED FUNCTIONS (WILL CAUSE RUNTIME CRASH — NEVER USE):**
 - EasingEaseOut, EasingEaseIn, EasingEaseInOut — these do not exist in Remotion. Use Easing.out(Easing.quad), Easing.in(Easing.quad), Easing.inOut(Easing.quad).
 - Valid Easing values: Easing.linear, Easing.ease, Easing.quad, Easing.cubic, Easing.sin, Easing.circle, Easing.exp, Easing.elastic(), Easing.back(), Easing.bounce, Easing.bezier(), Easing.in(), Easing.out(), Easing.inOut()
+- CRITICAL: Remotion interpolate() options MUST use the property name \`easing\`, NEVER \`ease\`. Correct: \`interpolate(frame, [0, 30], [0, 1], { easing: Easing.out(Easing.quad) })\`. Incorrect and forbidden: \`{ ease: ... }\`.
 - Date.now(), performance.now(), new Date() — BANNED, breaks deterministic frame rendering.
 - Math.random() inside component render — BANNED. Pre-calculate outside the component into a static const array.
 - setInterval(), setTimeout(), requestAnimationFrame() — BANNED.
@@ -2271,6 +2288,12 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
       tsxCode = parts[1].split("\n").slice(1).join("\n").split("```")[0].trim();
     } else if (tsxCode.startsWith("```")) {
       tsxCode = tsxCode.split("```")[1].split("```")[0].trim();
+    }
+
+    const repairedTsxCode = repairGeneratedTsx(tsxCode);
+    if (repairedTsxCode !== tsxCode) {
+      addTaskLog(itemId, "Auto-repair TSX: mengganti opsi Remotion yang tidak valid (mis. ease -> easing).", "info");
+      tsxCode = repairedTsxCode;
     }
 
     // Validasi lokal sebelum push
