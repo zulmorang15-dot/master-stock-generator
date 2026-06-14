@@ -1263,6 +1263,24 @@
             <span id="status_openrouter" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
           </div>
         </div>
+        <!-- 9Router Config -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">9Router API Key</label>
+          <input type="password" class="input-text-field" id="keyNinerouter" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="Kunci API 9Router..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('ninerouter')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_ninerouter" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">9Router Base URL</label>
+          <input type="text" class="input-text-field" id="keyNinerouterUrl" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="http://localhost:20128/v1" />
+        </div>
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">9Router Model Name</label>
+          <input type="text" class="input-text-field" id="keyNinerouterModel" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="9router" />
+        </div>
+
         <!-- RapidAPI Key (Gmailnator) -->
         <div>
           <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">RapidAPI Key (Gmailnator)</label>
@@ -3167,8 +3185,10 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         <option value="syntx-perplexity" ${item.aiModel === 'syntx-perplexity' ? 'selected' : ''}>🔍 Syntx Perplexity</option>
         <option value="gemini" ${item.aiModel === 'gemini' ? 'selected' : ''}>🧠 Gemini API</option>
         <option value="openrouter" ${item.aiModel === 'openrouter' ? 'selected' : ''}>🔀 OpenRouter</option>
+        <option value="9router" ${item.aiModel === '9router' ? 'selected' : ''}>🤖 9Router (Combo)</option>
         <option value="groq" ${item.aiModel === 'groq' ? 'selected' : ''}>⚡ Groq</option>
       </select>
+
     `;
 
     // Per-item video config selectors (auto-filled by AI analysis, editable by user)
@@ -3595,6 +3615,9 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       document.getElementById('keyGroq').value = data.groqKey || '';
       document.getElementById('keyGemini').value = data.geminiKey || '';
       document.getElementById('keyOpenrouter').value = data.openrouterKey || '';
+      document.getElementById('keyNinerouter').value = data.ninerouterKey || '';
+      document.getElementById('keyNinerouterUrl').value = data.ninerouterUrl || '';
+      document.getElementById('keyNinerouterModel').value = data.ninerouterModel || '';
       document.getElementById('keyRapidapi').value = data.rapidApiKey || '';
       document.getElementById('syntxBaseEmail').value = data.syntxBaseEmail || '';
       document.getElementById('syntxEmailIndex').value = data.syntxEmailIndex || '0';
@@ -3611,6 +3634,9 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const groqKey = document.getElementById('keyGroq').value;
     const geminiKey = document.getElementById('keyGemini').value;
     const openrouterKey = document.getElementById('keyOpenrouter').value;
+    const ninerouterKey = document.getElementById('keyNinerouter').value;
+    const ninerouterUrl = document.getElementById('keyNinerouterUrl').value;
+    const ninerouterModel = document.getElementById('keyNinerouterModel').value;
     const rapidApiKey = document.getElementById('keyRapidapi').value;
     const syntxBaseEmail = document.getElementById('syntxBaseEmail').value;
     const syntxEmailIndex = document.getElementById('syntxEmailIndex').value;
@@ -3627,6 +3653,9 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
           groqKey,
           geminiKey,
           openrouterKey,
+          ninerouterKey,
+          ninerouterUrl,
+          ninerouterModel,
           rapidApiKey,
           syntxBaseEmail,
           syntxEmailIndex,
@@ -3646,23 +3675,35 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   }
 
   async function testApiKey(provider) {
-    const inputId = provider === 'groq' ? 'keyGroq' : provider === 'gemini' ? 'keyGemini' : provider === 'gmailnator' ? 'keyRapidapi' : 'keyOpenrouter';
+    const inputId = provider === 'groq' ? 'keyGroq' : 
+                    provider === 'gemini' ? 'keyGemini' : 
+                    provider === 'gmailnator' ? 'keyRapidapi' : 
+                    provider === 'ninerouter' ? 'keyNinerouter' : 
+                    'keyOpenrouter';
     const statusId = `status_${provider}`;
-    const apiKey = document.getElementById(inputId).value;
+    let apiKey = document.getElementById(inputId).value;
     const statusEl = document.getElementById(statusId);
 
-    if (!apiKey) {
+    if (!apiKey && provider !== 'ninerouter') {
       statusEl.innerHTML = '<span style="color:var(--amber);">⚠️ Kosong</span>';
       return;
+    }
+    if (!apiKey && provider === 'ninerouter') {
+      apiKey = "TIDAK_ADA";
     }
 
     statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Mengecek...</span>';
 
     try {
+      const requestPayload = { provider, apiKey };
+      if (provider === 'ninerouter') {
+        requestPayload.apiBaseUrl = document.getElementById('keyNinerouterUrl').value;
+        requestPayload.apiModel = document.getElementById('keyNinerouterModel').value;
+      }
       const resp = await fetch('/api/keys/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, apiKey })
+        body: JSON.stringify(requestPayload)
       });
       const data = await resp.json();
       if (data.valid) {
@@ -3676,6 +3717,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       showToast(`❌ Gagal mengetes key: ${err.message}`, 'error');
     }
   }
+
 
   // ═══════════════════════════════════════════
   // TOAST

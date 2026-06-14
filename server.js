@@ -113,6 +113,10 @@ const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 let RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 let SYNTX_BASE_EMAIL = process.env.SYNTX_BASE_EMAIL || "";
 let SYNTX_EMAIL_INDEX = process.env.SYNTX_EMAIL_INDEX || "0";
+let NINEROUTER_API_KEY = process.env.NINEROUTER_API_KEY || "";
+let NINEROUTER_BASE_URL = process.env.NINEROUTER_BASE_URL || "http://localhost:20128/v1";
+let NINEROUTER_MODEL = process.env.NINEROUTER_MODEL || "9router";
+
 
 // DeepSeek AI Call Helper (langsung menggunakan API resmi DeepSeek)
 async function callDeepSeek(prompt, model = "deepseek-chat") {
@@ -405,6 +409,14 @@ async function callAIWithFallback(prompt, options = {}) {
         return result;
       }
       throw new Error("OpenRouter returned invalid response");
+    } else if (preferModel === '9router') {
+      const result = await callNineRouter(prompt);
+      if (isValid(result, '9Router')) {
+        log(`✅ Sukses menggunakan 9Router!`, 'success');
+        return result;
+      }
+      throw new Error("9Router returned invalid response");
+
     } else if (preferModel === 'tsx-default') {
       log("Memulai pencarian model untuk konversi TSX (Gemini Syntx -> Claude Syntx)...", "info");
       // 1. Coba Syntx Gemini
@@ -534,10 +546,30 @@ async function callAIWithFallback(prompt, options = {}) {
     errors.push({ provider: "deepseek", error: err.message });
   }
 
-  // 6. OpenRouter
+  // 6. 9Router
+  if (preferModel !== '9router') {
+    try {
+      if (NINEROUTER_API_KEY) {
+        log("📡 [6/7] Mencoba 9Router...", "info");
+        const result = await callNineRouter(prompt);
+        if (isValid(result, "9Router")) {
+          log("✅ Sukses menggunakan 9Router!", "success");
+          return result;
+        }
+        log("⚠️ 9Router: respons tidak valid, lanjut fallback...", "warning");
+      } else {
+        log("⏩ Skip 9Router (API Key kosong)", "info");
+      }
+    } catch (err) {
+      log(`⚠️ 9Router gagal: ${err.message?.substring(0, 150)}`, "warning");
+      errors.push({ provider: "9router", error: err.message });
+    }
+  }
+
+  // 7. OpenRouter
   try {
     if (OPENROUTER_API_KEY) {
-      log("📡 [6/6] Mencoba OpenRouter sebagai fallback terakhir...", "info");
+      log("📡 [7/7] Mencoba OpenRouter sebagai fallback terakhir...", "info");
       const result = await callOpenRouter(prompt, "default");
       if (isValid(result, "OpenRouter")) {
         log("✅ Sukses menggunakan OpenRouter!", "success");
@@ -551,6 +583,7 @@ async function callAIWithFallback(prompt, options = {}) {
     log(`⚠️ OpenRouter gagal: ${err.message?.substring(0, 150)}`, "warning");
     errors.push({ provider: "openrouter", error: err.message });
   }
+
 
   // Semua gagal
   log(`❌ Semua provider AI gagal! Rincian error: ${JSON.stringify(errors)}`, "error");
@@ -591,8 +624,52 @@ const OPENROUTER_MODELS = {
   "default": "meta-llama/llama-3.3-70b-instruct:free" // Model default yang gratis & unlimited
 };
 
+// 9Router API Call Helper (OpenAI-compatible)
+async function callNineRouter(prompt, model = NINEROUTER_MODEL) {
+  try {
+    const url = `${NINEROUTER_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
+    console.log(`📡 Mengirim request ke 9Router (URL: ${url}, model: ${model})...`);
+    
+    const headers = {
+      "Content-Type": "application/json"
+    };
+    if (NINEROUTER_API_KEY) {
+      headers["Authorization"] = `Bearer ${NINEROUTER_API_KEY}`;
+      console.log("🔑 API Key 9Router ada:", NINEROUTER_API_KEY.substring(0, 10) + "...");
+    }
+
+    const response = await axios.post(
+      url,
+      {
+        model: model,
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ]
+      },
+      {
+        headers: headers,
+        timeout: 90000 // 9Router may run slow for complex combo queries, give it 90s
+      }
+    );
+
+    if (!response.data.choices || !response.data.choices[0]) {
+      throw new Error("Respons 9Router tidak valid: " + JSON.stringify(response.data));
+    }
+
+    console.log("✅ Respon 9Router berhasil diterima!");
+    return response.data.choices[0].message.content;
+  } catch (error) {
+    console.error("❌ 9Router Error:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
 // OpenRouter API Call Helper dengan auto-fallback model
 async function callOpenRouter(prompt, modelKey = "default") {
+
   // Daftar model untuk fallback jika model utama gagal (utamakan model gratis)
   const fallbackModels = [
     modelKey,                                    // Model yang diminta
@@ -4150,7 +4227,7 @@ app.post("/api/batch-regenerate-seo", (req, res) => {
 });
 
 // Fungsi untuk memperbarui file .env dan memory variables
-function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey }) {
+function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey, ninerouterKey, ninerouterUrl, ninerouterModel }) {
   const envPath = path.join(__dirname, ".env");
   let content = "";
   if (fs.existsSync(envPath)) {
@@ -4182,6 +4259,9 @@ function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBa
   if (githubUsername !== undefined) keyValues["GITHUB_USERNAME"] = githubUsername;
   if (githubRepo !== undefined) keyValues["GITHUB_REPO"] = githubRepo;
   if (openInboxKey !== undefined) keyValues["OPENINBOX_API_KEY"] = openInboxKey;
+  if (ninerouterKey !== undefined) keyValues["NINEROUTER_API_KEY"] = ninerouterKey;
+  if (ninerouterUrl !== undefined) keyValues["NINEROUTER_BASE_URL"] = ninerouterUrl;
+  if (ninerouterModel !== undefined) keyValues["NINEROUTER_MODEL"] = ninerouterModel;
 
   // Build new content preserving original lines/formatting
   const newLines = [];
@@ -4253,7 +4333,20 @@ function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBa
     process.env.GITHUB_REPO = githubRepo;
     GITHUB_REPO = githubRepo;
   }
+  if (ninerouterKey !== undefined) {
+    process.env.NINEROUTER_API_KEY = ninerouterKey;
+    NINEROUTER_API_KEY = ninerouterKey;
+  }
+  if (ninerouterUrl !== undefined) {
+    process.env.NINEROUTER_BASE_URL = ninerouterUrl;
+    NINEROUTER_BASE_URL = ninerouterUrl;
+  }
+  if (ninerouterModel !== undefined) {
+    process.env.NINEROUTER_MODEL = ninerouterModel;
+    NINEROUTER_MODEL = ninerouterModel;
+  }
 }
+
 
 // GET: Ambil API Keys saat ini
 app.get("/api/keys", (req, res) => {
@@ -4267,21 +4360,25 @@ app.get("/api/keys", (req, res) => {
     githubToken: process.env.GITHUB_TOKEN || "",
     githubUsername: process.env.GITHUB_USERNAME || "",
     githubRepo: process.env.GITHUB_REPO || "",
-    openInboxKey: process.env.OPENINBOX_API_KEY || ""
+    openInboxKey: process.env.OPENINBOX_API_KEY || "",
+    ninerouterKey: process.env.NINEROUTER_API_KEY || "",
+    ninerouterUrl: process.env.NINEROUTER_BASE_URL || "",
+    ninerouterModel: process.env.NINEROUTER_MODEL || ""
   });
 });
 
 // POST: Simpan API Keys baru
 app.post("/api/keys", (req, res) => {
-  const { groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey } = req.body;
+  const { groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey, ninerouterKey, ninerouterUrl, ninerouterModel } = req.body;
   try {
-    updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey });
+    updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey, ninerouterKey, ninerouterUrl, ninerouterModel });
     console.log("🔑 API Keys & Config GitHub berhasil diperbarui di server runtime.");
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Gagal menyimpan API Keys ke .env: " + err.message });
   }
 });
+
 
 // POST: Test validitas API Key untuk provider tertentu
 app.post("/api/keys/test", async (req, res) => {
@@ -4355,7 +4452,38 @@ app.post("/api/keys/test", async (req, res) => {
       } else {
         throw new Error("Respons dari OpenRouter tidak valid");
       }
+    } else if (provider === "ninerouter") {
+      const baseUrl = req.body.apiBaseUrl || NINEROUTER_BASE_URL || "http://localhost:20128/v1";
+      const model = req.body.apiModel || NINEROUTER_MODEL || "9router";
+      const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+      
+      const headers = { "Content-Type": "application/json" };
+      if (apiKey && apiKey !== "TIDAK_ADA" && apiKey !== "kosong") {
+        headers["Authorization"] = `Bearer ${apiKey}`;
+      }
+
+      console.log(`🧪 Mengetes 9Router pada ${url} dengan model ${model}...`);
+      const response = await axios.post(
+        url,
+        {
+          model: model,
+          messages: [
+            { role: "user", content: "Hello" }
+          ],
+          max_tokens: 5
+        },
+        {
+          headers: headers,
+          timeout: 15000
+        }
+      );
+      if (response.data && response.data.choices && response.data.choices[0]) {
+        return res.json({ valid: true });
+      } else {
+        throw new Error("Respons dari 9Router tidak valid");
+      }
     } else if (provider === "gmailnator") {
+
       const response = await axios.post(
         "https://gmailnator.p.rapidapi.com/api/emails/generate",
         {},
