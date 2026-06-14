@@ -77,11 +77,12 @@ jobs:
           fi
 
       - name: Embed Metadata via FFmpeg
+        env:
+          ID: ${{ github.event.client_payload.item.id }}
+          JUDUL: ${{ github.event.client_payload.item.judul }}
+          KEYWORDS: ${{ github.event.client_payload.item.keywords }}
         run: |
           echo "=== Embedding metadata into output video ==="
-          ID="${{ github.event.client_payload.item.id }}"
-          JUDUL="${{ github.event.client_payload.item.judul }}"
-          KEYWORDS="${{ github.event.client_payload.item.keywords }}"
           if [ -f "out/${ID}.mp4" ]; then
             ffmpeg -y -i "out/${ID}.mp4" -metadata title="$JUDUL" -metadata description="$JUDUL" -metadata keywords="$KEYWORDS" -an -codec copy "out/temp_${ID}.mp4"
             mv "out/temp_${ID}.mp4" "out/${ID}.mp4"
