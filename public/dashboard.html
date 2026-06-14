@@ -2662,184 +2662,66 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     }
   }
 
-  // ─── STATEFUL CLIENT-SIDE BATCH SYSTEM ───
-  let batchActive = false;
-  let batchIds = [];
-  let batchCurrentIndex = 0;
-  let batchType = ''; // 'seo' or 'tsx'
-  let batchModel = 'auto';
-
-  function saveBatchState() {
-    localStorage.setItem('batch_active', batchActive ? 'true' : 'false');
-    localStorage.setItem('batch_ids', JSON.stringify(batchIds));
-    localStorage.setItem('batch_current_index', String(batchCurrentIndex));
-    localStorage.setItem('batch_type', batchType);
-    localStorage.setItem('batch_model', batchModel);
-  }
-
-  function loadBatchState() {
-    batchActive = localStorage.getItem('batch_active') === 'true';
-    try {
-      batchIds = JSON.parse(localStorage.getItem('batch_ids') || '[]');
-    } catch(e) {
-      batchIds = [];
-    }
-    batchCurrentIndex = Number(localStorage.getItem('batch_current_index') || '0');
-    batchType = localStorage.getItem('batch_type') || '';
-    batchModel = localStorage.getItem('batch_model') || 'auto';
-  }
-
-  function clearBatchState() {
-    batchActive = false;
-    batchIds = [];
-    batchCurrentIndex = 0;
-    batchType = '';
-    saveBatchState();
-  }
-
-  window.stopBatch = function() {
-    clearBatchState();
-    updateBatchStatusUI();
-    showToast('🛑 Batch dihentikan oleh user!', 'warning');
-    // Enable buttons back
-    const btnSeo = document.getElementById('btnBatchSeo');
-    if (btnSeo) { btnSeo.disabled = false; btnSeo.textContent = '✨ Gen Judul Terpilih'; }
-    const btnTsx = document.getElementById('btnBatchTsx');
-    if (btnTsx) { btnTsx.disabled = false; btnTsx.textContent = '⚙️ Gen TSX & Preview Terpilih'; }
-    updateBatchBar();
-  }
-
-  function updateBatchStatusUI() {
-    const banner = document.getElementById('batchStatusBanner');
-    const textEl = document.getElementById('batchStatusText');
-    if (!banner || !textEl) return;
-
-    if (batchActive && batchIds.length > 0 && batchCurrentIndex < batchIds.length) {
-      banner.style.display = 'flex';
-      const typeText = batchType === 'seo' ? 'Gen Judul & Keywords (SEO)' : 'Gen TSX & Preview';
-      textEl.textContent = `Batch Aktif: ${typeText} (${batchCurrentIndex + 1}/${batchIds.length} item)`;
-    } else {
-      banner.style.display = 'none';
-    }
-  }
-
-  async function runNextBatchItem() {
-    loadBatchState();
-    if (!batchActive || batchCurrentIndex >= batchIds.length) {
-      if (batchActive) {
-        showToast('✅ Semua item batch selesai diproses!', 'success');
-        clearBatchState();
-      }
-      updateBatchStatusUI();
-      // Re-enable batch buttons
-      const btnSeo = document.getElementById('btnBatchSeo');
-      if (btnSeo) { btnSeo.disabled = false; btnSeo.textContent = '✨ Gen Judul Terpilih'; }
-      const btnTsx = document.getElementById('btnBatchTsx');
-      if (btnTsx) { btnTsx.disabled = false; btnTsx.textContent = '⚙️ Gen TSX & Preview Terpilih'; }
-      return;
-    }
-
-    updateBatchStatusUI();
-    const id = batchIds[batchCurrentIndex];
-
-    try {
-      if (batchType === 'seo') {
-        activeSeoGenerations[id] = true;
-        loadResults();
-
-        const resp = await fetch(`/api/regenerate-seo/${id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ aiModel: batchModel })
-        });
-        const data = await resp.json();
-        if (data.error) throw new Error(data.error);
-        showToast(`✅ SEO untuk ${id} sukses!`, 'success');
-        
-        activeSeoGenerations[id] = false;
-        loadResults();
-        startTaskLogStream(id);
-      } else if (batchType === 'tsx') {
-        const resp = await fetch('/api/saved-items');
-        const items = await resp.json();
-        const item = items.find(i => i.id === id);
-        if (item) {
-          const status = item.statusConvertTsx || 'waiting';
-          let url, body;
-          if (status === 'waiting') {
-            url = `/api/start-task/${id}`;
-            body = JSON.stringify({ aiModel: batchModel });
-          } else {
-            url = `/api/retry-task/${id}`;
-            body = JSON.stringify({ aiModel: batchModel });
-          }
-          
-          const startResp = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: body
-          });
-          const startData = await startResp.json();
-          if (startData.error) throw new Error(startData.error);
-          
-          startTaskLogStream(id);
-        }
-      }
-    } catch (err) {
-      showToast(`❌ Item ${id} gagal: ${err.message}`, 'error');
-      if (batchType === 'seo') {
-        activeSeoGenerations[id] = false;
-        loadResults();
-      }
-    }
-
-    // Move to next item
-    batchCurrentIndex++;
-    saveBatchState();
-    updateBatchStatusUI();
-    
-    // Process next with a small delay
-    setTimeout(runNextBatchItem, 1000);
-  }
-
   async function triggerBatchSEO() {
     const ids = [...batchSelected];
     if (ids.length === 0) return;
-    if (!confirm(`Generate Judul & Keywords untuk ${ids.length} item?`)) return;
+    if (!confirm(`Generate Judul & Keywords (SEO) untuk ${ids.length} item secara berurutan di server?`)) return;
     
     const btn = document.getElementById('btnBatchSeo');
+    const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = '⏳ Batch Running...';
+    btn.textContent = '⏳ Memproses...';
     
-    batchActive = true;
-    batchIds = ids;
-    batchCurrentIndex = 0;
-    batchType = 'seo';
-    batchModel = 'auto';
-    
-    saveBatchState();
-    clearBatchSelection();
-    runNextBatchItem();
+    try {
+      const resp = await fetch('/api/batch-regenerate-seo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, aiModel: 'auto' })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      
+      showToast(`🚀 ${data.count} item berhasil dimasukkan ke antrean SEO server! Anda dapat menutup tab ini sekarang.`, 'success');
+      clearBatchSelection();
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal memproses batch SEO: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+      updateBatchBar();
+    }
   }
 
   async function triggerBatchTsx() {
     const ids = [...batchSelected];
     if (ids.length === 0) return;
-    if (!confirm(`Generate TSX & Preview untuk ${ids.length} item?`)) return;
+    if (!confirm(`Generate TSX & Preview untuk ${ids.length} item secara berurutan di server?`)) return;
     
     const btn = document.getElementById('btnBatchTsx');
+    const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = '⏳ Batch Running...';
+    btn.textContent = '⏳ Memproses...';
     
-    batchActive = true;
-    batchIds = ids;
-    batchCurrentIndex = 0;
-    batchType = 'tsx';
-    batchModel = 'auto';
-    
-    saveBatchState();
-    clearBatchSelection();
-    runNextBatchItem();
+    try {
+      const resp = await fetch('/api/batch-start-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, aiModel: 'auto' })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      
+      showToast(`🚀 ${data.count} item berhasil dimasukkan ke antrean konversi server! Anda dapat menutup tab ini sekarang.`, 'success');
+      clearBatchSelection();
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal memproses batch TSX: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+      updateBatchBar();
+    }
   }
 
   async function triggerBatch4K() {
@@ -4027,19 +3909,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     } else {
       // Load boilerplate by default if empty
       loadCompilerTemplate(false);
-    }
-
-    // Resume active batch if any
-    loadBatchState();
-    if (batchActive && batchIds.length > 0 && batchCurrentIndex < batchIds.length) {
-      showToast('🔄 Melanjutkan pemrosesan batch...', 'info');
-      const btnSeo = document.getElementById('btnBatchSeo');
-      if (btnSeo) { btnSeo.disabled = true; btnSeo.textContent = '⏳ Batch Running...'; }
-      const btnTsx = document.getElementById('btnBatchTsx');
-      if (btnTsx) { btnTsx.disabled = true; btnTsx.textContent = '⏳ Batch Running...'; }
-      runNextBatchItem();
-    } else {
-      clearBatchState();
     }
   }
 
