@@ -1,21 +1,180 @@
-import { useVideoConfig, useCurrentFrame } from 'remotion';
 import React, { useRef, useEffect } from 'react';
+import { useVideoConfig, useCurrentFrame } from 'remotion';
 import * as THREE from 'three';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const ElegantLiquidGradient: React.FC = () => {
-  const { width, height, fps } = useVideoConfig();
+const vertexShader = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const fragmentShader = `
+  uniform float uTime;
+  uniform vec2 uResolution;
+  varying vec2 vUv;
+
+  // ── Permutation helpers ──────────────────────────────────────────────
+  vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
+  vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+  vec3 fade(vec3 t){ return t*t*t*(t*(t*6.0-15.0)+10.0); }
+
+  // ── Classic Perlin 3D ────────────────────────────────────────────────
+  float cnoise(vec3 P){
+    vec3 Pi0 = floor(P);
+    vec3 Pi1 = Pi0 + vec3(1.0);
+    Pi0 = mod(Pi0, 289.0); Pi1 = mod(Pi1, 289.0);
+    vec3 Pf0 = fract(P);
+    vec3 Pf1 = Pf0 - vec3(1.0);
+    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+    vec4 iy = vec4(Pi0.yy, Pi1.yy);
+    vec4 iz0 = Pi0.zzzz;
+    vec4 iz1 = Pi1.zzzz;
+    vec4 ixy  = permute(permute(ix) + iy);
+    vec4 ixy0 = permute(ixy + iz0);
+    vec4 ixy1 = permute(ixy + iz1);
+    vec4 gx0 = ixy0 / 7.0;
+    vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+    gx0 = fract(gx0);
+    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+    vec4 sz0 = step(gz0, vec4(0.0));
+    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+    vec4 gx1 = ixy1 / 7.0;
+    vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+    gx1 = fract(gx1);
+    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+    vec4 sz1 = step(gz1, vec4(0.0));
+    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+    vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+    vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+    vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+    vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+    vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+    vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+    vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+    vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+    vec4 norm0 = taylorInvSqrt(vec4(dot(g000,g000),dot(g010,g010),dot(g100,g100),dot(g110,g110)));
+    g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
+    vec4 norm1 = taylorInvSqrt(vec4(dot(g001,g001),dot(g011,g011),dot(g101,g101),dot(g111,g111)));
+    g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
+    float n000 = dot(g000, Pf0);
+    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+    float n111 = dot(g111, Pf1);
+    vec3 fade_xyz = fade(Pf0);
+    vec4 n_z = mix(vec4(n000,n100,n010,n110), vec4(n001,n101,n011,n111), fade_xyz.z);
+    vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+    return 2.2 * n_xyz;
+  }
+
+  // ── FBM (fractal Brownian motion) ────────────────────────────────────
+  float fbm(vec3 p) {
+    float value = 0.0;
+    float amp   = 0.5;
+    float freq  = 1.0;
+    for (int i = 0; i < 6; i++) {
+      value += amp * cnoise(p * freq);
+      freq  *= 2.0;
+      amp   *= 0.5;
+    }
+    return value;
+  }
+
+  // ── Colour palette (cosine) ──────────────────────────────────────────
+  vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
+    return a + b * cos(6.28318 * (c * t + d));
+  }
+
+  void main() {
+    vec2 uv  = vUv;
+    float ar = uResolution.x / uResolution.y;
+    uv.x    *= ar;
+
+    float t = uTime * 0.18;
+
+    // ── Domain‐warped FBM layers ─────────────────────────────────────
+    vec3 q = vec3(uv, t);
+    float qx = fbm(q);
+    float qy = fbm(q + vec3(5.2, 1.3, 2.8));
+    float qz = fbm(q + vec3(2.4, 6.1, 4.0));
+
+    vec3 r = vec3(uv, t);
+    float rx = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(1.7, 9.2, 0.5));
+    float ry = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(8.3, 2.8, 7.1));
+    float rz = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(3.1, 4.4, 5.9));
+
+    // Third warp pass for extra complexity
+    vec3 s = vec3(uv, t);
+    float f = fbm(s + 3.5 * vec3(rx, ry, rz));
+
+    // ── Deep-sea colour palette: dark teal → electric blue → magenta ──
+    float idx = f * 0.5 + 0.5;
+    idx = pow(idx, 1.1);
+
+    // Primary palette: midnight ocean
+    vec3 colA = palette(
+      idx,
+      vec3(0.02, 0.03, 0.08),   // dark base
+      vec3(0.15, 0.25, 0.45),   // amplitude
+      vec3(1.0,  1.0,  1.0 ),   // frequency
+      vec3(0.00, 0.20, 0.50)    // phase
+    );
+
+    // Accent layer: electric / neon edges
+    float edge = smoothstep(0.3, 0.8, abs(f));
+    vec3 neon  = palette(
+      idx + t * 0.05,
+      vec3(0.05, 0.00, 0.12),
+      vec3(0.30, 0.20, 0.40),
+      vec3(0.80, 1.20, 0.90),
+      vec3(0.55, 0.80, 0.30)
+    );
+
+    vec3 col = mix(colA, neon, edge * 0.65);
+
+    // ── Thin glowing ridges ──────────────────────────────────────────
+    float ridge = 1.0 - abs(f);
+    ridge = pow(clamp(ridge, 0.0, 1.0), 18.0);
+    col  += ridge * vec3(0.05, 0.25, 0.55) * 1.8;
+
+    // ── Vignette ────────────────────────────────────────────────────
+    vec2 vUv2 = vUv - 0.5;
+    float vign = 1.0 - dot(vUv2, vUv2) * 1.6;
+    col *= clamp(vign, 0.0, 1.0);
+
+    // ── Gamma & exposure ────────────────────────────────────────────
+    col = pow(max(col, 0.0), vec3(0.85));
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+export const Displex: React.FC = () => {
+  const { width, height, durationInFrames } = useVideoConfig();
   const frame = useCurrentFrame();
 
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
-  const uniformsRef = useRef<{ [key: string]: THREE.IUniform } | null>(null);
+  const uniformsRef = useRef<{
+    uTime: { value: number };
+    uResolution: { value: THREE.Vector2 };
+  } | null>(null);
+
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -25,127 +184,32 @@ const ElegantLiquidGradient: React.FC = () => {
       antialias: true,
       alpha: true,
     });
-    renderer.setPixelRatio(1);
-    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT, false);
+    renderer.setPixelRatio(2);
+    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
     rendererRef.current = renderer;
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.z = 1;
     cameraRef.current = camera;
 
-    const LOOP = 15.0; // Match seamless 15 seconds loop
-
     const uniforms = {
-      uTime:       { value: 0 },
-      uLoop:       { value: LOOP },
+      uTime: { value: 0.0 },
       uResolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) },
-      uColBlue:    { value: new THREE.Vector3(0.22, 0.34, 0.82) },
-      uColPurple:  { value: new THREE.Vector3(0.62, 0.24, 0.78) },
-      uColPink:    { value: new THREE.Vector3(0.93, 0.40, 0.66) },
-      uColOrange:  { value: new THREE.Vector3(0.97, 0.62, 0.22) },
-      uColPeach:   { value: new THREE.Vector3(0.99, 0.85, 0.78) },
-      uColRed:     { value: new THREE.Vector3(0.83, 0.16, 0.34) },
-      uColDark:    { value: new THREE.Vector3(0.07, 0.05, 0.10) },
     };
     uniformsRef.current = uniforms;
 
+    const geometry = new THREE.PlaneGeometry(2, 2);
     const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
       uniforms,
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        precision highp float;
-        varying vec2 vUv;
-        uniform float uTime, uLoop;
-        uniform vec2  uResolution;
-        uniform vec3  uColBlue, uColPurple, uColPink, uColOrange, uColPeach, uColRed, uColDark;
-        #define TAU 6.28318530718
-
-        float ph(){ return (uTime / uLoop) * TAU; }
-
-        float inf(vec2 uv, vec2 c, float r){
-          return 1.0 - smoothstep(0.0, r, length(uv - c));
-        }
-
-        // ---- Hash & noise untuk grain halus ----
-        float hash(vec2 p){
-          p = fract(p * vec2(123.34, 456.21));
-          p += dot(p, p + 45.32);
-          return fract(p.x * p.y);
-        }
-
-        // Grain seamless: blend 2 frame noise secara periodik (tanpa loncatan)
-        float smoothGrain(vec2 uv, float p){
-          // dua "seed" yang berputar dalam satu loop
-          float t  = p / TAU;                 // 0..1 dalam loop
-          float f  = fract(t * 24.0);         // sub-frame untuk variasi cepat
-          float i  = floor(t * 24.0);
-          vec2 g   = uv * uResolution * 0.9;
-          float n1 = hash(g + i);
-          float n2 = hash(g + i + 1.0);
-          // smoothstep blend → tidak ada patahan antar frame
-          float n  = mix(n1, n2, smoothstep(0.0, 1.0, f));
-          return n * 2.0 - 1.0;
-        }
-
-        void main(){
-          vec2 uv = vUv;
-          float p = ph();
-
-          vec2 cBlue   = vec2(0.28 + 0.10*cos(p),          0.70 + 0.08*sin(p));
-          vec2 cPurple = vec2(0.40 + 0.09*cos(p + 1.2),    0.78 + 0.07*sin(p + 0.6));
-          vec2 cPink   = vec2(0.82 + 0.08*cos(p + 2.0),    0.55 + 0.10*sin(p + 1.5));
-          vec2 cOrange = vec2(0.68 + 0.07*cos(p + 3.1),    0.42 + 0.09*sin(p + 2.4));
-          vec2 cPeach  = vec2(0.74 + 0.06*cos(p + 4.0),    0.50 + 0.06*sin(p + 3.3));
-          vec2 cRed    = vec2(0.18 + 0.09*cos(p + 5.0),    0.30 + 0.08*sin(p + 4.2));
-          vec2 cDark   = vec2(0.30 + 0.08*cos(p + 0.7),    0.10 + 0.07*sin(p + 5.1));
-
-          float r = 0.55 + 0.06 * sin(p);
-
-          vec3 col = uColDark;
-          col = mix(col, uColBlue,   clamp(inf(uv, cBlue,   r + 0.05), 0.0, 1.0));
-          col = mix(col, uColPurple, clamp(inf(uv, cPurple, r),        0.0, 1.0) * 0.95);
-          col = mix(col, uColRed,    clamp(inf(uv, cRed,    r - 0.05), 0.0, 1.0) * 0.9);
-          col = mix(col, uColOrange, clamp(inf(uv, cOrange, r - 0.08), 0.0, 1.0) * 0.95);
-          col = mix(col, uColPeach,  clamp(inf(uv, cPeach,  r - 0.18), 0.0, 1.0) * 0.85);
-          col = mix(col, uColPink,   clamp(inf(uv, cPink,   r + 0.02), 0.0, 1.0) * 0.95);
-
-          col = mix(col, uColDark, clamp(inf(uv, cDark, 0.32), 0.0, 1.0) * 0.55);
-
-          // saturasi & gamma
-          float lum = dot(col, vec3(0.299, 0.587, 0.114));
-          col = mix(vec3(lum), col, 1.20);
-          col = pow(col, vec3(0.95));
-
-          // ---- VIGNETTE SINEMATIK (radial, halus, warm falloff) ----
-          vec2 vd = uv - 0.5;
-          vd.x *= uResolution.x / uResolution.y; // koreksi aspek → vignette bulat sempurna
-          float dist = length(vd);
-          float vig = 1.0 - smoothstep(0.45, 0.95, dist);
-          vig = pow(vig, 1.4);                 // falloff lebih lembut & dalam
-          col *= mix(0.55, 1.0, vig);          // pojok lebih gelap untuk kesan premium
-
-          // ---- GRAIN HALUS & SEAMLESS ----
-          float g = smoothGrain(uv, p);
-          // grain lebih terlihat di area gelap, halus di terang (film-like)
-          float grainAmt = mix(0.06, 0.025, lum);
-          col += g * grainAmt;
-
-          gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
-        }
-      `
     });
 
-    const geometry = new THREE.PlaneGeometry(2, 2);
-    const quad = new THREE.Mesh(geometry, material);
-    scene.add(quad);
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
 
     return () => {
       renderer.dispose();
@@ -155,17 +219,23 @@ const ElegantLiquidGradient: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!rendererRef.current || !sceneRef.current || !cameraRef.current || !uniformsRef.current) {
+    if (
+      !rendererRef.current ||
+      !sceneRef.current ||
+      !cameraRef.current ||
+      !uniformsRef.current
+    ) {
       return;
     }
 
-    const LOOP = 15.0; // Exactly match 15 seconds
-    const elapsedTime = (frame / fps) % LOOP;
+    // Seamless loop: map the 15-second frame range cleanly to a 2*PI circle.
+    // The sine function ensures start and end match perfectly with zero jump.
+    const theta = (frame / durationInFrames) * Math.PI * 2;
+    const uTimeVal = Math.sin(theta) * 15.0;
 
-    uniformsRef.current.uTime.value = elapsedTime;
-
+    uniformsRef.current.uTime.value = uTimeVal;
     rendererRef.current.render(sceneRef.current, cameraRef.current);
-  }, [frame, fps]);
+  }, [frame, durationInFrames]);
 
   return (
     <div
@@ -178,29 +248,20 @@ const ElegantLiquidGradient: React.FC = () => {
         transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
         overflow: 'hidden',
-        backgroundColor: '#08060d',
+        backgroundColor: '#000',
       }}
     >
-      <div
+      <canvas
+        ref={canvasRef}
         style={{
-          position: 'relative',
           width: '100%',
           height: '100%',
-          overflow: 'hidden',
+          display: 'block',
         }}
-      >
-        <canvas
-          ref={canvasRef}
-          style={{
-            display: 'block',
-            width: '100%',
-            height: '100%',
-          }}
-        />
-      </div>
+      />
     </div>
   );
 };
 
-export default ElegantLiquidGradient;
+export default Displex;
 // END_OF_FILE
