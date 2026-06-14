@@ -101,173 +101,16 @@ app.get("/", (req, res) => {
   res.redirect("/dashboard");
 });
 
-// API Configuration
-let OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-let GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 let GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 let GITHUB_USERNAME = process.env.GITHUB_USERNAME;
 let GITHUB_REPO = process.env.GITHUB_REPO;
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-let GROQ_API_KEY = process.env.GROQ_API_KEY;
-const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
-let RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 let SYNTX_BASE_EMAIL = process.env.SYNTX_BASE_EMAIL || "";
 let SYNTX_EMAIL_INDEX = process.env.SYNTX_EMAIL_INDEX || "0";
+let NINEROUTER_API_KEY = process.env.NINEROUTER_API_KEY || "";
+let NINEROUTER_BASE_URL = process.env.NINEROUTER_BASE_URL || "http://localhost:20128/v1";
+let NINEROUTER_MODEL = process.env.NINEROUTER_MODEL || "9router";
 
-// DeepSeek AI Call Helper (langsung menggunakan API resmi DeepSeek)
-async function callDeepSeek(prompt, model = "deepseek-chat") {
-  try {
-    if (!DEEPSEEK_API_KEY) {
-      throw new Error("DEEPSEEK_API_KEY tidak ditemukan di .env");
-    }
 
-    console.log("📡 Mengirim request ke DeepSeek AI...");
-    console.log("🤖 Model:", model);
-
-    const response = await axios.post(
-      "https://api.deepseek.com/chat/completions",
-      {
-        model: model,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,
-        stream: false
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 90000
-      }
-    );
-
-    if (!response.data.choices || !response.data.choices[0]) {
-      throw new Error("Respons DeepSeek tidak valid: " + JSON.stringify(response.data));
-    }
-
-    console.log("✅ Respon DeepSeek berhasil diterima!");
-    return response.data.choices[0].message.content;
-  } catch (error) {
-    console.error("❌ DeepSeek Error:", error.response?.data || error.message);
-    throw error;
-  }
-}
-
-// Nvidia AI Call Helper
-async function callNvidia(prompt, model = "nvidia/nemotron-3-ultra-550b-a55b") {
-  try {
-    if (!NVIDIA_API_KEY) {
-      throw new Error("NVIDIA_API_KEY tidak ditemukan di .env");
-    }
-
-    console.log(`📡 Mengirim request ke Nvidia AI (model: ${model})...`);
-    
-    const response = await axios.post(
-      "https://integrate.api.nvidia.com/v1/chat/completions",
-      {
-        model: model,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 4000,
-        extra_body: {
-          chat_template_kwargs: {
-            enable_thinking: true
-          }
-        }
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${NVIDIA_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 90000 // 90 seconds timeout for thinking
-      }
-    );
-
-    if (!response.data.choices || !response.data.choices[0]) {
-      throw new Error("Respons Nvidia tidak valid: " + JSON.stringify(response.data));
-    }
-
-    console.log("✅ Respon Nvidia AI berhasil diterima!");
-    return response.data.choices[0].message.content;
-  } catch (error) {
-    console.error("❌ Nvidia Error:", error.response?.data || error.message);
-    throw error;
-  }
-}
-
-// Inisialisasi Gemini AI
-let genAI = null;
-if (GEMINI_API_KEY) {
-  genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  console.log("🤖 Gemini AI SDK berhasil diinisialisasi!");
-} else {
-  console.warn("⚠️ GEMINI_API_KEY tidak ditemukan, Gemini AI tidak akan tersedia.");
-}
-
-// Groq AI Call Helper (fallback cepat saat Gemini limit)
-async function callGroq(prompt, model = "llama-3.3-70b-versatile") {
-  try {
-    if (!GROQ_API_KEY) {
-      throw new Error("GROQ_API_KEY tidak ditemukan di .env");
-    }
-
-    console.log(`📡 Mengirim request ke Groq AI (model: ${model})...`);
-    console.log("🔑 API Key Groq ada:", GROQ_API_KEY.substring(0, 20) + "...");
-
-    const response = await axios.post(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        model: model,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 8192,
-        top_p: 1
-      },
-      {
-        headers: {
-          "Authorization": `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 90000
-      }
-    );
-
-    if (!response.data.choices || !response.data.choices[0]) {
-      throw new Error("Respons Groq tidak valid: " + JSON.stringify(response.data));
-    }
-
-    console.log("✅ Respon Groq AI berhasil diterima!");
-    return response.data.choices[0].message.content;
-  } catch (error) {
-    console.error("❌ Groq Error:", error.response?.data || error.message);
-    
-    // Auto-fallback to llama-3.1-8b-instant if rate limit is hit
-    const isRateLimit = error.response?.status === 429 || 
-                        error.response?.data?.error?.code === 'rate_limit_exceeded';
-    if (isRateLimit && model === "llama-3.3-70b-versatile") {
-      console.warn("⚠️ Groq TPM limit hit. Retrying automatically with llama-3.1-8b-instant...");
-      return await callGroq(prompt, "llama-3.1-8b-instant");
-    }
-    throw error;
-  }
-}
 
 // Helper: deteksi apakah error adalah rate limit / quota exceeded
 function isRateLimitError(err) {
@@ -330,14 +173,15 @@ async function callAIWithFallback(prompt, options = {}) {
 
   // Jika preferModel adalah specific provider, langsung route ke sana
   if (preferModel && preferModel !== 'auto') {
+
     log(`Mencoba model spesifik pilihan: ${preferModel}...`, 'info');
-    if (preferModel === 'groq') {
-      const result = await callGroq(prompt);
-      if (isValid(result, 'Groq')) {
-        log(`✅ Sukses menggunakan Groq AI!`, 'success');
+    if (preferModel === '9router') {
+      const result = await callNineRouter(prompt);
+      if (isValid(result, '9Router')) {
+        log(`✅ Sukses menggunakan 9Router!`, 'success');
         return result;
       }
-      throw new Error("Groq returned invalid response");
+      throw new Error("9Router returned invalid response");
     } else if (preferModel === 'syntx-claude') {
       const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
       if (isValid(result, 'Syntx Claude')) {
@@ -387,29 +231,28 @@ async function callAIWithFallback(prompt, options = {}) {
         return result;
       }
       throw new Error("Syntx Perplexity returned invalid response");
-    } else if (preferModel === 'gemini') {
-      if (genAI) {
-        const result = await callGemini(prompt);
-        if (isValid(result, 'Gemini')) {
-          log(`✅ Sukses menggunakan Gemini AI!`, 'success');
-          return result;
-        }
-        throw new Error("Gemini returned invalid response");
-      } else {
-        throw new Error("Gemini AI belum diinisialisasi (GEMINI_API_KEY kosong)");
-      }
-    } else if (preferModel === 'openrouter') {
-      const result = await callOpenRouter(prompt);
-      if (isValid(result, 'OpenRouter')) {
-        log(`✅ Sukses menggunakan OpenRouter!`, 'success');
-        return result;
-      }
-      throw new Error("OpenRouter returned invalid response");
     } else if (preferModel === 'tsx-default') {
-      log("Memulai pencarian model untuk konversi TSX (Gemini Syntx -> Claude Syntx)...", "info");
-      // 1. Coba Syntx Gemini
+      log("Memulai pencarian model untuk konversi TSX (9Router -> Gemini Syntx -> Claude Syntx)...", "info");
+      
+      // 1. Coba 9Router
       try {
-        log("📡 [1/2] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
+        if (NINEROUTER_API_KEY) {
+          log("📡 [1/3] Mencoba 9Router...", "info");
+          const result = await callNineRouter(prompt);
+          if (isValid(result, "9Router")) {
+            log("✅ Sukses menggunakan 9Router untuk TSX!", "success");
+            return result;
+          }
+          log("⚠️ 9Router: respons tidak valid, lanjut fallback...", "warning");
+        }
+      } catch (err) {
+        log(`⚠️ 9Router gagal untuk TSX: ${err.message?.substring(0, 150)}`, "warning");
+        errors.push({ provider: "9router", error: err.message });
+      }
+
+      // 2. Coba Syntx Gemini
+      try {
+        log("📡 [2/3] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
         const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
         if (isValid(result, "Syntx Gemini")) {
           log("✅ Sukses menggunakan Syntx Gemini untuk TSX!", "success");
@@ -421,9 +264,9 @@ async function callAIWithFallback(prompt, options = {}) {
         errors.push({ provider: "syntx-gemini", error: err.message });
       }
 
-      // 2. Coba Syntx Claude
+      // 3. Coba Syntx Claude
       try {
-        log("📡 [2/2] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
+        log("📡 [3/3] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
         const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
         if (isValid(result, "Syntx Claude")) {
           log("✅ Sukses menggunakan Syntx Claude untuk TSX!", "success");
@@ -435,38 +278,37 @@ async function callAIWithFallback(prompt, options = {}) {
         errors.push({ provider: "syntx-claude", error: err.message });
       }
 
-      log("⚠️ Kedua model Syntx (Gemini & Claude) gagal, lanjut ke standard auto-fallback...", "warning");
+      log("⚠️ Semua model TSX (9Router, Gemini, Claude) gagal, lanjut ke standard auto-fallback...", "warning");
     }
   }
 
-  // Auto-fallback mode (default) — coba semua secara berurutan
-  log("Memulai pencarian model otomatis dengan fallback...", "info");
+  // Auto-fallback mode (default) — coba 9Router lalu Syntx
+  log("Memulai pencarian model otomatis dengan fallback (9Router -> Syntx)...", "info");
 
-  // 1. Coba Groq dulu
-  if (preferModel !== 'groq') {
+  // 1. Coba 9Router dulu
+  if (preferModel !== '9router') {
     try {
-      if (GROQ_API_KEY) {
-        log("📡 [1/6] Mencoba Groq AI (llama-3.3-70b)...", "info");
-        const result = await callGroq(prompt, "llama-3.3-70b-versatile");
-        if (isValid(result, "Groq")) {
-          log("✅ Sukses menggunakan Groq AI!", "success");
+      if (NINEROUTER_API_KEY) {
+        log("📡 [1/3] Mencoba 9Router...", "info");
+        const result = await callNineRouter(prompt);
+        if (isValid(result, "9Router")) {
+          log("✅ Sukses menggunakan 9Router!", "success");
           return result;
         }
-        log("⚠️ Groq: respons tidak valid, lanjut fallback...", "warning");
+        log("⚠️ 9Router: respons tidak valid, lanjut fallback...", "warning");
       } else {
-        log("⏩ Skip Groq (API Key kosong)", "info");
+        log("⏩ Skip 9Router (API Key kosong)", "info");
       }
     } catch (err) {
-      const isLimit = isRateLimitError(err);
-      log(`⚠️ Groq gagal${isLimit ? ' (RATE LIMIT)' : ''}: ${err.message?.substring(0, 150)}`, "warning");
-      errors.push({ provider: "groq", error: err.message });
+      log(`⚠️ 9Router gagal: ${err.message?.substring(0, 150)}`, "warning");
+      errors.push({ provider: "9router", error: err.message });
     }
   }
 
   // 2. Syntx.ai Claude
   if (preferModel !== 'syntx-claude') {
     try {
-      log("📡 [2/6] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
+      log("📡 [2/3] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
       const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
       if (isValid(result, "Syntx Claude")) {
         log("✅ Sukses menggunakan Syntx Claude!", "success");
@@ -479,77 +321,20 @@ async function callAIWithFallback(prompt, options = {}) {
     }
   }
 
-  // 3. Gemini AI
-  if (preferModel !== 'gemini') {
-    try {
-      if (genAI) {
-        log("📡 [3/6] Mencoba Gemini AI...", "info");
-        const result = await callGemini(prompt);
-        if (isValid(result, "Gemini")) {
-          log("✅ Sukses menggunakan Gemini AI!", "success");
-          return result;
-        }
-        log("⚠️ Gemini: respons tidak valid, lanjut fallback...", "warning");
-      } else {
-        log("⏩ Skip Gemini AI (API Key kosong)", "info");
-      }
-    } catch (err) {
-      const isLimit = isRateLimitError(err);
-      log(`⚠️ Gemini gagal${isLimit ? ' (QUOTA)' : ''}: ${err.message?.substring(0, 150)}`, "warning");
-      errors.push({ provider: "gemini", error: err.message });
-    }
-  }
-
-  // 4. Syntx Gemini
+  // 3. Syntx.ai Gemini
   if (preferModel !== 'syntx-gemini') {
     try {
-      log("📡 [4/6] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
+      log("📡 [3/3] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
       const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
       if (isValid(result, "Syntx Gemini")) {
         log("✅ Sukses menggunakan Syntx Gemini!", "success");
         return result;
       }
-      log("⚠️ Syntx Gemini: respons tidak valid, lanjut fallback...", "warning");
+      log("⚠️ Syntx Gemini: respons tidak valid", "warning");
     } catch (err) {
       log(`⚠️ Syntx.ai Gemini gagal: ${err.message?.substring(0, 150)}`, "warning");
       errors.push({ provider: "syntx-gemini", error: err.message });
     }
-  }
-
-  // 5. DeepSeek
-  try {
-    if (DEEPSEEK_API_KEY) {
-      log("📡 [5/6] Mencoba DeepSeek AI...", "info");
-      const result = await callDeepSeek(prompt);
-      if (isValid(result, "DeepSeek")) {
-        log("✅ Sukses menggunakan DeepSeek AI!", "success");
-        return result;
-      }
-      log("⚠️ DeepSeek: respons tidak valid, lanjut fallback...", "warning");
-    } else {
-      log("⏩ Skip DeepSeek (API Key kosong)", "info");
-    }
-  } catch (err) {
-    log(`⚠️ DeepSeek gagal: ${err.message?.substring(0, 150)}`, "warning");
-    errors.push({ provider: "deepseek", error: err.message });
-  }
-
-  // 6. OpenRouter
-  try {
-    if (OPENROUTER_API_KEY) {
-      log("📡 [6/6] Mencoba OpenRouter sebagai fallback terakhir...", "info");
-      const result = await callOpenRouter(prompt, "default");
-      if (isValid(result, "OpenRouter")) {
-        log("✅ Sukses menggunakan OpenRouter!", "success");
-        return result;
-      }
-      log("⚠️ OpenRouter: respons tidak valid", "warning");
-    } else {
-      log("⏩ Skip OpenRouter (API Key kosong)", "info");
-    }
-  } catch (err) {
-    log(`⚠️ OpenRouter gagal: ${err.message?.substring(0, 150)}`, "warning");
-    errors.push({ provider: "openrouter", error: err.message });
   }
 
   // Semua gagal
@@ -557,146 +342,51 @@ async function callAIWithFallback(prompt, options = {}) {
   throw new Error(`Semua provider AI gagal: ${JSON.stringify(errors)}`);
 }
 
-// Daftar model OpenRouter yang tersedia (fallback jika satu model error)
-const OPENROUTER_MODELS = {
-  // Google Models
-  "gemini-2.0-flash": "google/gemini-2.0-flash-001",
-  "gemini-2.0-flash-lite": "google/gemini-2.0-flash-lite-preview-02-05",
-  "gemini-1.5-flash": "google/gemini-1.5-flash",
-  "gemini-1.5-pro": "google/gemini-1.5-pro",
-  "gemini-2.5-pro": "google/gemini-2.5-pro-exp-03-25",
-  "gemini-2.5-flash-free": "google/gemini-2.5-flash:free",
-
-  // OpenAI Models
-  "gpt-4o": "openai/gpt-4o",
-  "gpt-4o-mini": "openai/gpt-4o-mini",
-  "gpt-3.5-turbo": "openai/gpt-3.5-turbo",
-
-  // Meta / Llama
-  "llama-3.3-70b": "meta-llama/llama-3.3-70b-instruct",
-  "llama-3.1-8b": "meta-llama/llama-3.1-8b-instruct",
-
-  // Mistral
-  "mistral-7b": "mistralai/mistral-7b-instruct",
-  "mixtral-8x7b": "mistralai/mixtral-8x7b-instruct",
-
-  // DeepSeek
-  "deepseek-v3": "deepseek/deepseek-chat",
-  "deepseek-r1": "deepseek/deepseek-r1",
-
-  // Qwen
-  "qwen-2.5-72b": "qwen/qwen-2.5-72b-instruct",
-
-  // Default
-  "default": "meta-llama/llama-3.3-70b-instruct:free" // Model default yang gratis & unlimited
-};
-
-// OpenRouter API Call Helper dengan auto-fallback model
-async function callOpenRouter(prompt, modelKey = "default") {
-  // Daftar model untuk fallback jika model utama gagal (utamakan model gratis)
-  const fallbackModels = [
-    modelKey,                                    // Model yang diminta
-    "meta-llama/llama-3.3-70b-instruct:free",    // Fallback 1: Llama 3.3 70B Free
-    "meta-llama/llama-3.2-3b-instruct:free",     // Fallback 2: Llama 3.2 3B Free
-    "qwen/qwen3-coder:free",                     // Fallback 3: Qwen 3 Coder Free
-    "nousresearch/hermes-3-llama-3.1-405b:free", // Fallback 4: Hermes 3 405B Free
-    "nvidia/nemotron-3-ultra-550b-a55b:free"     // Fallback 5: Nvidia Nemotron Free
-  ];
-
-  let lastError = null;
-
-  for (const fbModel of fallbackModels) {
-    try {
-      const modelName = OPENROUTER_MODELS[fbModel] || fbModel;
-
-      if (!OPENROUTER_API_KEY) {
-        throw new Error("OPENROUTER_API_KEY tidak ditemukan di .env");
-      }
-
-      console.log(`📡 Mengirim request ke OpenRouter (model: ${modelName})...`);
-      console.log("🔑 API Key ada:", OPENROUTER_API_KEY.substring(0, 20) + "...");
-
-      const response = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          model: modelName,
-          messages: [
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 4000,
-          top_p: 1
-        },
-        {
-          headers: {
-            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-            "HTTP-Referer": "http://localhost:5000",
-            "X-Title": "Stock Generator",
-            "Content-Type": "application/json"
-          },
-          timeout: 60000
-        }
-      );
-
-      if (!response.data.choices || !response.data.choices[0]) {
-        throw new Error("Respons OpenRouter tidak valid: " + JSON.stringify(response.data));
-      }
-
-      console.log(`✅ OpenRouter sukses dengan model: ${modelName}`);
-      return response.data.choices[0].message.content;
-    } catch (error) {
-      lastError = error;
-      console.warn(`⚠️ Model ${OPENROUTER_MODELS[fbModel] || fbModel} gagal, coba model berikutnya...`);
-      console.warn(`   Error: ${error.response?.data?.error?.message || error.message}`);
-    }
-  }
-
-  // Semua model gagal
-  console.error("❌ Semua model OpenRouter gagal!");
-  console.error("📋 Error Terakhir:", lastError.response?.data || lastError.message);
-  throw lastError;
-}
-
-// Gemini AI Call Helper (langsung tanpa OpenRouter)
-async function callGemini(prompt, model = "gemini-2.0-flash") {
+// 9Router API Call Helper (OpenAI-compatible)
+async function callNineRouter(prompt, model = NINEROUTER_MODEL) {
   try {
-    if (!genAI) {
-      throw new Error("Gemini AI belum diinisialisasi. Periksa GEMINI_API_KEY di .env");
+    const url = `${NINEROUTER_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
+    console.log(`📡 Mengirim request ke 9Router (URL: ${url}, model: ${model})...`);
+    
+    const headers = {
+      "Content-Type": "application/json"
+    };
+    if (NINEROUTER_API_KEY) {
+      headers["Authorization"] = `Bearer ${NINEROUTER_API_KEY}`;
+      console.log("🔑 API Key 9Router ada:", NINEROUTER_API_KEY.substring(0, 10) + "...");
     }
 
-    console.log("📡 Mengirim request ke Gemini AI...");
-    console.log("🤖 Model:", model);
-
-    const genModel = genAI.getGenerativeModel({
-      model: model,
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 8192,
-        topP: 1,
+    const response = await axios.post(
+      url,
+      {
+        model: model,
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ]
+      },
+      {
+        headers: headers,
+        timeout: 90000 // 9Router may run slow for complex combo queries, give it 90s
       }
-    });
+    );
 
-    const result = await genModel.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    if (!text) {
-      throw new Error("Respons Gemini tidak valid");
+    if (!response.data.choices || !response.data.choices[0]) {
+      throw new Error("Respons 9Router tidak valid: " + JSON.stringify(response.data));
     }
 
-    console.log("✅ Respon Gemini berhasil diterima!");
-    return text;
+    console.log("✅ Respon 9Router berhasil diterima!");
+    return response.data.choices[0].message.content;
   } catch (error) {
-    console.error("❌ Gemini Error:", error.message);
-    if (error.message?.includes("API_KEY_INVALID") || error.message?.includes("API key not valid")) {
-      console.error("🔑 API Key Gemini tidak valid! Periksa GEMINI_API_KEY di .env");
-    }
+    console.error("❌ 9Router Error:", error.response?.data || error.message);
     throw error;
   }
 }
+
+
+
 
 // ══════════════════════════════════════════════════════════════
 // MARKET RESEARCH SCRAPERS — Adobe Stock + Shutterstock
@@ -946,11 +636,11 @@ app.post("/api/generate", async (req, res) => {
   const { keyword } = req.body;
 
   const dataScrap = await scrapAdobeStock(keyword);
-  console.log("🤖 Menyodorkan data kompetitor ke OpenRouter AI...");
+  console.log("🤖 Menyodorkan data kompetitor ke 9Router AI...");
 
-  if (!OPENROUTER_API_KEY) {
-    console.error("❌ EROR: OPENROUTER_API_KEY tidak ditemukan di file .env!");
-    return res.status(500).json({ error: "API Key OpenRouter belum dikonfigurasi di file .env" });
+  if (!NINEROUTER_API_KEY) {
+    console.error("❌ EROR: NINEROUTER_API_KEY tidak ditemukan di file .env!");
+    return res.status(500).json({ error: "API Key 9Router belum dikonfigurasi di file .env" });
   }
 
   const prompt = "Kamu adalah pakar Creative Director SEO Microstock USA.\n" +
@@ -990,61 +680,6 @@ app.post("/api/generate", async (req, res) => {
     console.error("❌ Detail Eror Koneksi AI:");
     console.error(error.message);
     return res.status(500).json({ error: "Koneksi ke AI terputus.", details: error.message });
-  }
-});
-
-// JALUR 1B: GENERATE IDE VIA GEMINI LANGSUNG (tanpa OpenRouter)
-app.post("/api/generate-gemini", async (req, res) => {
-  const { keyword } = req.body;
-
-  if (!keyword) {
-    return res.status(400).json({ error: "Keyword diperlukan" });
-  }
-
-  const dataScrap = await scrapAdobeStock(keyword);
-  console.log("🤖 Menyodorkan data kompetitor ke Gemini AI...");
-
-  if (!genAI) {
-    return res.status(500).json({ error: "Gemini AI belum dikonfigurasi. Periksa GEMINI_API_KEY di .env" });
-  }
-
-  const prompt = "Kamu adalah pakar Creative Director SEO Microstock USA.\n" +
-    "Berikut adalah tren data judul kompetitor di Adobe Stock saat ini:\n" + dataScrap.raw + "\n\n" +
-    "Lakukan strategi ATM untuk pasar USA. Buat 5 variasi ide video yang LUAR BIASA KREATIF, visualnya mewah, kompleks, futuristik, dan bernilai jual tinggi.\n\n" +
-    "Keluarkan hasil dalam format JSON murni berbentuk Array of Object tanpa teks pengantar/penutup apa pun.\n" +
-    "DILARANG menggunakan karakter double quote (\") di dalam nilai string. Gunakan single quote (') jika perlu.\n" +
-    "Struktur objek wajib persis seperti ini:\n" +
-    "[\n" +
-    "  {\n" +
-    '    "id": "nama_file_unik_tanpa_spasi",\n' +
-    '    "deskripsi": "Deskripsi detail visual bahasa Inggris untuk Adobe Stock (minimal 15 kata). Terjemahkan istilah kode ke visual: jangan sebut keyframes/easing/canvas, tapi gunakan smooth animation, fluid movement, dll.",\n' +
-    '    "judul": "Rekomendasi judul video SEO bahasa Inggris (maksimal 12 kata). DILARANG menggunakan kata teknis pemrograman seperti CSS, keyframes, requestAnimationFrame, HTML, canvas, SVG, easing, DLL. Gunakan istilah komersial video seperti: smooth animation, fluid movement, modern UI UX elements overlay, app interface template, abstract particles, seamless loop, data visualization, animated infographics, interactive design concept.",\n' +
-    '    "keywords": "35-50 kata kunci bahasa Inggris dipisah koma. DILARANG menggunakan istilah teknis pemrograman (CSS transition, keyframes, requestAnimationFrame, SVG, canvas, loop). WAJIB menerjemahkan ke istilah komersial video stock dan disusun berdasarkan Teknik 3 Pilar dengan 7-10 keyword pertama adalah yang paling krusial. Pilar 1 (What/Isi: mouse click, subscribe button, loading bar, progress indicator, dll), Pilar 2 (Visual/Style: minimalist, flat design, modern UI, isolated, 4k. Jika video transparan, keyword \'alpha channel\' dan \'transparent background\' WAJIB ditaruh di 10 keyword pertama), Pilar 3 (Kegunaan/Context: website promo, social media asset, app presentation, marketing material).",\n' +
-    '    "kategori": "Kategori Adobe Stock (Technology/Abstract/Business)",\n' +
-    '    "durationInFrames": 150\n' +
-    "  }\n" +
-    "]";
-
-  try {
-    console.log("📡 Menggunakan AI dengan fallback untuk generate ide...");
-    const aiResponse = await callAIWithFallback(prompt);
-
-    let jsonText = aiResponse.trim();
-    if (jsonText.includes("```json")) {
-      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
-    } else if (jsonText.includes("```")) {
-      jsonText = jsonText.split("```")[1].split("```")[0].trim();
-    }
-
-    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-    const dataObjek = JSON.parse(jsonText);
-    console.log("✅ Sukses memproses data riset dari Gemini AI!");
-    return res.json(dataObjek);
-
-  } catch (error) {
-    console.error("❌ Detail Eror Gemini AI:");
-    console.error(error.message);
-    return res.status(500).json({ error: "Koneksi ke Gemini AI terputus.", details: error.message });
   }
 });
 
@@ -1091,64 +726,6 @@ app.post("/api/render", async (req, res) => {
   } catch (error) {
     console.error("❌ Gagal di jalur pipa otomatisasi:", error.message);
     return res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// JALUR 3A: GENERATE HTML PREVIEW VIA GEMINI (tanpa OpenRouter)
-app.post("/api/generate-html-preview-gemini", async (req, res) => {
-  const { item } = req.body;
-  console.log("🎨 Menghasilkan preview HTML via Gemini untuk: " + item.id);
-
-  if (!genAI) {
-    return res.status(500).json({ error: "Gemini AI belum dikonfigurasi. Periksa GEMINI_API_KEY di .env" });
-  }
-
-  try {
-    const prompt = item.promptHTML || `Generate an exceptionally detailed, premium, and professional HTML5, CSS3, and JavaScript animation that is visually jaw-dropping, high-performance, and designed to look like a premium commercial stock video template (1920x1080 viewport). The animation must be based on the following description:
-    
-    "${item.deskripsi}"
-    
-    **CRITICAL STYLING & VISUAL AESTHETICS (WOW-EFFECT):**
-    1.  **Vibrant & Modern Color Palette:**
-        *   Do NOT use basic solid primary colors (plain red, plain blue, plain green).
-        *   Use rich dark mode backgrounds (e.g., deep space obsidian \`#050716\`, carbon obsidian, or dark slate).
-        *   Implement smooth multi-stop linear/radial gradients and neon glow effects (using CSS box-shadow, text-shadow, filters, and glow animations).
-        *   Utilize beautiful tailored color combinations: cyber neon cyan (\`#00f2fe\`), glowing hot magenta/pink (\`#4facfe\` to \`#ff0844\`), tech purple/violet, or radioactive lime green.
-    2.  **Visual Depth & Premium UI styling (Glassmorphism):**
-        *   Use modern translucent panels with \`backdrop-filter: blur(15px)\`, semi-transparent borders (\`border: 1px solid rgba(255, 255, 255, 0.1)\`), and subtle inner shadows.
-        *   Include thin grid overlays, cyber grids, digital network nodes, particle trails, or moving mathematical wave structures (using HTML5 Canvas or complex SVG paths).
-    3.  **Elegant Typography:**
-        *   Import custom typography inside the HTML using Google Fonts (e.g. Orbitron, Outfit, Inter, Montserrat, or Space Grotesk) inside a \`<link>\` tag or \`@import\`.
-        *   Apply beautiful typography details: letter-spacing, text gradients (\`background-clip: text\`), text uppercase transformations, and clean layout scaling.
-    4.  **Complex & Rich Movement:**
-        *   Use layered animations. Avoid basic linear movements.
-        *   Use fluid, organic easing (e.g. cubic-bezier easing or Math.sin/Math.cos for wave and floating systems).
-        *   If the animation is a loop, ensure a seamless looping transition (no sudden jumps/flickers).
-        *   Create highly detailed visual ornaments: glowing lines, rotating coordinate rings, data streams, cybernetic shapes, interactive or automated cursor click indicators.
-    
-    **TECHNICAL REQUIREMENTS:**
-    1.  **Semantic Structure:** Use appropriate HTML5 tags (e.g., <canvas>, <svg>, <main>, <section>).
-    2.  **No External Dependencies:** Provide the complete HTML document. All CSS must be within \`<style>\` tags, and all JS within \`<script>\` tags. Do not load external JavaScript files unless they are lightweight standard libraries (e.g., load Google Fonts or standard SVG).
-    3.  **Deterministic Animations:** To prevent frame-tearing in video conversion, do NOT use non-deterministic code (like true random positions on every frame, Date.now(), setInterval/setTimeout in a loop). Initialize random values into static arrays on load, and drive all dynamic motion relative to a global frame/time counter.
-    4.  **Output Format:** Provide ONLY the raw HTML code. Do NOT wrap it in markdown like \`\`\`html or include any explanatory text.
-    
-    Make the output extremely aesthetic, complex, and professional. The user should be completely wowed by the design.`;
-
-    const aiResponse = await callAIWithFallback(prompt);
-
-    let htmlText = aiResponse.trim();
-    if (htmlText.includes("```html")) {
-      htmlText = htmlText.split("```html")[1].split("```")[0].trim();
-    } else if (htmlText.includes("```")) {
-      htmlText = htmlText.split("```")[1].split("```")[0].trim();
-    }
-
-    console.log("✅ HTML Preview via Gemini berhasil dihasilkan untuk " + item.id);
-    return res.json({ htmlPreview: htmlText });
-
-  } catch (error) {
-    console.error("❌ Gagal generate HTML preview via Gemini:", error.message);
-    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -1207,54 +784,13 @@ app.post("/api/generate-html-preview", async (req, res) => {
   }
 });
 
-// JALUR 4A: KONVERSI HTML KE TSX VIA GEMINI (tanpa OpenRouter)
-app.post("/api/convert-html-to-tsx-gemini", async (req, res) => {
-  const { item } = req.body;
-  console.log("🔄 Mengonversi HTML ke TSX via Gemini untuk: " + item.id);
-
-  if (!genAI) {
-    return res.status(500).json({ error: "Gemini AI belum dikonfigurasi. Periksa GEMINI_API_KEY di .env" });
-  }
-
-  try {
-    const promptsData = loadPromptsConfig();
-    const animationDuration = item.animationDuration || 10;
-    const durationFrames = item.durationInFrames || 300;
-    const conversionPrompt = promptsData.conversionPrompt
-      .replace(/{{ANIMATION_DURATION}}/g, String(animationDuration))
-      .replace(/{{DURATION_FRAMES}}/g, String(durationFrames))
-      .replace(/{{HTML_CONTENT}}/g, item.htmlPreview || "");
-
-    const aiResponse = await callAIWithFallback(conversionPrompt, { preferModel: 'tsx-default' });
-
-    let tsxCode = aiResponse.trim();
-    if (tsxCode.includes("```typescript") || tsxCode.includes("```tsx")) {
-      const parts = tsxCode.split("```");
-      tsxCode = parts[1].split("\n").slice(1).join("\n").split("```")[0].trim();
-    } else if (tsxCode.includes("```")) {
-      tsxCode = tsxCode.split("```")[1].split("```")[0].trim();
-    }
-
-    // Simpan file Composition.tsx
-    fs.writeFileSync("src/Composition.tsx", tsxCode);
-    console.log("📝 File src/Composition.tsx berhasil diperbarui dari HTML via Gemini!");
-
-    console.log("✅ Konversi HTML ke TSX via Gemini sukses!");
-    return res.json({ success: true, promptCode: tsxCode });
-
-  } catch (error) {
-    console.error("❌ Gagal konversi HTML ke TSX via Gemini:", error.message);
-    return res.status(500).json({ error: error.message });
-  }
-});
-
 // JALUR 4B: KONVERSI HTML KE TSX & SIMPAN (via OpenRouter)
 app.post("/api/convert-html-to-tsx", async (req, res) => {
   const { item } = req.body;
   console.log("🔄 Mengonversi HTML ke TSX untuk: " + item.id);
 
-  if (!OPENROUTER_API_KEY) {
-    return res.status(500).json({ error: "OPENROUTER_API_KEY tidak ditemukan" });
+  if (!NINEROUTER_API_KEY) {
+    return res.status(500).json({ error: "NINEROUTER_API_KEY tidak ditemukan" });
   }
 
   try {
@@ -4150,7 +3686,7 @@ app.post("/api/batch-regenerate-seo", (req, res) => {
 });
 
 // Fungsi untuk memperbarui file .env dan memory variables
-function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey }) {
+function updateEnvKeys({ syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, ninerouterKey, ninerouterUrl, ninerouterModel }) {
   const envPath = path.join(__dirname, ".env");
   let content = "";
   if (fs.existsSync(envPath)) {
@@ -4172,16 +3708,14 @@ function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBa
   }
 
   // Update keys
-  if (groqKey !== undefined) keyValues["GROQ_API_KEY"] = groqKey;
-  if (geminiKey !== undefined) keyValues["GEMINI_API_KEY"] = geminiKey;
-  if (openrouterKey !== undefined) keyValues["OPENROUTER_API_KEY"] = openrouterKey;
-  if (rapidApiKey !== undefined) keyValues["RAPIDAPI_KEY"] = rapidApiKey;
   if (syntxBaseEmail !== undefined) keyValues["SYNTX_BASE_EMAIL"] = syntxBaseEmail;
   if (syntxEmailIndex !== undefined) keyValues["SYNTX_EMAIL_INDEX"] = syntxEmailIndex;
   if (githubToken !== undefined) keyValues["GITHUB_TOKEN"] = githubToken;
   if (githubUsername !== undefined) keyValues["GITHUB_USERNAME"] = githubUsername;
   if (githubRepo !== undefined) keyValues["GITHUB_REPO"] = githubRepo;
-  if (openInboxKey !== undefined) keyValues["OPENINBOX_API_KEY"] = openInboxKey;
+  if (ninerouterKey !== undefined) keyValues["NINEROUTER_API_KEY"] = ninerouterKey;
+  if (ninerouterUrl !== undefined) keyValues["NINEROUTER_BASE_URL"] = ninerouterUrl;
+  if (ninerouterModel !== undefined) keyValues["NINEROUTER_MODEL"] = ninerouterModel;
 
   // Build new content preserving original lines/formatting
   const newLines = [];
@@ -4212,27 +3746,6 @@ function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBa
   fs.writeFileSync(envPath, newLines.join("\n"));
 
   // Update memory variables
-  if (groqKey !== undefined) {
-    process.env.GROQ_API_KEY = groqKey;
-    GROQ_API_KEY = groqKey;
-  }
-  if (geminiKey !== undefined) {
-    process.env.GEMINI_API_KEY = geminiKey;
-    GEMINI_API_KEY = geminiKey;
-    if (geminiKey) {
-      genAI = new GoogleGenerativeAI(geminiKey);
-    } else {
-      genAI = null;
-    }
-  }
-  if (openrouterKey !== undefined) {
-    process.env.OPENROUTER_API_KEY = openrouterKey;
-    OPENROUTER_API_KEY = openrouterKey;
-  }
-  if (rapidApiKey !== undefined) {
-    process.env.RAPIDAPI_KEY = rapidApiKey;
-    RAPIDAPI_KEY = rapidApiKey;
-  }
   if (syntxBaseEmail !== undefined) {
     process.env.SYNTX_BASE_EMAIL = syntxBaseEmail;
     SYNTX_BASE_EMAIL = syntxBaseEmail;
@@ -4253,35 +3766,47 @@ function updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBa
     process.env.GITHUB_REPO = githubRepo;
     GITHUB_REPO = githubRepo;
   }
+  if (ninerouterKey !== undefined) {
+    process.env.NINEROUTER_API_KEY = ninerouterKey;
+    NINEROUTER_API_KEY = ninerouterKey;
+  }
+  if (ninerouterUrl !== undefined) {
+    process.env.NINEROUTER_BASE_URL = ninerouterUrl;
+    NINEROUTER_BASE_URL = ninerouterUrl;
+  }
+  if (ninerouterModel !== undefined) {
+    process.env.NINEROUTER_MODEL = ninerouterModel;
+    NINEROUTER_MODEL = ninerouterModel;
+  }
 }
+
 
 // GET: Ambil API Keys saat ini
 app.get("/api/keys", (req, res) => {
   res.json({
-    groqKey: process.env.GROQ_API_KEY || "",
-    geminiKey: process.env.GEMINI_API_KEY || "",
-    openrouterKey: process.env.OPENROUTER_API_KEY || "",
-    rapidApiKey: process.env.RAPIDAPI_KEY || "",
     syntxBaseEmail: process.env.SYNTX_BASE_EMAIL || "",
     syntxEmailIndex: process.env.SYNTX_EMAIL_INDEX || "0",
     githubToken: process.env.GITHUB_TOKEN || "",
     githubUsername: process.env.GITHUB_USERNAME || "",
     githubRepo: process.env.GITHUB_REPO || "",
-    openInboxKey: process.env.OPENINBOX_API_KEY || ""
+    ninerouterKey: process.env.NINEROUTER_API_KEY || "",
+    ninerouterUrl: process.env.NINEROUTER_BASE_URL || "",
+    ninerouterModel: process.env.NINEROUTER_MODEL || ""
   });
 });
 
 // POST: Simpan API Keys baru
 app.post("/api/keys", (req, res) => {
-  const { groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey } = req.body;
+  const { syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, ninerouterKey, ninerouterUrl, ninerouterModel } = req.body;
   try {
-    updateEnvKeys({ groqKey, geminiKey, openrouterKey, rapidApiKey, syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, openInboxKey });
+    updateEnvKeys({ syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, ninerouterKey, ninerouterUrl, ninerouterModel });
     console.log("🔑 API Keys & Config GitHub berhasil diperbarui di server runtime.");
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Gagal menyimpan API Keys ke .env: " + err.message });
   }
 });
+
 
 // POST: Test validitas API Key untuk provider tertentu
 app.post("/api/keys/test", async (req, res) => {
@@ -4293,85 +3818,35 @@ app.post("/api/keys/test", async (req, res) => {
 
   console.log(`🧪 Mengetes API Key untuk provider: ${provider}...`);
   try {
-    if (provider === "gemini") {
-      const tempGenAI = new GoogleGenerativeAI(apiKey);
-      const tempModel = tempGenAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        generationConfig: { maxOutputTokens: 5 }
-      });
-      const result = await tempModel.generateContent("Hello");
-      const response = await result.response;
-      const text = response.text();
-      if (text) {
-        return res.json({ valid: true });
-      } else {
-        throw new Error("Respons dari Gemini kosong atau tidak valid");
+    if (provider === "ninerouter") {
+      const baseUrl = req.body.apiBaseUrl || NINEROUTER_BASE_URL || "http://localhost:20128/v1";
+      const model = req.body.apiModel || NINEROUTER_MODEL || "9router";
+      const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+      
+      const headers = { "Content-Type": "application/json" };
+      if (apiKey && apiKey !== "TIDAK_ADA" && apiKey !== "kosong") {
+        headers["Authorization"] = `Bearer ${apiKey}`;
       }
-    } else if (provider === "groq") {
+
+      console.log(`🧪 Mengetes 9Router pada ${url} dengan model ${model}...`);
       const response = await axios.post(
-        "https://api.groq.com/openai/v1/chat/completions",
+        url,
         {
-          model: "llama-3.3-70b-versatile",
+          model: model,
           messages: [
             { role: "user", content: "Hello" }
           ],
           max_tokens: 5
         },
         {
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
-          },
+          headers: headers,
           timeout: 15000
         }
       );
       if (response.data && response.data.choices && response.data.choices[0]) {
         return res.json({ valid: true });
       } else {
-        throw new Error("Respons dari Groq tidak valid");
-      }
-    } else if (provider === "openrouter") {
-      const response = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          model: "google/gemini-2.5-flash:free",
-          messages: [
-            { role: "user", content: "Hello" }
-          ],
-          max_tokens: 5
-        },
-        {
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "HTTP-Referer": "http://localhost:5000",
-            "X-Title": "Stock Generator",
-            "Content-Type": "application/json"
-          },
-          timeout: 15000
-        }
-      );
-      if (response.data && response.data.choices && response.data.choices[0]) {
-        return res.json({ valid: true });
-      } else {
-        throw new Error("Respons dari OpenRouter tidak valid");
-      }
-    } else if (provider === "gmailnator") {
-      const response = await axios.post(
-        "https://gmailnator.p.rapidapi.com/api/emails/generate",
-        {},
-        {
-          headers: {
-            "content-type": "application/json",
-            "X-RapidAPI-Key": apiKey,
-            "X-RapidAPI-Host": "gmailnator.p.rapidapi.com"
-          },
-          timeout: 15000
-        }
-      );
-      if (response.data && response.data.email) {
-        return res.json({ valid: true });
-      } else {
-        throw new Error("Respons dari Gmailnator tidak valid: " + JSON.stringify(response.data));
+        throw new Error("Respons dari 9Router tidak valid");
       }
     } else {
       return res.status(400).json({ valid: false, error: "Provider tidak dikenal" });

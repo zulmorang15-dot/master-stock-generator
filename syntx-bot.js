@@ -748,92 +748,6 @@ async function fetchOTPFromEmailnator(email, cookies, xsrfToken, maxWaitMs = 900
 
 
 // ─────────────────────────────────────────────
-// GMAILNATOR (RAPIDAPI) INTEGRATION FOR DISPOSABLE EMAIL BYPASS
-// ─────────────────────────────────────────────
-async function createGmailnatorEmail(rapidApiKey, options) {
-  logToTask(options, '📧 [syntx-bot] Membuat email Gmailnator via RapidAPI...', 'info');
-  const response = await axios.post(
-    'https://gmailnator.p.rapidapi.com/api/emails/generate',
-    {
-      type: ["public_gmail_dot"]
-    },
-    {
-      headers: {
-        'content-type': 'application/json',
-        'X-RapidAPI-Key': rapidApiKey,
-        'X-RapidAPI-Host': 'gmailnator.p.rapidapi.com'
-      },
-      timeout: 20000
-    }
-  );
-  const email = response.data?.email;
-  if (!email) {
-    throw new Error('Gagal mendapatkan email dari Gmailnator: ' + JSON.stringify(response.data));
-  }
-  logToTask(options, `✅ [syntx-bot] Email Gmailnator dibuat: ${email}`, 'success');
-  return email;
-}
-
-async function fetchOTPFromGmailnator(rapidApiKey, email, maxWaitMs = 90000, options) {
-  logToTask(options, `🔍 [syntx-bot] Menunggu OTP di inbox Gmailnator untuk: ${email}...`, 'info');
-  const startTime = Date.now();
-  const headers = {
-    'content-type': 'application/json',
-    'X-RapidAPI-Key': rapidApiKey,
-    'X-RapidAPI-Host': 'gmailnator.p.rapidapi.com'
-  };
-
-  while (Date.now() - startTime < maxWaitMs) {
-    await sleep(5000);
-
-    try {
-      const response = await axios.post(
-        'https://gmailnator.p.rapidapi.com/api/inbox',
-        { email },
-        { headers, timeout: 20000 }
-      );
-
-      const messages = Array.isArray(response.data) ? response.data : (response.data?.data || []);
-      if (messages.length === 0) {
-        logToTask(options, `⏳ [syntx-bot] Inbox Gmailnator kosong, tunggu 5s... (${Math.floor((Date.now() - startTime)/1000)}s)`, 'info');
-        continue;
-      }
-
-      // Ambil pesan pertama karena email ini baru dibuat dan khusus untuk menerima OTP
-      const otpMail = messages[0];
-
-      const messageId = otpMail.message_id || otpMail.id;
-      if (!messageId) {
-        throw new Error('Message ID tidak ditemukan di entry inbox: ' + JSON.stringify(otpMail));
-      }
-
-      // Fetch detail message
-      logToTask(options, `🎯 [syntx-bot] Email OTP masuk! Membaca konten pesan: ${messageId}...`, 'info');
-      const msgDetailRes = await axios.get(
-        `https://gmailnator.p.rapidapi.com/api/inbox/${messageId}`,
-        { headers, timeout: 20000 }
-      );
-
-      const body = msgDetailRes.data?.content || msgDetailRes.data?.text || msgDetailRes.data?.html || '';
-      const subject = otpMail.subject || msgDetailRes.data?.subject || '';
-
-      const otpMatch = body.match(/\b(\d{6})\b/) || subject.match(/\b(\d{6})\b/);
-      if (otpMatch) {
-        const otp = otpMatch[1];
-        logToTask(options, `🎯 [syntx-bot] OTP berhasil ditemukan via Gmailnator: ${otp}`, 'success');
-        return otp;
-      } else {
-        logToTask(options, `⚠️ [syntx-bot] OTP tidak ditemukan di badan atau subjek email.`, 'warning');
-      }
-    } catch (err) {
-      logToTask(options, `⚠️ [syntx-bot] Error saat cek inbox Gmailnator: ${err.message}`, 'warning');
-    }
-  }
-
-  throw new Error('Timeout: OTP tidak diterima via Gmailnator dalam 90 detik');
-}
-
-// ─────────────────────────────────────────────
 // MAIN: Full login flow + send prompt
 // ─────────────────────────────────────────────
 // Helper to generate dot-variants of a Gmail address
@@ -886,8 +800,7 @@ function registerOtpProvider(fn) {
 async function loginAndGetToken(options = {}) {
   logToTask(options, '\n🔄 [syntx-bot] Memulai proses login syntx.ai...', 'info');
   
-  // Prioritas: 1) OpenInbox (gratis, stabil), 2) dot-variant, 3) Emailnator, 4) Gmailnator, 5) Mail.tm
-  const rapidApiKey = process.env.RAPIDAPI_KEY;
+  // Prioritas: 1) OpenInbox (gratis, stabil), 2) dot-variant, 3) Emailnator, 4) Mail.tm
   const baseEmail = process.env.SYNTX_BASE_EMAIL;
   let email;
   let syntxToken;
@@ -929,8 +842,6 @@ async function loginAndGetToken(options = {}) {
 
     email = getDotVariant(baseEmail, foundIndex);
     logToTask(options, `📧 [syntx-bot] Menggunakan Gmail dot-variant indeks ${foundIndex}: ${email}`, 'info');
-    // Kami tidak meng-increment SYNTX_EMAIL_INDEX secara otomatis ke env,
-    // karena SYNTX_EMAIL_INDEX bertindak sebagai batas maksimal index/jumlah akun.
   }
   // === OPSI 3: Emailnator Web ===
   else if (!email) {
@@ -943,19 +854,12 @@ async function loginAndGetToken(options = {}) {
     } catch (enErr) {
       logToTask(options, `⚠️ [syntx-bot] Emailnator gagal: ${enErr.message}`, 'warning');
 
-      // === OPSI 4: Gmailnator RapidAPI ===
-      if (rapidApiKey) {
-        logToTask(options, '🔑 [syntx-bot] Fallback ke Gmailnator (RapidAPI)...', 'info');
-        email = await createGmailnatorEmail(rapidApiKey, options);
-      }
-      // === OPSI 5: Mail.tm ===
-      else {
-        logToTask(options, '⚠️ [syntx-bot] Fallback ke Mail.tm...', 'warning');
-        const { email: tempEmail, mailToken, accountId } = await createTempEmail(options);
-        email = tempEmail;
-        sessionState.mailToken = mailToken;
-        sessionState.mailId = accountId;
-      }
+      // === OPSI 4: Mail.tm ===
+      logToTask(options, '⚠️ [syntx-bot] Fallback ke Mail.tm...', 'warning');
+      const { email: tempEmail, mailToken, accountId } = await createTempEmail(options);
+      email = tempEmail;
+      sessionState.mailToken = mailToken;
+      sessionState.mailId = accountId;
     }
   }
 
@@ -981,13 +885,6 @@ async function loginAndGetToken(options = {}) {
       otp = await fetchOTPFromEmailnator(email, emailnatorCookies, emailnatorXsrf, 90000, options);
     } catch (err) {
       logToTask(options, `⚠️ Gagal mengambil OTP dari Emailnator: ${err.message}`, 'warning');
-    }
-  } else if (rapidApiKey) {
-    // Gmailnator (RapidAPI) - for dot-variant or Gmailnator email
-    try {
-      otp = await fetchOTPFromGmailnator(rapidApiKey, email, 60000, options);
-    } catch (err) {
-      logToTask(options, `⚠️ Gagal mengambil OTP dari Gmailnator: ${err.message}`, 'warning');
     }
   } else if (sessionState.mailToken) {
     // Mail.tm
