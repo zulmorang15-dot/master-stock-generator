@@ -1,633 +1,498 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+
+// 🎨 CYBER COLOR PALETTE
+const COLORS = ['#00f0ff', '#0066ff', '#bd00ff', '#ff00c8', '#00ff9d', '#3d7bff', '#00d4ff'];
+
+// Deterministic seed-based PRNG to avoid Math.random() inside component render
+let seed = 98765;
+const random = () => {
+  const x = Math.sin(seed++) * 10000;
+  return x - Math.floor(x);
+};
+const rnd = (min: number, max: number) => min + random() * (max - min);
+const pick = <T,>(arr: T[]): T => arr[Math.floor(random() * arr.length)];
+
+// Smooth color interpolation helper for frame-locked breathing effects
+const interpColor = (p: number, r1: number, g1: number, b1: number, a1: number, r2: number, g2: number, b2: number, a2: number) => {
+  const r = Math.round(r1 + (r2 - r1) * p);
+  const g = Math.round(g1 + (g2 - g1) * p);
+  const b = Math.round(b1 + (b2 - b1) * p);
+  const a = a1 + (a2 - a1) * p;
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+};
+
+interface StreakData {
+  width: number;
+  height: number;
+  left: number;
+  color: string;
+  opacity: number;
+  rev: boolean;
+  duration: number;
+  offset: number;
+}
+
+// Generate static, deterministic stream of vertical lines
+const STREAKS: StreakData[] = Array.from({ length: 50 }).map(() => {
+  const thick = rnd(2, 9);
+  return {
+    width: thick,
+    height: rnd(80, 420),
+    left: rnd(0, 100),
+    color: pick(COLORS),
+    opacity: Number(rnd(0.35, 0.9).toFixed(2)),
+    rev: random() > 0.5,
+    duration: rnd(1.5, 3.5),
+    offset: random(),
+  };
+});
+
+interface DotlineData {
+  width: number;
+  height: number;
+  left: number;
+  color: string;
+  gap: number;
+  opacity: number;
+  rev: boolean;
+  duration: number;
+  offset: number;
+}
+
+// Generate static vertical dotted lines
+const DOTLINES: DotlineData[] = Array.from({ length: 24 }).map(() => {
+  const size = rnd(2, 5);
+  return {
+    width: size,
+    height: rnd(120, 380),
+    left: rnd(0, 100),
+    color: pick(COLORS),
+    gap: rnd(8, 18),
+    opacity: Number(rnd(0.5, 1).toFixed(2)),
+    rev: random() > 0.5,
+    duration: rnd(1.8, 3.8),
+    offset: random(),
+  };
+});
+
+interface DotData {
+  size: number;
+  top: number;
+  left: number;
+  color: string;
+  opacity: number;
+  moveDuration: number;
+  twinkleDuration: number;
+  moveOffset: number;
+  twinkleOffset: number;
+}
+
+// Generate static twinkling ambient background particles
+const DOTS: DotData[] = Array.from({ length: 45 }).map(() => {
+  return {
+    size: rnd(2, 6),
+    top: rnd(0, 100),
+    left: rnd(0, 100),
+    color: pick(COLORS),
+    opacity: Number(rnd(0.4, 1).toFixed(2)),
+    moveDuration: rnd(2.5, 6),
+    twinkleDuration: rnd(1.5, 3),
+    moveOffset: random(),
+    twinkleOffset: random(),
+  };
+});
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-// Deterministic Seeded Generator to avoid Math.random() inside component render
-const LINES_COUNT = 14;
-const LINES_DATA = Array.from({ length: LINES_COUNT }, (_, i) => {
-  const seed1 = Math.sin(i * 12.3) * 0.5 + 0.5;
-  const seed2 = Math.cos(i * 37.7) * 0.5 + 0.5;
-  const seed3 = Math.sin(i * 89.1) * 0.5 + 0.5;
-  const vertical = seed1 > 0.5;
-  return {
-    vertical,
-    top: seed2 * 100,
-    left: seed3 * 100,
-    size: vertical ? (80 + seed1 * 180) : (80 + seed2 * 220),
-    pulseDelay: Math.round(seed3 * 150), // 150 frames = 2.5s cycle (divisible into 1200)
-  };
-});
-
-const NODES_COUNT = 30;
-const NODES_DATA = Array.from({ length: NODES_COUNT }, (_, i) => {
-  const seed1 = Math.sin(i * 45.6) * 0.5 + 0.5;
-  const seed2 = Math.cos(i * 92.3) * 0.5 + 0.5;
-  const seed3 = Math.sin(i * 124.5) * 0.5 + 0.5;
-  return {
-    top: seed1 * 100,
-    left: seed2 * 100,
-    blinkDelay: Math.round(seed3 * 120), // 120 frames = 2s cycle (divisible into 1200)
-  };
-});
-
-const PARTICLES_COUNT = 20;
-const PARTICLE_DURATIONS = [300, 400, 600]; // Seamless divisible factors of 1200
-const PARTICLES_DATA = Array.from({ length: PARTICLES_COUNT }, (_, i) => {
-  const seed1 = Math.sin(i * 73.1) * 0.5 + 0.5;
-  const seed2 = Math.cos(i * 29.4) * 0.5 + 0.5;
-  const seed3 = Math.sin(i * 156.2) * 0.5 + 0.5;
-  const durationIdx = Math.floor(seed2 * 3) % 3;
-  return {
-    left: seed1 * 100,
-    duration: PARTICLE_DURATIONS[durationIdx],
-    delay: Math.round(seed3 * 600),
-  };
-});
-
-const FuturisticCircuitEndScreen: React.FC = () => {
-  const { width, height, fps } = useVideoConfig();
+const CyberNeonFlow: React.FC = () => {
   const frame = useCurrentFrame();
+  const { width, height, fps } = useVideoConfig();
 
-  // Scale computation to fit within 16:9 flawlessly with no black bars
+  // Fullscreen 16:9 aspect ratio preservation scaling
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // 1. Grid Background movement loop (300 frames = 5 seconds)
-  const gridPos = interpolate(frame % 300, [0, 300], [0, 55]);
+  // 1. Ambient Background Hue shift (20s cycle matches total duration seamlessly)
+  const hue = (frame / (fps * 20)) * 360;
+  const ambientStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    background: `
+      radial-gradient(circle at 50% 50%, rgba(0, 102, 255, 0.28), transparent 60%),
+      radial-gradient(circle at 20% 80%, rgba(189, 0, 255, 0.18), transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(0, 240, 255, 0.18), transparent 50%)
+    `,
+    zIndex: 0,
+    filter: `hue-rotate(${hue}deg)`,
+  };
 
-  // 2. Scanline loop (300 frames = 5 seconds)
-  const scanTop = interpolate(frame % 300, [0, 300], [-180, 1080]);
+  // 2. Pixel Grid moving & breathing (4s pulse cycle, 20s grid translation loops at exactly 38px size)
+  const gridPulseProgress = (frame % (fps * 4)) / (fps * 4);
+  const gridPulseOpacity = interpolate(gridPulseProgress, [0, 0.5, 1], [0.22, 0.55, 0.22]);
+  const gridScrollProgress = (frame / (fps * 20)) * 38;
+  const pixelGridStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: -50,
+    backgroundImage: `
+      linear-gradient(rgba(0, 240, 255, 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 240, 255, 0.07) 1px, transparent 1px)
+    `,
+    backgroundSize: '38px 38px',
+    opacity: gridPulseOpacity,
+    transform: `translateY(${gridScrollProgress}px)`,
+    zIndex: 1,
+  };
 
-  // 3. Flares movement (600 frames = 10 seconds loop)
-  const f1Prog = frame % 600;
-  const f1X = interpolate(f1Prog, [0, 300, 600], [0, 50, 0]);
-  const f1Y = interpolate(f1Prog, [0, 300, 600], [0, 40, 0]);
-  const f1Scale = interpolate(f1Prog, [0, 300, 600], [1, 1.25, 1]);
-  const f1Opacity = interpolate(f1Prog, [0, 300, 600], [0.4, 0.85, 0.4]);
+  // 3. Scanline sweep effect (10s cycle)
+  const scanProgress = (frame % (fps * 10)) / (fps * 10);
+  const scanLeft = interpolate(scanProgress, [0, 1], [-160, 1920]);
+  const scanlineStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    height: '100%',
+    width: 160,
+    background: 'linear-gradient(to right, transparent, rgba(0, 240, 255, 0.08), rgba(189, 0, 255, 0.08), transparent)',
+    zIndex: 3,
+    pointerEvents: 'none',
+    left: scanLeft,
+  };
 
-  const f2Prog = (frame + 300) % 600;
-  const f2X = interpolate(f2Prog, [0, 300, 600], [0, 50, 0]);
-  const f2Y = interpolate(f2Prog, [0, 300, 600], [0, 40, 0]);
-  const f2Scale = interpolate(f2Prog, [0, 300, 600], [1, 1.25, 1]);
-  const f2Opacity = interpolate(f2Prog, [0, 300, 600], [0.4, 0.85, 0.4]);
+  // 4. Glitching & pulsing neon Title (5s cycle loop)
+  const titleGlowPulseProgress = (frame % (fps * 2.5)) / (fps * 2.5);
+  const titleBrightness = interpolate(titleGlowPulseProgress, [0, 0.5, 1], [1, 1.8, 1]);
+  const titleSaturate = interpolate(titleGlowPulseProgress, [0, 0.5, 1], [1.2, 1.7, 1.2]);
 
-  // 4. Rotating Corner Decos (600 frames loop)
-  const rotTL = interpolate(frame % 600, [0, 600], [0, 360]);
-  const rotBR = interpolate(frame % 600, [0, 600], [360, 0]);
+  const titleGlitchProgress = (frame % (fps * 5)) / (fps * 5);
+  const titleTx = interpolate(titleGlitchProgress, [0, 0.90, 0.91, 0.93, 0.95, 1.0], [0, 0, -3, 3, 0, 0]);
+  const titleSkewX = interpolate(titleGlitchProgress, [0, 0.90, 0.91, 0.93, 0.95, 1.0], [0, 0, 5, -5, 0, 0]);
 
-  // Helper for Corner Deco markup mapping
-  const renderCornerDeco = (rotation: number, positionStyle: React.CSSProperties) => (
-    <div style={{
-      position: 'absolute',
-      width: 90,
-      height: 90,
-      border: '2px solid rgba(0,200,255,0.4)',
-      borderRadius: '50%',
-      transform: `rotate(${rotation}deg)`,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      ...positionStyle
-    }}>
-      <div style={{
-        position: 'absolute',
-        inset: 12,
-        border: '1px dashed rgba(0,200,255,0.5)',
-        borderRadius: '50%',
-      }} />
-      <div style={{
-        position: 'absolute',
-        inset: 35,
-        background: 'rgba(0,200,255,0.3)',
-        borderRadius: '50%',
-        boxShadow: '0 0 15px #00d4ff',
-      }} />
-    </div>
+  let titleShadow = '0 0 12px #00f0ff, 0 0 24px #ff00c8';
+  if (titleGlitchProgress >= 0.90 && titleGlitchProgress < 0.92) {
+    titleShadow = '2px 0 #ff00c8, -2px 0 #00f0ff';
+  } else if (titleGlitchProgress >= 0.92 && titleGlitchProgress < 0.94) {
+    titleShadow = '-2px 0 #ff00c8, 2px 0 #00f0ff';
+  }
+
+  const titleStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 140,
+    width: '100%',
+    textAlign: 'center',
+    zIndex: 5,
+    color: '#fff',
+    fontSize: 44,
+    letterSpacing: 10,
+    textTransform: 'uppercase',
+    textShadow: titleShadow,
+    filter: `brightness(${titleBrightness}) saturate(${titleSaturate})`,
+    transform: `translateX(${titleTx}px) skewX(${titleSkewX}deg)`,
+    fontFamily: `'Segoe UI', Arial, sans-serif`,
+    fontWeight: 700,
+  };
+
+  // 5. Container floating motion (5s cycle loop)
+  const containerFloatProgress = (frame % (fps * 5)) / (fps * 5);
+  const containerY = interpolate(containerFloatProgress, [0, 0.5, 1], [0, -20, 0], {
+    easing: Easing.inOut(Easing.quad),
+  });
+  const containerStyle: React.CSSProperties = {
+    position: 'relative',
+    zIndex: 5,
+    width: 1200,
+    height: 450,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    transform: `translateY(${containerY}px)`,
+  };
+
+  // 6. Generic Flicker animation for Content/CTA labels
+  const labelFlickerProgress = (frame % (fps * 5)) / (fps * 5);
+  const labelOpacity = interpolate(
+    labelFlickerProgress,
+    [0, 0.92, 0.93, 0.94, 0.96, 0.97, 1.0],
+    [1, 1, 0.4, 1, 0.6, 1, 1]
   );
 
-  // 5. Title animation (in and out)
-  let titleOpacity = 0;
-  let titleY = -20;
-  if (frame < 1050) {
-    titleOpacity = interpolate(frame, [18, 102], [0, 1], {
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    });
-    titleY = interpolate(frame, [18, 102], [-20, 0], {
-      easing: Easing.out(Easing.quad),
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    });
-  } else {
-    titleOpacity = interpolate(frame, [1120, 1180], [1, 0], {
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    });
-    titleY = interpolate(frame, [1120, 1180], [0, -20], {
-      easing: Easing.in(Easing.quad),
-      extrapolateLeft: 'clamp',
-      extrapolateRight: 'clamp',
-    });
-  }
-
-  // 6. Placeholders state computation
-  const getPlaceholderState = (startFrame: number) => {
-    let scale = 0.6;
-    let rotate = -4;
-    let opacity = 0;
-
-    if (frame < 1050) {
-      scale = interpolate(frame, [startFrame, startFrame + 54], [0.6, 1], {
-        easing: Easing.bezier(0.2, 0.8, 0.3, 1.2),
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-      rotate = interpolate(frame, [startFrame, startFrame + 54], [-4, 0], {
-        easing: Easing.bezier(0.2, 0.8, 0.3, 1.2),
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-      opacity = interpolate(frame, [startFrame, startFrame + 54], [0, 1], {
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-    } else {
-      scale = interpolate(frame, [1110, 1150], [1, 0.6], {
-        easing: Easing.in(Easing.quad),
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-      rotate = interpolate(frame, [1110, 1150], [0, -4], {
-        easing: Easing.in(Easing.quad),
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-      opacity = interpolate(frame, [1110, 1150], [1, 0], {
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-    }
-
-    return { scale, rotate, opacity };
+  const labelStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    fontSize: 24,
+    fontWeight: 700,
+    letterSpacing: 2,
+    color: '#d6faff',
+    textShadow: '0 0 10px #00f0ff, 0 0 18px #ff00c8',
+    pointerEvents: 'none',
+    opacity: labelOpacity,
+    fontFamily: `'Segoe UI', Arial, sans-serif`,
   };
 
-  const getFillScaleY = (startFrame: number) => {
-    if (frame < 1050) {
-      return interpolate(frame, [startFrame, startFrame + 66], [0, 1], {
-        easing: Easing.bezier(0.4, 0, 0.2, 1),
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-    } else {
-      return interpolate(frame, [1060, 1100], [1, 0], {
-        easing: Easing.in(Easing.quad),
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-    }
+  // --- Dynamic Framework animations (Left Card, Right Card, Center Circle) ---
+  const globalPulseProgress = (frame % (fps * 2.5)) / (fps * 2.5);
+  const elementBrightness = interpolate(globalPulseProgress, [0, 0.5, 1], [1, 1.8, 1]);
+  const elementSaturate = interpolate(globalPulseProgress, [0, 0.5, 1], [1.2, 1.7, 1.2]);
+
+  // A. Left Rect Frame
+  const rectLeftBorderFlowY = ((frame % (fps * 5)) / (fps * 5)) * 100;
+  const tiltLProgress = (frame % (fps * 5)) / (fps * 5);
+  const tiltLAngle = interpolate(tiltLProgress, [0, 0.5, 1], [6, -2, 6]);
+
+  const rectLeftStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 380,
+    height: 240,
+    left: 100,
+    borderRadius: 8,
+    border: '3px solid transparent',
+    background: `
+      linear-gradient(rgba(4, 8, 20, 0.85), rgba(4, 8, 20, 0.85)) padding-box,
+      linear-gradient(160deg, #00f0ff, #0066ff, #bd00ff, #00ff9d, #00f0ff) border-box
+    `,
+    backgroundSize: '100% 100%, 300% 300%',
+    backgroundPosition: `0% 0%, 50% ${rectLeftBorderFlowY}%`,
+    boxShadow: '0 0 16px #00f0ff, 0 0 35px rgba(189, 0, 255, 0.55), inset 0 0 25px rgba(0, 240, 255, 0.25)',
+    filter: `brightness(${elementBrightness}) saturate(${elementSaturate})`,
+    transform: `perspective(800px) rotateY(${tiltLAngle}deg)`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backdropFilter: 'blur(2px)',
   };
 
-  const getHatchOpacity = (startFrame: number) => {
-    if (frame < 1050) {
-      return interpolate(frame, [startFrame, startFrame + 60], [1, 0], {
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-    }
-    return 0;
+  // B. Right Rect Frame
+  const rectRightBorderFlowY = 100 - ((frame % (fps * 5)) / (fps * 5)) * 100;
+  const tiltRProgress = ((frame % (fps * 5)) / (fps * 5) + 0.24) % 1;
+  const tiltRAngle = interpolate(tiltRProgress, [0, 0.5, 1], [-6, 2, -6]);
+
+  const rectRightStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 380,
+    height: 240,
+    right: 100,
+    borderRadius: 8,
+    border: '3px solid transparent',
+    background: `
+      linear-gradient(rgba(4, 8, 20, 0.85), rgba(4, 8, 20, 0.85)) padding-box,
+      linear-gradient(20deg, #ff00c8, #bd00ff, #0066ff, #00ff9d, #ff00c8) border-box
+    `,
+    backgroundSize: '100% 100%, 300% 300%',
+    backgroundPosition: `0% 0%, 50% ${rectRightBorderFlowY}%`,
+    boxShadow: '0 0 16px #ff00c8, 0 0 35px rgba(0, 102, 255, 0.55), inset 0 0 25px rgba(189, 0, 255, 0.25)',
+    filter: `brightness(${elementBrightness}) saturate(${elementSaturate})`,
+    transform: `perspective(800px) rotateY(${tiltRAngle}deg)`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backdropFilter: 'blur(2px)',
   };
 
-  const getLabelAnim = (startFrame: number) => {
-    let opacity = 0;
-    let y = -20;
-    if (frame < 1000) {
-      opacity = interpolate(frame, [startFrame, startFrame + 60], [0, 1], {
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-      y = interpolate(frame, [startFrame, startFrame + 60], [-20, 0], {
-        easing: Easing.out(Easing.quad),
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-    } else {
-      opacity = interpolate(frame, [1020, 1060], [1, 0], {
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-      y = interpolate(frame, [1020, 1060], [0, -20], {
-        easing: Easing.in(Easing.quad),
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-    }
-    return { opacity, y };
+  // C. Centered Circular Frame components
+  const breatheProgress = (frame % (fps * 4)) / (fps * 4);
+  const bValue = interpolate(breatheProgress, [0, 0.5, 1], [0, 1, 0]);
+
+  // Color & intensity breathing transitions inside Center CTA Frame
+  const shadowColor1 = interpColor(bValue, 189, 0, 255, 1.0, 255, 0, 200, 1.0);
+  const shadowColor2 = interpColor(bValue, 0, 240, 255, 0.5, 0, 255, 157, 0.7);
+  const shadowColor3 = interpColor(bValue, 189, 0, 255, 0.3, 255, 0, 200, 0.4);
+
+  const cShadowWidth1 = interpolate(bValue, [0, 1], [18, 30]);
+  const cShadowWidth2 = interpolate(bValue, [0, 1], [40, 70]);
+  const cShadowWidth3 = interpolate(bValue, [0, 1], [25, 35]);
+
+  const spinAngle = ((frame % (fps * 5)) / (fps * 5)) * 360;
+  const dashAngle = -((frame % (fps * 10)) / (fps * 10)) * 360;
+  const orbitAngle = ((frame % (fps * 4)) / (fps * 4)) * 360;
+
+  const circleContainerStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    zIndex: 10,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   };
 
-  // Shine sweep animation left value (300 frames loop)
-  let shineLeft = -60;
-  if (frame > 192 && frame < 1060) {
-    const shineProgress = ((frame - 192) % 300) / 300;
-    if (shineProgress < 0.4) {
-      shineLeft = interpolate(shineProgress, [0, 0.4], [-60, 160]);
-    } else {
-      shineLeft = 160;
-    }
-  }
+  const circleStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: '50%',
+    border: '3px solid transparent',
+    background: `
+      radial-gradient(circle, rgba(4, 10, 25, 0.9), rgba(4, 8, 20, 0.85)) padding-box,
+      conic-gradient(#ff00c8, #bd00ff, #0066ff, #00f0ff, #00ff9d, #ff00c8) border-box
+    `,
+    boxShadow: `0 0 ${cShadowWidth1}px ${shadowColor1}, 0 0 ${cShadowWidth2}px ${shadowColor2}, inset 0 0 ${cShadowWidth3}px ${shadowColor3}`,
+    filter: `brightness(${elementBrightness}) saturate(${elementSaturate})`,
+    transform: `rotate(${spinAngle}deg)`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
 
-  // Anim state configurations for the elements
-  const r1Anim = getPlaceholderState(48); // r1 delay 0.8s (48f)
-  const r1FillScale = getFillScaleY(132); // r1 fill delay 2.2s (132f)
-  const r1HatchOpacity = getHatchOpacity(132);
-  const r1Label = getLabelAnim(192); // r1 label delay 3.2s (192f)
-
-  const circleAnim = getPlaceholderState(30); // circle delay 0.5s (30f)
-  const circleFillScale = getFillScaleY(114); // circle fill delay 1.9s (114f)
-  const circleHatchOpacity = getHatchOpacity(114);
-  const circleLabel = getLabelAnim(180); // circle label delay 3.0s (180f)
-
-  const r2Anim = getPlaceholderState(66); // r2 delay 1.1s (66f)
-  const r2FillScale = getFillScaleY(150); // r2 fill delay 2.5s (150f)
-  const r2HatchOpacity = getHatchOpacity(150);
-  const r2Label = getLabelAnim(204); // r2 label delay 3.4s (204f)
+  const orbitStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: -22,
+    left: '50%',
+    width: 10,
+    height: 10,
+    marginLeft: -5,
+    borderRadius: '50%',
+    backgroundColor: '#00ff9d',
+    boxShadow: '0 0 14px #00ff9d',
+    transformOrigin: '5px 142px',
+    transform: `rotate(${orbitAngle}deg)`,
+  };
 
   return (
-    <div style={{
-      width: ORIGINAL_WIDTH,
-      height: ORIGINAL_HEIGHT,
-      position: 'absolute',
-      top: '50%',
-      left: '50%',
-      transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-      transformOrigin: 'center center',
-      overflow: 'hidden',
-      backgroundColor: '#020812',
-      fontFamily: "'Segoe UI', 'Arial', sans-serif"
-    }}>
-      {/* Background radial and linear gradients */}
-      <div style={{
+    <div
+      style={{
+        backgroundColor: '#01030a',
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
         position: 'absolute',
-        inset: 0,
-        background: `
-          radial-gradient(circle at 25% 35%, rgba(0,120,255,0.18), transparent 45%),
-          radial-gradient(circle at 75% 65%, rgba(0,210,255,0.14), transparent 45%),
-          linear-gradient(135deg, #010610 0%, #04162e 50%, #010610 100%)
-        `
-      }} />
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Background Layers */}
+      <div style={ambientStyle} />
+      <div style={pixelGridStyle} />
+      <div style={scanlineStyle} />
 
-      {/* Circuit grid background */}
-      <div style={{
-        position: 'absolute',
-        inset: '-50px',
-        backgroundImage: `
-          linear-gradient(rgba(0,150,255,0.07) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(0,150,255,0.07) 1px, transparent 1px)
-        `,
-        backgroundSize: '55px 55px',
-        backgroundPosition: `${gridPos}px ${gridPos}px`,
-      }} />
+      {/* Dynamic particles, streaks & dashed dotlines */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 2 }}>
+        {STREAKS.map((s, i) => {
+          const localProgress = ((frame / (fps * s.duration)) + s.offset) % 1;
+          const y = s.rev
+            ? interpolate(localProgress, [0, 1], [-450, 1350])
+            : interpolate(localProgress, [0, 1], [1350, -450]);
 
-      {/* Light Flares */}
-      <div style={{
-        position: 'absolute',
-        width: 450,
-        height: 450,
-        background: 'radial-gradient(circle, rgba(0,200,255,0.22), transparent 70%)',
-        borderRadius: '50%',
-        filter: 'blur(50px)',
-        top: '5%',
-        left: '2%',
-        transform: `translate(${f1X}px, ${f1Y}px) scale(${f1Scale})`,
-        opacity: f1Opacity,
-      }} />
-
-      <div style={{
-        position: 'absolute',
-        width: 450,
-        height: 450,
-        background: 'radial-gradient(circle, rgba(0,200,255,0.22), transparent 70%)',
-        borderRadius: '50%',
-        filter: 'blur(50px)',
-        bottom: '5%',
-        right: '2%',
-        transform: `translate(${f2X}px, ${f2Y}px) scale(${f2Scale})`,
-        opacity: f2Opacity,
-      }} />
-
-      {/* Lines, Nodes & Particles container */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-        {/* Pulsing Circuit Lines */}
-        {LINES_DATA.map((line, idx) => {
-          const lineOpacity = interpolate(
-            (frame + line.pulseDelay) % 150,
-            [0, 75, 150],
-            [0.15, 0.8, 0.15]
-          );
           return (
             <div
-              key={`line-${idx}`}
+              key={`streak-${i}`}
               style={{
                 position: 'absolute',
-                top: `${line.top}%`,
-                left: `${line.left}%`,
-                height: line.vertical ? line.size : 2,
-                width: line.vertical ? 2 : line.size,
-                background: line.vertical
-                  ? 'linear-gradient(0deg, transparent, #00d4ff, transparent)'
-                  : 'linear-gradient(90deg, transparent, #00d4ff, transparent)',
-                opacity: lineOpacity,
-                boxShadow: '0 0 8px #00d4ff',
+                borderRadius: 6,
+                filter: 'blur(0.6px)',
+                width: s.width,
+                height: s.height,
+                left: `${s.left}%`,
+                background: `linear-gradient(180deg, transparent, ${s.color}, transparent)`,
+                boxShadow: `0 0 ${s.width * 2}px ${s.color}`,
+                opacity: s.opacity,
+                transform: `translateY(${y}px)`,
               }}
             />
           );
         })}
 
-        {/* Blinking Nodes */}
-        {NODES_DATA.map((node, idx) => {
-          const nodeProgress = (frame + node.blinkDelay) % 120;
-          const nodeOpacity = interpolate(nodeProgress, [0, 60, 120], [0.25, 1, 0.25]);
-          const nodeScale = interpolate(nodeProgress, [0, 60, 120], [1, 1.6, 1]);
+        {DOTLINES.map((d, i) => {
+          const localProgress = ((frame / (fps * d.duration)) + d.offset) % 1;
+          const y = d.rev
+            ? interpolate(localProgress, [0, 1], [-450, 1350])
+            : interpolate(localProgress, [0, 1], [1350, -450]);
+
           return (
             <div
-              key={`node-${idx}`}
+              key={`dotline-${i}`}
               style={{
                 position: 'absolute',
-                top: `${node.top}%`,
-                left: `${node.left}%`,
-                width: 5,
-                height: 5,
-                backgroundColor: '#00eaff',
-                borderRadius: '50%',
-                boxShadow: '0 0 12px #00eaff, 0 0 24px #00aaff',
-                transform: `scale(${nodeScale})`,
-                opacity: nodeOpacity,
+                width: d.width,
+                height: d.height,
+                left: `${d.left}%`,
+                backgroundImage: `radial-gradient(circle, ${d.color} 0 ${d.width / 2}px, transparent ${d.width / 2 + 0.5}px)`,
+                backgroundSize: `${d.width}px ${d.gap}px`,
+                backgroundRepeat: 'repeat-y',
+                filter: `drop-shadow(0 0 ${d.width * 2}px ${d.color})`,
+                opacity: d.opacity,
+                transform: `translateY(${y}px)`,
               }}
             />
           );
         })}
 
-        {/* Floating Particles */}
-        {PARTICLES_DATA.map((p, idx) => {
-          const pFrame = (frame + p.delay) % p.duration;
-          const yPos = interpolate(pFrame, [0, p.duration], [1150, -150]);
-          const opacity = interpolate(
-            pFrame,
-            [0, p.duration * 0.1, p.duration * 0.9, p.duration],
-            [0, 1, 1, 0],
-            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-          );
+        {DOTS.map((p, i) => {
+          const localMoveProgress = ((frame / (fps * p.moveDuration)) + p.moveOffset) % 1;
+          const y = interpolate(localMoveProgress, [0, 1], [1350, -450]);
+
+          const localTwinkleProgress = ((frame / (fps * p.twinkleDuration)) + p.twinkleOffset) % 1;
+          const twinkleOpacity = interpolate(localTwinkleProgress, [0, 0.5, 1], [0.3, 1, 0.3]);
+
           return (
             <div
-              key={`particle-${idx}`}
+              key={`dot-${i}`}
               style={{
                 position: 'absolute',
-                width: 3,
-                height: 3,
-                backgroundColor: 'rgba(120,220,255,0.8)',
                 borderRadius: '50%',
-                boxShadow: '0 0 6px #66ddff',
+                width: p.size,
+                height: p.size,
                 left: `${p.left}%`,
-                transform: `translateY(${yPos}px)`,
-                opacity,
+                background: p.color,
+                boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
+                opacity: p.opacity * twinkleOpacity,
+                transform: `translateY(${y}px)`,
               }}
             />
           );
         })}
       </div>
 
-      {/* Sweep Scan Line */}
-      <div style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        height: 180,
-        background: 'linear-gradient(180deg, transparent, rgba(0,200,255,0.12), transparent)',
-        top: scanTop,
-        pointerEvents: 'none',
-      }} />
+      {/* Cyber Title */}
+      <h1 style={titleStyle}>Cyber Neon Flow</h1>
 
-      {/* Corner Decos */}
-      {renderCornerDeco(rotTL, { top: 35, left: 35 })}
-      {renderCornerDeco(rotBR, { bottom: 35, right: 35 })}
-
-      {/* Title */}
-      <div style={{
-        position: 'absolute',
-        top: '7%',
-        width: '100%',
-        textAlign: 'center',
-        color: '#bdeeff',
-        fontSize: 30,
-        fontWeight: 700,
-        letterSpacing: '6px',
-        textTransform: 'uppercase',
-        textShadow: '0 0 18px rgba(0,200,255,0.8)',
-        opacity: titleOpacity,
-        transform: `translateY(${titleY}px)`,
-      }}>
-        Thanks For Watching
-      </div>
-
-      {/* Placeholders */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 50,
-        flexWrap: 'wrap',
-      }}>
-        {/* R1: Next Video */}
-        <div style={{
-          position: 'relative',
-          border: '2px solid rgba(0,200,255,0.7)',
-          boxShadow: '0 0 30px rgba(0,180,255,0.45), inset 0 0 25px rgba(0,150,255,0.2)',
-          overflow: 'hidden',
-          width: 270,
-          height: 160,
-          borderRadius: 14,
-          opacity: r1Anim.opacity,
-          transform: `scale(${r1Anim.scale}) rotate(${r1Anim.rotate}deg)`,
-        }}>
-          {/* Solid fill rising */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(135deg, #5fd9ff, #009dff)',
-            transformOrigin: 'bottom',
-            transform: `scaleY(${r1FillScale})`,
-          }} />
-
-          {/* Hatch pattern overlay */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,190,255,0.5), rgba(0,190,255,0.5) 4px, transparent 4px, transparent 11px)',
-            zIndex: 1,
-            opacity: r1HatchOpacity,
-          }} />
-
-          {/* Shine Sweep Overlay */}
-          {frame > 192 && frame < 1060 && (
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: `${shineLeft}%`,
-              width: '50%',
-              height: '100%',
-              background: 'linear-gradient(120deg, transparent, rgba(255,255,255,0.4), transparent)',
-              transform: 'skewX(-20deg)',
-              zIndex: 3,
-            }} />
-          )}
-
-          {/* Label */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff',
-            fontWeight: 700,
-            fontSize: 18,
-            letterSpacing: '1px',
-            textShadow: '0 0 10px rgba(0,60,120,0.9)',
-            opacity: r1Label.opacity,
-            transform: `translateY(${r1Label.y}px)`,
-            zIndex: 4,
-          }}>
-            Next Video
+      {/* Frames Interface Wrapper */}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={containerStyle}>
+          {/* Left Panel */}
+          <div style={rectLeftStyle}>
+            <span style={labelStyle}>CONTENT 01</span>
           </div>
-        </div>
 
-        {/* Circle: Logo */}
-        <div style={{
-          position: 'relative',
-          border: '2px solid rgba(0,200,255,0.7)',
-          boxShadow: '0 0 30px rgba(0,180,255,0.45), inset 0 0 25px rgba(0,150,255,0.2)',
-          overflow: 'hidden',
-          width: 210,
-          height: 210,
-          borderRadius: '50%',
-          opacity: circleAnim.opacity,
-          transform: `scale(${circleAnim.scale}) rotate(${circleAnim.rotate}deg)`,
-        }}>
-          {/* Solid fill rising */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(135deg, #5fd9ff, #009dff)',
-            transformOrigin: 'bottom',
-            transform: `scaleY(${circleFillScale})`,
-          }} />
+          {/* Central Circular CTA Component */}
+          <div style={circleContainerStyle}>
+            {/* outer dashed spinning border */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: -18,
+                borderRadius: '50%',
+                border: '1px dashed rgba(0, 240, 255, 0.5)',
+                transform: `rotate(${dashAngle}deg)`,
+              }}
+            />
 
-          {/* Hatch pattern overlay */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,190,255,0.5), rgba(0,190,255,0.5) 4px, transparent 4px, transparent 11px)',
-            zIndex: 1,
-            opacity: circleHatchOpacity,
-          }} />
+            {/* main frame */}
+            <div style={circleStyle}>
+              {/* rotating the label in reverse cancels the parent spin, keeping text legible */}
+              <span
+                style={{
+                  ...labelStyle,
+                  transform: `rotate(${-spinAngle}deg)`,
+                  fontSize: 28,
+                }}
+              >
+                CTA
+              </span>
+            </div>
 
-          {/* Shine Sweep Overlay */}
-          {frame > 192 && frame < 1060 && (
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: `${shineLeft}%`,
-              width: '50%',
-              height: '100%',
-              background: 'linear-gradient(120deg, transparent, rgba(255,255,255,0.4), transparent)',
-              transform: 'skewX(-20deg)',
-              zIndex: 3,
-            }} />
-          )}
-
-          {/* Label */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff',
-            fontWeight: 700,
-            fontSize: 22,
-            letterSpacing: '1px',
-            textShadow: '0 0 10px rgba(0,60,120,0.9)',
-            opacity: circleLabel.opacity,
-            transform: `translateY(${circleLabel.y}px)`,
-            zIndex: 4,
-          }}>
-            LOGO
+            {/* satellite orbit point */}
+            <div style={orbitStyle} />
           </div>
-        </div>
 
-        {/* R2: Subscribe */}
-        <div style={{
-          position: 'relative',
-          border: '2px solid rgba(0,200,255,0.7)',
-          boxShadow: '0 0 30px rgba(0,180,255,0.45), inset 0 0 25px rgba(0,150,255,0.2)',
-          overflow: 'hidden',
-          width: 270,
-          height: 160,
-          borderRadius: 14,
-          opacity: r2Anim.opacity,
-          transform: `scale(${r2Anim.scale}) rotate(${r2Anim.rotate}deg)`,
-        }}>
-          {/* Solid fill rising */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(135deg, #5fd9ff, #009dff)',
-            transformOrigin: 'bottom',
-            transform: `scaleY(${r2FillScale})`,
-          }} />
-
-          {/* Hatch pattern overlay */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: 'repeating-linear-gradient(45deg, rgba(0,190,255,0.5), rgba(0,190,255,0.5) 4px, transparent 4px, transparent 11px)',
-            zIndex: 1,
-            opacity: r2HatchOpacity,
-          }} />
-
-          {/* Shine Sweep Overlay */}
-          {frame > 192 && frame < 1060 && (
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: `${shineLeft}%`,
-              width: '50%',
-              height: '100%',
-              background: 'linear-gradient(120deg, transparent, rgba(255,255,255,0.4), transparent)',
-              transform: 'skewX(-20deg)',
-              zIndex: 3,
-            }} />
-          )}
-
-          {/* Label */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff',
-            fontWeight: 700,
-            fontSize: 18,
-            letterSpacing: '1px',
-            textShadow: '0 0 10px rgba(0,60,120,0.9)',
-            opacity: r2Label.opacity,
-            transform: `translateY(${r2Label.y}px)`,
-            zIndex: 4,
-          }}>
-            Subscribe
+          {/* Right Panel */}
+          <div style={rectRightStyle}>
+            <span style={labelStyle}>CONTENT 02</span>
           </div>
         </div>
       </div>
@@ -635,5 +500,5 @@ const FuturisticCircuitEndScreen: React.FC = () => {
   );
 };
 
-export default FuturisticCircuitEndScreen;
+export default CyberNeonFlow;
 // END_OF_FILE
