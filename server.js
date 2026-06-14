@@ -4920,11 +4920,18 @@ app.get("/api/trends/raw", async (req, res) => {
   }
 });
 
-// GET /api/trends/events -> Ambil data event/hari penting internasional dari daysoftheyear.com
+// GET /api/trends/events -> Ambil data event/hari penting internasional dari daysoftheyear.com untuk bulan ini
 app.get("/api/trends/events", async (req, res) => {
-  console.log("📡 Mengambil data event internasional dari daysoftheyear.com...");
+  const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+  let month = req.query.month || months[new Date().getMonth()];
+  month = month.toLowerCase();
+  if (!months.includes(month)) {
+    month = months[new Date().getMonth()];
+  }
+  const url = `https://www.daysoftheyear.com/days/${month}/`;
+  console.log(`📡 Mengambil data event internasional untuk bulan ${month} dari ${url}...`);
+
   try {
-    const url = 'https://www.daysoftheyear.com/';
     const response = await axios.get(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -4976,7 +4983,14 @@ app.get("/api/trends/events", async (req, res) => {
       });
     });
 
-    console.log(`✅ Berhasil mengambil ${events.length} event internasional.`);
+    // Sort chronologically (1-31, month-long events at the bottom using day 99)
+    events.sort((a, b) => {
+      const dayA = parseInt((a.rawDate || '').match(/^\d+/)?.[0] || '99');
+      const dayB = parseInt((b.rawDate || '').match(/^\d+/)?.[0] || '99');
+      return dayA - dayB;
+    });
+
+    console.log(`✅ Berhasil mengambil ${events.length} event internasional untuk bulan ${month}.`);
     res.json(events);
   } catch (error) {
     console.error("❌ Gagal mengambil event internasional:", error.message);

@@ -4153,9 +4153,11 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 
     container.style.display = 'grid';
 
-    // Pre-fill prompt editor
+    // Pre-fill prompt editor (Filter out month-long events & limit to first 50 daily events to avoid token bloat)
     let eventsPromptText = "";
-    data.forEach(e => {
+    const dailyEvents = data.filter(e => e.rawDate && e.rawDate.match(/^\d+/));
+    const limitedEvents = dailyEvents.slice(0, 50);
+    limitedEvents.forEach(e => {
       eventsPromptText += `- ${e.title} (${e.date}): ${e.excerpt || 'Hari peringatan'}\n`;
     });
 
@@ -4357,7 +4359,9 @@ Saran Tags/Keywords: ${tags}`;
       return;
     }
     let eventsPromptText = "";
-    lastFetchedEventsData.forEach(e => {
+    const dailyEvents = lastFetchedEventsData.filter(e => e.rawDate && e.rawDate.match(/^\d+/));
+    const limitedEvents = dailyEvents.slice(0, 50);
+    limitedEvents.forEach(e => {
       eventsPromptText += `- ${e.title} (${e.date}): ${e.excerpt || 'Hari peringatan'}\n`;
     });
     const editor = document.getElementById('eventsPromptEditor');
