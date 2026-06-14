@@ -1227,42 +1227,16 @@
         <button class="btn-batch-4k" onclick="savePrompts()">💾 Simpan Prompt</button>
       </div>
     </div>
+
     <!-- ═══════════ API KEYS PANEL ═══════════ -->
     <div class="input-card" id="apiKeysPanel" style="display:none; border-color: var(--blue); background: rgba(59,130,246,0.03); margin-bottom: 20px;">
       <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
         🔑 Pengaturan API Keys AI & Layanan Pembantu
       </h3>
       <p style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">
-        Isi API Key untuk AI pribadi Anda dan RapidAPI Key (untuk email Gmailnator Syntx) di bawah ini. Kunci disimpan di file <code>.env</code> Anda.
+        Isi API Key untuk 9Router dan akun Syntx.ai di bawah ini. Kunci disimpan di file <code>.env</code> Anda.
       </p>
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px; flex-wrap:wrap;">
-        <!-- Groq Key -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Groq API Key</label>
-          <input type="password" class="input-text-field" id="keyGroq" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="gsk_..." />
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button class="btn-refresh" onclick="testApiKey('groq')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
-            <span id="status_groq" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
-          </div>
-        </div>
-        <!-- Gemini Key -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Gemini AI API Key</label>
-          <input type="password" class="input-text-field" id="keyGemini" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="AQ.Ab8RN..." />
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button class="btn-refresh" onclick="testApiKey('gemini')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
-            <span id="status_gemini" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
-          </div>
-        </div>
-        <!-- OpenRouter Key -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">OpenRouter API Key</label>
-          <input type="password" class="input-text-field" id="keyOpenrouter" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="sk-or-v1-..." />
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button class="btn-refresh" onclick="testApiKey('openrouter')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
-            <span id="status_openrouter" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
-          </div>
-        </div>
         <!-- 9Router Config -->
         <div>
           <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">9Router API Key</label>
@@ -1281,15 +1255,6 @@
           <input type="text" class="input-text-field" id="keyNinerouterModel" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="9router" />
         </div>
 
-        <!-- RapidAPI Key (Gmailnator) -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">RapidAPI Key (Gmailnator)</label>
-          <input type="password" class="input-text-field" id="keyRapidapi" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="Masukkan key RapidAPI..." />
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button class="btn-refresh" onclick="testApiKey('gmailnator')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
-            <span id="status_gmailnator" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
-          </div>
-        </div>
         <!-- Syntx Base Email -->
         <div>
           <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Syntx Base Email (Gmail)</label>
@@ -1315,11 +1280,7 @@
           <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub Repository</label>
           <input type="text" class="input-text-field" id="githubRepo" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="master-stock-generator" />
         </div>
-        <!-- OpenInbox API Key -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">OpenInbox.io API Key (untuk OTP otomatis)</label>
-          <input type="password" class="input-text-field" id="openInboxKey" style="margin-bottom:8px; border-color:rgba(16,185,129,0.3);" placeholder="tmp_xxxxx (beli di openinbox.io/premium)" />
-        </div>
+
         <!-- Syntx Account Pool Status -->
         <div style="grid-column: 1 / -1; margin-top: 10px; padding: 12px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 8px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -3119,7 +3080,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
             <textarea id="title_${item.id}" class="edit-field" placeholder="Belum ada judul video..." rows="2" style="width:100%; font-family:inherit; font-size:13px; line-height:1.4; padding:4px 6px;">${escHtml(item.judul||'')}</textarea>
             <button class="btn-copy" onclick="copyText(document.getElementById('title_${item.id}').value, this)">📋</button>
           </div>
-          ${item.seoAiUsed ? `<div style="margin-top:4px; font-size:9.5px; color:var(--green); display:flex; align-items:center; gap:3px;"><span>✅</span><span>Generate dengan AI: <strong>${item.seoAiUsed === 'auto' ? 'Auto-Fallback' : item.seoAiUsed === 'groq' ? 'Groq' : item.seoAiUsed === 'syntx-claude' ? 'Syntx Claude' : item.seoAiUsed === 'syntx-gemini' ? 'Syntx Gemini' : item.seoAiUsed === 'gemini' ? 'Gemini API' : item.seoAiUsed === 'openrouter' ? 'OpenRouter' : item.seoAiUsed}</strong></span></div>` : ''}
+          ${item.seoAiUsed ? `<div style="margin-top:4px; font-size:9.5px; color:var(--green); display:flex; align-items:center; gap:3px;"><span>✅</span><span>Generate dengan AI: <strong>${item.seoAiUsed === 'auto' ? 'Auto-Fallback' : item.seoAiUsed === '9router' ? '9Router' : item.seoAiUsed === 'syntx-claude' ? 'Syntx Claude' : item.seoAiUsed === 'syntx-gemini' ? 'Syntx Gemini' : item.seoAiUsed}</strong></span></div>` : ''}
         </td>
       </tr>
       
@@ -3176,6 +3137,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const aiSelect = `
       <select id="ai_model_${item.id}" class="select-input" style="padding: 4px 8px; font-size: 11px; height: auto; font-weight: 600; width: 100%; margin-bottom: 8px;" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}>
         <option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>🤖 Auto AI</option>
+        <option value="9router" ${item.aiModel === '9router' ? 'selected' : ''}>🤖 9Router (Combo)</option>
         <option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>🎯 Syntx Claude 4.6</option>
         <option value="syntx-chatgpt" ${item.aiModel === 'syntx-chatgpt' ? 'selected' : ''}>💬 Syntx ChatGPT 5.5</option>
         <option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>✨ Syntx Gemini 3.5</option>
@@ -3183,10 +3145,6 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         <option value="syntx-deepseek" ${item.aiModel === 'syntx-deepseek' ? 'selected' : ''}>🐉 Syntx DeepSeek R1</option>
         <option value="syntx-qwen" ${item.aiModel === 'syntx-qwen' ? 'selected' : ''}>🌀 Syntx Qwen 3.7</option>
         <option value="syntx-perplexity" ${item.aiModel === 'syntx-perplexity' ? 'selected' : ''}>🔍 Syntx Perplexity</option>
-        <option value="gemini" ${item.aiModel === 'gemini' ? 'selected' : ''}>🧠 Gemini API</option>
-        <option value="openrouter" ${item.aiModel === 'openrouter' ? 'selected' : ''}>🔀 OpenRouter</option>
-        <option value="9router" ${item.aiModel === '9router' ? 'selected' : ''}>🤖 9Router (Combo)</option>
-        <option value="groq" ${item.aiModel === 'groq' ? 'selected' : ''}>⚡ Groq</option>
       </select>
 
     `;
@@ -3490,10 +3448,9 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       loadApiKeys();
       loadSyntxStatus();
       // Reset statuses
-      document.getElementById('status_groq').innerHTML = '';
-      document.getElementById('status_gemini').innerHTML = '';
-      document.getElementById('status_openrouter').innerHTML = '';
-      document.getElementById('status_gmailnator').innerHTML = '';
+      if (document.getElementById('status_ninerouter')) {
+        document.getElementById('status_ninerouter').innerHTML = '';
+      }
       
       // Start polling every 10 seconds while open
       if (syntxPollInterval) clearInterval(syntxPollInterval);
@@ -3612,57 +3569,42 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     try {
       const resp = await fetch('/api/keys');
       const data = await resp.json();
-      document.getElementById('keyGroq').value = data.groqKey || '';
-      document.getElementById('keyGemini').value = data.geminiKey || '';
-      document.getElementById('keyOpenrouter').value = data.openrouterKey || '';
       document.getElementById('keyNinerouter').value = data.ninerouterKey || '';
       document.getElementById('keyNinerouterUrl').value = data.ninerouterUrl || '';
       document.getElementById('keyNinerouterModel').value = data.ninerouterModel || '';
-      document.getElementById('keyRapidapi').value = data.rapidApiKey || '';
       document.getElementById('syntxBaseEmail').value = data.syntxBaseEmail || '';
       document.getElementById('syntxEmailIndex').value = data.syntxEmailIndex || '0';
       document.getElementById('githubToken').value = data.githubToken || '';
       document.getElementById('githubUsername').value = data.githubUsername || '';
       document.getElementById('githubRepo').value = data.githubRepo || '';
-      document.getElementById('openInboxKey').value = data.openInboxKey || '';
     } catch (err) {
       showToast('❌ Gagal memuat API Keys: ' + err.message, 'error');
     }
   }
 
   async function saveApiKeys() {
-    const groqKey = document.getElementById('keyGroq').value;
-    const geminiKey = document.getElementById('keyGemini').value;
-    const openrouterKey = document.getElementById('keyOpenrouter').value;
     const ninerouterKey = document.getElementById('keyNinerouter').value;
     const ninerouterUrl = document.getElementById('keyNinerouterUrl').value;
     const ninerouterModel = document.getElementById('keyNinerouterModel').value;
-    const rapidApiKey = document.getElementById('keyRapidapi').value;
     const syntxBaseEmail = document.getElementById('syntxBaseEmail').value;
     const syntxEmailIndex = document.getElementById('syntxEmailIndex').value;
     const githubToken = document.getElementById('githubToken').value;
     const githubUsername = document.getElementById('githubUsername').value;
     const githubRepo = document.getElementById('githubRepo').value;
-    const openInboxKey = document.getElementById('openInboxKey').value;
 
     try {
       const resp = await fetch('/api/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          groqKey,
-          geminiKey,
-          openrouterKey,
           ninerouterKey,
           ninerouterUrl,
           ninerouterModel,
-          rapidApiKey,
           syntxBaseEmail,
           syntxEmailIndex,
           githubToken,
           githubUsername,
-          githubRepo,
-          openInboxKey
+          githubRepo
         })
       });
       const data = await resp.json();
@@ -3675,31 +3617,25 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   }
 
   async function testApiKey(provider) {
-    const inputId = provider === 'groq' ? 'keyGroq' : 
-                    provider === 'gemini' ? 'keyGemini' : 
-                    provider === 'gmailnator' ? 'keyRapidapi' : 
-                    provider === 'ninerouter' ? 'keyNinerouter' : 
-                    'keyOpenrouter';
-    const statusId = `status_${provider}`;
+    if (provider !== 'ninerouter') return;
+    const inputId = 'keyNinerouter';
+    const statusId = 'status_ninerouter';
     let apiKey = document.getElementById(inputId).value;
     const statusEl = document.getElementById(statusId);
 
-    if (!apiKey && provider !== 'ninerouter') {
-      statusEl.innerHTML = '<span style="color:var(--amber);">⚠️ Kosong</span>';
-      return;
-    }
-    if (!apiKey && provider === 'ninerouter') {
+    if (!apiKey) {
       apiKey = "TIDAK_ADA";
     }
 
     statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Mengecek...</span>';
 
     try {
-      const requestPayload = { provider, apiKey };
-      if (provider === 'ninerouter') {
-        requestPayload.apiBaseUrl = document.getElementById('keyNinerouterUrl').value;
-        requestPayload.apiModel = document.getElementById('keyNinerouterModel').value;
-      }
+      const requestPayload = { 
+        provider, 
+        apiKey,
+        apiBaseUrl: document.getElementById('keyNinerouterUrl').value,
+        apiModel: document.getElementById('keyNinerouterModel').value
+      };
       const resp = await fetch('/api/keys/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3710,7 +3646,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         statusEl.innerHTML = '<span style="color:var(--green);">✅ Valid</span>';
       } else {
         statusEl.innerHTML = `<span style="color:var(--red);" title="${data.error || 'Gagal'}">❌ Invalid</span>`;
-        showToast(`❌ API Key ${provider} tidak valid: ${data.error || 'Gagal'}`, 'error');
+        showToast(`❌ API Key 9Router tidak valid: ${data.error || 'Gagal'}`, 'error');
       }
     } catch(err) {
       statusEl.innerHTML = `<span style="color:var(--red);" title="${err.message}">❌ Error</span>`;
