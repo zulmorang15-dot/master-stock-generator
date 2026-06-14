@@ -98,10 +98,13 @@ jobs:
             --log=verbose
 
       - name: Embed Metadata via FFmpeg
+        env:
+          JUDUL: ${{ github.event.inputs.judul }}
+          KEYWORDS: ${{ github.event.inputs.keywords }}
         run: |
           echo "=== Embedding metadata into output video ==="
           FILENAME="${{ github.event.inputs.composition_id }}-preview.mp4"
-          ffmpeg -y -i out/$FILENAME -metadata title="${{ github.event.inputs.judul }}" -metadata description="${{ github.event.inputs.judul }}" -metadata keywords="${{ github.event.inputs.keywords }}" -an -codec copy out/temp_$FILENAME
+          ffmpeg -y -i out/$FILENAME -metadata title="$JUDUL" -metadata description="$JUDUL" -metadata keywords="$KEYWORDS" -an -codec copy out/temp_$FILENAME
           mv out/temp_$FILENAME out/$FILENAME
 
       - name: Install ExifTool
@@ -110,17 +113,20 @@ jobs:
           sudo apt-get install -y exiftool
 
       - name: Embed XMP/IPTC/QuickTime Metadata via ExifTool
+        env:
+          JUDUL: ${{ github.event.inputs.judul }}
+          KEYWORDS: ${{ github.event.inputs.keywords }}
         run: |
           echo "=== Embedding stock metadata via ExifTool ==="
           FILENAME="${{ github.event.inputs.composition_id }}-preview.mp4"
           # Normalize keywords format to guarantee consistent spacing and split them cleanly into lists
-          KEYWORDS_NORMALIZED=$(echo "${{ github.event.inputs.keywords }}" | sed 's/, */, /g')
+          KEYWORDS_NORMALIZED=$(echo "$KEYWORDS" | sed 's/, */, /g')
           exiftool -overwrite_original -sep ", " \
-            -Title="${{ github.event.inputs.judul }}" \
-            -Description="${{ github.event.inputs.judul }}" \
+            -Title="$JUDUL" \
+            -Description="$JUDUL" \
             -Keywords="$KEYWORDS_NORMALIZED" \
-            -XMP-dc:Title="${{ github.event.inputs.judul }}" \
-            -XMP-dc:Description="${{ github.event.inputs.judul }}" \
+            -XMP-dc:Title="$JUDUL" \
+            -XMP-dc:Description="$JUDUL" \
             -XMP-dc:Subject="$KEYWORDS_NORMALIZED" \
             out/$FILENAME
 
