@@ -4952,6 +4952,11 @@ app.get("/api/trends/events", async (req, res) => {
       }
       
       let img = card.find('img').first().attr('src') || card.find('img').first().attr('data-src') || card.find('img').first().attr('data-lazy-src') || '';
+      if (img && img.startsWith('/')) {
+        img = 'https://www.daysoftheyear.com' + img;
+      } else if (img && img.startsWith('//')) {
+        img = 'https:' + img;
+      }
       
       let cleanDate = dateText;
       const match = dateText.match(/^(\d{1,2})([A-Z]{3})([A-Z]{3,4})$/i);
