@@ -2476,19 +2476,35 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
 
     const tsxValidator = (text) => {
       if (!text || !text.trim()) return false;
-      const trimmed = text.trim();
-      if (!trimmed.includes('export default')) return false;
+      
+      // Ekstrak blok kode jika dibungkus markdown backticks
+      let code = text.trim();
+      if (code.includes("```typescript")) {
+        code = code.split("```typescript")[1].split("```")[0].trim();
+      } else if (code.includes("```tsx")) {
+        code = code.split("```tsx")[1].split("```")[0].trim();
+      } else if (code.includes("```")) {
+        const parts = code.split("```");
+        if (parts.length >= 3) {
+          code = parts[1].trim();
+        }
+      }
+
+      if (!code.includes('export default')) return false;
+
+      // Hitung balance kurung kurawal {} untuk mendeteksi kode yang terpotong (truncated)
       let curly = 0;
-      let angle = 0;
-      for (const ch of trimmed) {
+      for (const ch of code) {
         if (ch === '{') curly++;
         else if (ch === '}') curly--;
-        else if (ch === '<') angle++;
-        else if (ch === '>') angle--;
       }
-      if (Math.abs(curly) > 2 || Math.abs(angle) > 5) return false;
+      
+      // Kita abaikan pembanding angle brackets (< dan >) karena sering dipakai
+      // sebagai operator perbandingan matematik (i < 10) atau generics dalam TypeScript
+      if (Math.abs(curly) > 5) return false;
       return true;
     };
+
 
     while (tsxAttempts < MAX_TSX_ATTEMPTS) {
       if (signal.aborted) throw new Error("Cancelled by user");
