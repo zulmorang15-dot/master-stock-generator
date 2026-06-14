@@ -1,179 +1,333 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const PARTICLE_COUNT = 180;
+// Deterministic Sparkles properties pre-calculated outside render to avoid Math.random()
+const SPARKLES = [
+  { id: 1, top: '15%', left: '22%', delay: 12, duration: 60 },
+  { id: 2, top: '45%', left: '8%', delay: 45, duration: 55 },
+  { id: 3, top: '78%', left: '33%', delay: 5, duration: 62 },
+  { id: 4, top: '23%', left: '67%', delay: 28, duration: 50 },
+  { id: 5, top: '60%', left: '85%', delay: 18, duration: 58 },
+  { id: 6, top: '88%', left: '12%', delay: 33, duration: 48 },
+  { id: 7, top: '10%', left: '50%', delay: 50, duration: 65 },
+  { id: 8, top: '35%', left: '92%', delay: 8, duration: 52 },
+  { id: 9, top: '52%', left: '48%', delay: 22, duration: 60 },
+  { id: 10, top: '82%', left: '70%', delay: 40, duration: 54 },
+  { id: 11, top: '28%', left: '15%', delay: 15, duration: 56 },
+  { id: 12, top: '68%', left: '25%', delay: 30, duration: 64 },
+  { id: 13, top: '12%', left: '80%', delay: 2, duration: 50 },
+  { id: 14, top: '90%', left: '55%', delay: 25, duration: 58 },
+  { id: 15, top: '40%', left: '38%', delay: 37, duration: 62 },
+  { id: 16, top: '74%', left: '95%', delay: 11, duration: 46 },
+  { id: 17, top: '5%', left: '30%', delay: 48, duration: 55 },
+  { id: 18, top: '58%', left: '3%', delay: 20, duration: 50 },
+  { id: 19, top: '32%', left: '58%', delay: 35, duration: 60 },
+  { id: 20, top: '85%', left: '42%', delay: 14, duration: 66 },
+  { id: 21, top: '20%', left: '45%', delay: 29, duration: 52 },
+  { id: 22, top: '63%', left: '77%', delay: 42, duration: 57 },
+  { id: 23, top: '95%', left: '88%', delay: 7, duration: 61 },
+  { id: 24, top: '48%', left: '62%', delay: 53, duration: 49 },
+  { id: 25, top: '18%', left: '97%', delay: 1, duration: 63 }
+];
 
-// Precompute deterministic particle parameters outside the component
-const STATIC_PARTICLES = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
-  const r1 = Math.sin(i * 12.9898) * 43758.5453;
-  const rand1 = r1 - Math.floor(r1);
-  const r2 = Math.cos(i * 78.233) * 43758.5453;
-  const rand2 = r2 - Math.floor(r2);
-  const r3 = Math.sin(i * 45.123) * 43758.5453;
-  const rand3 = r3 - Math.floor(r3);
-  const r4 = Math.cos(i * 92.456) * 43758.5453;
-  const rand4 = r4 - Math.floor(r4);
+const bgWords = "SUBSCRIBE TO MY CHANNEL! ";
+const repeatedBgLine = bgWords.repeat(8);
+const tapeText = "SUBSCRIBE TO MY CHANNEL! ";
 
-  // k must be negative to move upwards. Limit choices to divisors/multipliers for perfect looping over 300 frames
-  // L_Y is 1200. speedY = k * (1200 / 300) = k * 4. So speedY is an integer multiple of 4, wrapping flawlessly.
-  const k = -((i % 4) + 1); // -1, -2, -3, -4
-  // j represents horizontal motion. L_X is 2000. speedX = j * (2000 / 300) = j * 6.666... Flawless wrapping around 2000.
-  const j = (i % 3) - 1; // -1, 0, 1
-
-  return {
-    startX: rand1 * 2000,
-    startY: rand2 * 1200,
-    size: rand3 * 3.0 + 0.5, // Particle size: 0.5 to 3.5
-    k,
-    j,
-    opacity: rand4 * 0.8 + 0.2, // Base opacity: 0.2 to 1
-    hue: rand2 * 15 + 30, // Golden hues: 30 to 45
-  };
-});
-
-export const GoldenEndScreen: React.FC = () => {
+export const DiagonalTapeOutro: React.FC = () => {
   const { width, height } = useVideoConfig();
   const frame = useCurrentFrame();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Handle high-fidelity layout scaling dynamically
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  // 1. Scene Background Shift: Loop 20s (600 frames) symmetrically
+  const bgPos = interpolate(
+    frame,
+    [0, 300, 600],
+    [0, 100, 0],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+  const backgroundPosition = `${bgPos}% ${bgPos}%`;
 
-    // Background color
-    ctx.fillStyle = '#0a0500';
-    ctx.fillRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+  // 2. Samar Background Text Opacity & Translation Loop
+  const bgTextOpacity = interpolate(
+    frame % 150,
+    [0, 75, 150],
+    [0.10, 0.18, 0.10],
+    { easing: Easing.inOut(Easing.quad) }
+  );
 
-    // Dynamic top-center radial light glow
-    const grad = ctx.createRadialGradient(
-      ORIGINAL_WIDTH * 0.55, ORIGINAL_HEIGHT * 0.1, 0,
-      ORIGINAL_WIDTH * 0.55, ORIGINAL_HEIGHT * 0.1, ORIGINAL_WIDTH * 0.6
-    );
-    grad.addColorStop(0, 'rgba(255,170,40,0.35)');
-    grad.addColorStop(0.3, 'rgba(180,90,10,0.15)');
-    grad.addColorStop(1, 'rgba(10,5,0,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+  const bgTextScroll = interpolate(
+    frame,
+    [0, 300, 600],
+    [0, -200, 0],
+    { easing: Easing.inOut(Easing.quad) }
+  );
 
-    ctx.globalCompositeOperation = 'lighter';
+  // 3. Diagonal Tapes Sliding Transitions
+  const getTapeTransition = (frame: number, delay: number) => {
+    const entranceStart = delay;
+    const entranceEnd = delay + 25;
+    const exitStart = 575 - (21 - delay);
+    const exitEnd = 600 - (21 - delay);
 
-    STATIC_PARTICLES.forEach((p, i) => {
-      // Periodic X position loop (range: 2000px, centering shift offset -40px)
-      const L_X = 2000;
-      const speedX = p.j * (L_X / 300);
-      let x = (p.startX + speedX * frame) % L_X;
-      if (x < 0) x += L_X;
-      x -= 40;
+    let opacity = 0;
+    let translateX = -60;
 
-      // Periodic Y position loop (range: 1200px, centering shift offset -60px)
-      const L_Y = 1200;
-      const speedY = p.k * (L_Y / 300);
-      let y = (p.startY + speedY * frame) % L_Y;
-      if (y < 0) y += L_Y;
-      y -= 60;
+    if (frame >= entranceStart && frame < exitStart) {
+      opacity = interpolate(frame, [entranceStart, entranceEnd], [0, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+        easing: Easing.out(Easing.quad),
+      });
+      translateX = interpolate(frame, [entranceStart, entranceEnd], [-60, 0], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+        easing: Easing.out(Easing.quad),
+      });
+    } else if (frame >= exitStart) {
+      opacity = interpolate(frame, [exitStart, exitEnd], [1, 0], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+        easing: Easing.in(Easing.quad),
+      });
+      translateX = interpolate(frame, [exitStart, exitEnd], [0, -60], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+        easing: Easing.in(Easing.quad),
+      });
+    }
 
-      // Deterministic periodic flicker
-      const cycleCount = (i % 15) + 5;
-      const flickerOpacity = p.opacity + Math.sin((frame / 300) * 2 * Math.PI * cycleCount) * 0.15;
-      const finalOpacity = Math.max(0.1, Math.min(1.0, flickerOpacity));
+    return { opacity, transform: `translateX(${translateX}px)` };
+  };
 
-      // Outer particle glow
-      const glowSize = p.size * 4;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, glowSize);
-      g.addColorStop(0, `hsla(${p.hue}, 100%, 65%, ${finalOpacity})`);
-      g.addColorStop(1, `hsla(${p.hue}, 100%, 50%, 0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(x, y, glowSize, 0, Math.PI * 2);
-      ctx.fill();
+  // 4. Diagonal Tapes Scroll Movements (Loop seamlessly every 300 frames)
+  const scrollPercent = interpolate(frame % 300, [0, 300], [0, -50]);
+  const scrollPercentRev = interpolate(frame % 300, [0, 300], [-50, 0]);
 
-      // Inner solid particle core
-      ctx.fillStyle = `hsla(${p.hue + 10}, 100%, 80%, ${finalOpacity})`;
-      ctx.beginPath();
-      ctx.arc(x, y, p.size, 0, Math.PI * 2);
-      ctx.fill();
+  // 5. Circle Life, Float and Glow animations (Seamlessly Symmetrical)
+  const circleLifeProgress = () => {
+    if (frame < 45) {
+      return interpolate(frame, [15, 45], [0, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+        easing: Easing.bezier(0.34, 1.56, 0.64, 1),
+      });
+    } else if (frame > 555) {
+      return interpolate(frame, [555, 585], [1, 0], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+        easing: Easing.in(Easing.quad),
+      });
+    }
+    return 1;
+  };
+
+  const circleScale = circleLifeProgress();
+
+  const floatFrame = frame % 150;
+  const circleTranslateY = interpolate(floatFrame, [0, 75, 150], [0, -14, 0], {
+    easing: Easing.inOut(Easing.quad),
+  });
+  const circleRotate = interpolate(floatFrame, [0, 75, 150], [0, 8, 0], {
+    easing: Easing.inOut(Easing.quad),
+  });
+
+  const glowFrame = frame % 75;
+  const glowRadius = interpolate(glowFrame, [0, 37.5, 75], [25, 55, 25], {
+    easing: Easing.inOut(Easing.quad),
+  });
+
+  // 6. Video Box Life, Float, Gradient and Bracket Blinks
+  let boxLife = 0;
+  let boxTranslateX = 80;
+  let boxRotate = 6;
+  let boxScale = 0.85;
+
+  if (frame >= 20 && frame <= 545) {
+    boxLife = interpolate(frame, [20, 55], [0, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.bezier(0.34, 1.56, 0.64, 1),
     });
+    boxTranslateX = interpolate(frame, [20, 55], [80, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.bezier(0.34, 1.56, 0.64, 1),
+    });
+    boxRotate = interpolate(frame, [20, 55], [6, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.bezier(0.34, 1.56, 0.64, 1),
+    });
+    boxScale = interpolate(frame, [20, 55], [0.85, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.bezier(0.34, 1.56, 0.64, 1),
+    });
+  } else if (frame > 545) {
+    boxLife = interpolate(frame, [545, 580], [1, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.in(Easing.quad),
+    });
+    boxTranslateX = interpolate(frame, [545, 580], [0, 80], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.in(Easing.quad),
+    });
+    boxRotate = interpolate(frame, [545, 580], [0, 6], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.in(Easing.quad),
+    });
+    boxScale = interpolate(frame, [545, 580], [1, 0.85], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.in(Easing.quad),
+    });
+  }
 
-    ctx.globalCompositeOperation = 'source-over';
-  }, [frame]);
-
-  // ===== Dynamic Keyframe Conversions (Strictly driven by frame) =====
-
-  // 1. glowPulse Animation (2.5s cycle = 75 frames. Perfect loop within 300 frames)
-  const glowLocalFrame = frame % 75;
-
-  const glowRadius = interpolate(glowLocalFrame, [0, 37.5, 75], [25, 50, 25], {
+  const boxFloatFrame = frame % 180;
+  const boxFloatY = interpolate(boxFloatFrame, [0, 90, 180], [0, -12, 0], {
+    easing: Easing.inOut(Easing.quad),
+  });
+  const boxFloatRot = interpolate(boxFloatFrame, [0, 90, 180], [0, -2, 0], {
     easing: Easing.inOut(Easing.quad),
   });
 
-  const innerRadius = interpolate(glowLocalFrame, [0, 37.5, 75], [20, 35, 20], {
+  const gradFrame = frame % 150;
+  const gradX = interpolate(gradFrame, [0, 75, 150], [0, 100, 0], {
     easing: Easing.inOut(Easing.quad),
   });
 
-  const borderG = interpolate(glowLocalFrame, [0, 37.5, 75], [178, 215, 178], {
+  const blinkFrame = frame % 60;
+  const bracketOpacity1 = interpolate(blinkFrame, [0, 30, 60], [1, 0.4, 1], {
     easing: Easing.inOut(Easing.quad),
   });
-  const borderB = interpolate(glowLocalFrame, [0, 37.5, 75], [46, 110, 46], {
+  const bracketOffset1 = interpolate(blinkFrame, [0, 30, 60], [0, -3, 0], {
     easing: Easing.inOut(Easing.quad),
   });
-  const borderColor = `rgb(255, ${Math.round(borderG)}, ${Math.round(borderB)})`;
 
-  const glowG = interpolate(glowLocalFrame, [0, 37.5, 75], [149, 203, 149], {
+  const blinkFrameDelayed = (frame + 24) % 60;
+  const bracketOpacity2 = interpolate(blinkFrameDelayed, [0, 30, 60], [1, 0.4, 1], {
     easing: Easing.inOut(Easing.quad),
   });
-  const glowB = interpolate(glowLocalFrame, [0, 37.5, 75], [0, 82, 0], {
+  const bracketOffset2 = interpolate(blinkFrameDelayed, [0, 30, 60], [0, -3, 0], {
     easing: Easing.inOut(Easing.quad),
   });
-  const outerColor = `rgb(255, ${Math.round(glowG)}, ${Math.round(glowB)})`;
 
-  const innerG = interpolate(glowLocalFrame, [0, 37.5, 75], [149, 180, 149], {
+  // 7. Check Label Pop & Swing Swing
+  const swingFrame = frame % 120;
+  const swingRot = interpolate(swingFrame, [0, 30, 60, 90, 120], [0, 3, 0, -3, 0], {
     easing: Easing.inOut(Easing.quad),
   });
-  const innerB = interpolate(glowLocalFrame, [0, 37.5, 75], [0, 46, 0], {
+  const swingScale = interpolate(swingFrame, [0, 30, 60, 90, 120], [1, 1.05, 1, 1.05, 1], {
     easing: Easing.inOut(Easing.quad),
   });
-  const innerA = interpolate(glowLocalFrame, [0, 37.5, 75], [0.4, 0.5, 0.4], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const innerColor = `rgba(255, ${Math.round(innerG)}, ${Math.round(innerB)}, ${innerA})`;
 
-  // 2. rotateRing Animation (linear 150 frames cycle = 5s. Perfect loop in 10s)
-  const rotateVal = interpolate(frame % 150, [0, 150], [0, 360]);
+  let labelLifeScale = 0;
+  let labelLifeRot = -15;
+  let labelOpacity = 0;
 
-  // 3. btnPulse Animation (2s cycle = 60 frames. Perfect loop within 300 frames)
-  const btnLocalFrame = frame % 60;
-  const btnScale = interpolate(btnLocalFrame, [0, 30, 60], [1, 1.06, 1], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const btnGlowRad = interpolate(btnLocalFrame, [0, 30, 60], [30, 45, 30], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const btnG = interpolate(btnLocalFrame, [0, 30, 60], [149, 180, 149], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const btnB = interpolate(btnLocalFrame, [0, 30, 60], [0, 46, 0], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const btnA = interpolate(btnLocalFrame, [0, 30, 60], [0.7, 1.0, 0.7], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const btnShadowColor = `rgba(255, ${Math.round(btnG)}, ${Math.round(btnB)}, ${btnA})`;
+  if (frame >= 36 && frame <= 540) {
+    labelOpacity = interpolate(frame, [36, 54], [0, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    });
+    labelLifeScale = interpolate(frame, [36, 54], [0, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.bezier(0.34, 1.56, 0.64, 1),
+    });
+    labelLifeRot = interpolate(frame, [36, 54], [-15, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.bezier(0.34, 1.56, 0.64, 1),
+    });
+  } else if (frame > 540) {
+    labelOpacity = interpolate(frame, [540, 558], [1, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    });
+    labelLifeScale = interpolate(frame, [540, 558], [1, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.in(Easing.quad),
+    });
+    labelLifeRot = interpolate(frame, [540, 558], [0, -15], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.in(Easing.quad),
+    });
+  }
 
-  // 4. video-frame glow parameters
-  const videoOuterRadius = interpolate(glowLocalFrame, [0, 37.5, 75], [30, 45, 30], {
+  // 8. Follow Label Pop & Bounce
+  const bounceFrame = frame % 60;
+  const bounceY = interpolate(bounceFrame, [0, 18, 30, 39, 60], [0, -12, 0, -5, 0], {
     easing: Easing.inOut(Easing.quad),
   });
-  const videoInnerRadius = interpolate(glowLocalFrame, [0, 37.5, 75], [25, 35, 25], {
+  const bounceScale = interpolate(bounceFrame, [0, 18, 30, 39, 60], [1, 1.08, 1, 1.03, 1], {
     easing: Easing.inOut(Easing.quad),
   });
+
+  let followLifeScale = 0;
+  let followLifeY = 40;
+  let followOpacity = 0;
+
+  if (frame >= 42 && frame <= 535) {
+    followOpacity = interpolate(frame, [42, 63], [0, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    });
+    followLifeScale = interpolate(frame, [42, 63], [0.7, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.bezier(0.34, 1.56, 0.64, 1),
+    });
+    followLifeY = interpolate(frame, [42, 63], [40, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.bezier(0.34, 1.56, 0.64, 1),
+    });
+  } else if (frame > 535) {
+    followOpacity = interpolate(frame, [535, 556], [1, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    });
+    followLifeScale = interpolate(frame, [535, 556], [1, 0.7], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.in(Easing.quad),
+    });
+    followLifeY = interpolate(frame, [535, 556], [0, 40], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+      easing: Easing.in(Easing.quad),
+    });
+  }
+
+  // Tape JSX Elements creation
+  const renderTapeSpans = () => {
+    return Array.from({ length: 12 }).map((_, i) => (
+      <span
+        key={i}
+        style={{
+          fontSize: '65.28px',
+          fontWeight: 900,
+          color: '#2a1f3a',
+          letterSpacing: '1px',
+          padding: '0 23.04px',
+          WebkitTextStroke: '0.5px rgba(0,0,0,0.2)',
+        }}
+      >
+        {tapeText}
+      </span>
+    ));
+  };
 
   return (
     <div
@@ -186,94 +340,340 @@ export const GoldenEndScreen: React.FC = () => {
         transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
         overflow: 'hidden',
-        backgroundColor: '#0a0500',
-        fontFamily: "'Arial', sans-serif",
+        fontFamily: "'Arial Black', 'Arial', sans-serif",
+        backgroundColor: '#000',
       }}
     >
-      <canvas
-        ref={canvasRef}
-        width={ORIGINAL_WIDTH}
-        height={ORIGINAL_HEIGHT}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          zIndex: 0,
-        }}
-      />
-
+      {/* Background with repeating gradient and shift */}
       <div
         style={{
           position: 'absolute',
-          top: 0,
-          left: 0,
           width: '100%',
           height: '100%',
-          zIndex: 2,
-          pointerEvents: 'none',
+          background: 'repeating-linear-gradient(135deg, #4a3a5e 0px, #4a3a5e 38px, #463658 38px, #463658 76px)',
+          backgroundSize: '200% 200%',
+          backgroundPosition: backgroundPosition,
         }}
       >
-        {/* Subscribe Ring (Circle Frame) */}
+        {/* Background Text samar */}
         <div
           style={{
             position: 'absolute',
-            left: '8%',
-            top: '38%',
-            width: '130px',
-            height: '130px',
-            borderRadius: '50%',
-            border: `3px solid ${borderColor}`,
-            boxShadow: `0 0 ${glowRadius}px ${outerColor}, inset 0 0 ${innerRadius}px ${innerColor}`,
-            transform: `rotate(${rotateVal}deg)`,
-            transformOrigin: 'center center',
-          }}
-        />
-
-        {/* Subscribe Button */}
-        <div
-          style={{
-            position: 'absolute',
-            left: '7%',
-            top: '70%',
-            background: 'linear-gradient(90deg, #ff7b00, #ffb22e)',
-            color: '#fff',
-            padding: '12px 30px',
-            borderRadius: '30px',
-            fontSize: '18px',
-            fontWeight: 'bold',
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            boxShadow: `0 0 ${btnGlowRad}px ${btnShadowColor}`,
-            transform: `scale(${btnScale})`,
-            transformOrigin: 'center center',
+            inset: '-20%',
+            transform: `rotate(-45deg) translateX(${bgTextScroll}px)`,
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: 'column',
             justifyContent: 'center',
+            pointerEvents: 'none',
+            opacity: bgTextOpacity,
           }}
         >
-          Subscribe
+          {Array.from({ length: 25 }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                whiteSpace: 'nowrap',
+                fontSize: '42.24px',
+                fontWeight: 900,
+                color: '#1a1228',
+                letterSpacing: '2px',
+                lineHeight: 2.6,
+              }}
+            >
+              {repeatedBgLine}
+            </div>
+          ))}
         </div>
 
-        {/* Right Video Frame */}
+        {/* Diagonal Yellow Tapes */}
         <div
           style={{
             position: 'absolute',
-            right: '8%',
-            top: '30%',
-            width: '42%',
-            height: '45%',
-            border: `3px solid ${borderColor}`,
-            borderRadius: '6px',
-            boxShadow: `0 0 ${videoOuterRadius}px ${outerColor}, inset 0 0 ${videoInnerRadius}px ${innerColor}`,
-            transformOrigin: 'center center',
+            inset: '-30%',
+            transform: 'rotate(-30deg)',
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Tape 1 (t1) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '8%',
+              left: '-20%',
+              width: '140%',
+              height: '105.6px',
+              backgroundColor: '#f2f021',
+              display: 'flex',
+              alignItems: 'center',
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+              ...getTapeTransition(frame, 3),
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                whiteSpace: 'nowrap',
+                transform: `translateX(${scrollPercent}%)`,
+              }}
+            >
+              {renderTapeSpans()}
+            </div>
+          </div>
+
+          {/* Tape 2 (t2 reverse) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '26%',
+              left: '-20%',
+              width: '140%',
+              height: '105.6px',
+              backgroundColor: '#f2f021',
+              display: 'flex',
+              alignItems: 'center',
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+              ...getTapeTransition(frame, 8),
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                whiteSpace: 'nowrap',
+                transform: `translateX(${scrollPercentRev}%)`,
+              }}
+            >
+              {renderTapeSpans()}
+            </div>
+          </div>
+
+          {/* Tape 3 (t3) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '44%',
+              left: '-20%',
+              width: '140%',
+              height: '105.6px',
+              backgroundColor: '#f2f021',
+              display: 'flex',
+              alignItems: 'center',
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+              ...getTapeTransition(frame, 12),
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                whiteSpace: 'nowrap',
+                transform: `translateX(${scrollPercent}%)`,
+              }}
+            >
+              {renderTapeSpans()}
+            </div>
+          </div>
+
+          {/* Tape 4 (t4 reverse) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '62%',
+              left: '-20%',
+              width: '140%',
+              height: '105.6px',
+              backgroundColor: '#f2f021',
+              display: 'flex',
+              alignItems: 'center',
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+              ...getTapeTransition(frame, 17),
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                whiteSpace: 'nowrap',
+                transform: `translateX(${scrollPercentRev}%)`,
+              }}
+            >
+              {renderTapeSpans()}
+            </div>
+          </div>
+
+          {/* Tape 5 (t5) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '80%',
+              left: '-20%',
+              width: '140%',
+              height: '105.6px',
+              backgroundColor: '#f2f021',
+              display: 'flex',
+              alignItems: 'center',
+              overflow: 'hidden',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+              ...getTapeTransition(frame, 21),
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                whiteSpace: 'nowrap',
+                transform: `translateX(${scrollPercent}%)`,
+              }}
+            >
+              {renderTapeSpans()}
+            </div>
+          </div>
+        </div>
+
+        {/* Pink Circle */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '19%',
+            width: '403px',
+            height: '403px',
+            background: 'radial-gradient(circle at 35% 30%, #ff66e0, #ff35d8 70%, #e01ec0)',
+            borderRadius: '50%',
+            boxShadow: `0 0 ${glowRadius}px rgba(255,53,216,0.6), 0 10px 30px rgba(0,0,0,0.4)`,
+            transform: `translate(-50%, -50%) scale(${circleScale}) translateY(${circleTranslateY}px) rotate(${circleRotate}deg)`,
           }}
         />
+
+        {/* Pink Video Box */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '324px',
+            right: '134.4px',
+            width: '691.2px',
+            height: '453.6px',
+            background: 'linear-gradient(135deg, #ff66e0, #ff35d8 60%, #e01ec0)',
+            backgroundSize: '200% 200%',
+            backgroundPosition: `${gradX}% 50%`,
+            boxShadow: '0 0 35px rgba(255,53,216,0.5), 0 12px 35px rgba(0,0,0,0.45)',
+            transformOrigin: 'center',
+            opacity: boxLife,
+            transform: `translate(${boxTranslateX}px, ${boxFloatY}px) rotate(${boxRotate + boxFloatRot}deg) scale(${boxScale})`,
+          }}
+        >
+          {/* Bracket Before (Top Left) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '-10px',
+              left: '-10px',
+              width: '30px',
+              height: '30px',
+              borderWidth: '3px 0 0 3px',
+              borderStyle: 'solid',
+              borderColor: '#ff35d8',
+              opacity: bracketOpacity1,
+              transform: `translate(${bracketOffset1}px, ${bracketOffset1}px)`,
+            }}
+          />
+          {/* Bracket After (Bottom Right) */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '-10px',
+              right: '-10px',
+              width: '30px',
+              height: '30px',
+              borderWidth: '0 3px 3px 0',
+              borderStyle: 'solid',
+              borderColor: '#ff35d8',
+              opacity: bracketOpacity2,
+              transform: `translate(${bracketOffset2}px, ${bracketOffset2}px)`,
+            }}
+          />
+        </div>
+
+        {/* Check Label */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '49%',
+            left: '43%',
+            backgroundColor: '#ff35d8',
+            color: '#fff',
+            fontSize: '19.2px',
+            fontWeight: 900,
+            textAlign: 'center',
+            padding: '9.6px 21.12px',
+            borderRadius: '6px',
+            lineHeight: 1.3,
+            letterSpacing: '1px',
+            boxShadow: '0 0 18px rgba(255,53,216,0.6)',
+            zIndex: 5,
+            opacity: labelOpacity,
+            transform: `translate(-50%, -50%) rotate(${labelLifeRot + swingRot}deg) scale(${labelLifeScale * swingScale})`,
+          }}
+        >
+          CHECK LATEST<br />VIDEO!
+        </div>
+
+        {/* Follow Label */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '97.2px',
+            right: '134.4px',
+            backgroundColor: '#ff35d8',
+            color: '#fff',
+            fontSize: '28.8px',
+            fontWeight: 900,
+            padding: '9.6px 24.96px',
+            borderRadius: '8px',
+            letterSpacing: '1px',
+            boxShadow: '0 0 20px rgba(255,53,216,0.7)',
+            zIndex: 5,
+            opacity: followOpacity,
+            transform: `translateY(${followLifeY + bounceY}px) scale(${followLifeScale * bounceScale})`,
+          }}
+        >
+          FOLLOW ME!
+        </div>
+
+        {/* Sparkling Particles */}
+        {SPARKLES.map((s) => {
+          const sparkleFrame = (frame + s.delay) % s.duration;
+          const halfDuration = s.duration / 2;
+          const sOpacity = interpolate(sparkleFrame, [0, halfDuration, s.duration], [0, 1, 0], {
+            easing: Easing.inOut(Easing.quad),
+          });
+          const sScale = interpolate(sparkleFrame, [0, halfDuration, s.duration], [0, 1.4, 0], {
+            easing: Easing.inOut(Easing.quad),
+          });
+
+          return (
+            <div
+              key={s.id}
+              style={{
+                position: 'absolute',
+                top: s.top,
+                left: s.left,
+                width: '8px',
+                height: '8px',
+                backgroundColor: '#fff',
+                borderRadius: '50%',
+                pointerEvents: 'none',
+                boxShadow: '0 0 8px #fff, 0 0 16px #ff66e0',
+                opacity: sOpacity,
+                transform: `scale(${sScale})`,
+              }}
+            />
+          );
+        })}
       </div>
     </div>
   );
 };
 
-export default GoldenEndScreen;
+export default DiagonalTapeOutro;
 // END_OF_FILE
