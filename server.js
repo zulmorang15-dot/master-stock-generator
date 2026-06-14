@@ -327,12 +327,40 @@ async function callAIWithFallback(prompt, options = {}) {
       }
       throw new Error("Syntx Perplexity returned invalid response");
     } else if (preferModel === 'tsx-default') {
-      log("Memulai pencarian model untuk konversi TSX (9Router -> Gemini Syntx -> Claude Syntx)...", "info");
+      log("Memulai pencarian model untuk konversi TSX (Gemini Syntx -> Claude Syntx -> 9Router)...", "info");
       
-      // 1. Coba 9Router
+      // 1. Coba Syntx Gemini
+      try {
+        log("📡 [1/3] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
+        const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
+        if (isValid(result, "Syntx Gemini")) {
+          log("✅ Sukses menggunakan Syntx Gemini untuk TSX!", "success");
+          return result;
+        }
+        log("⚠️ Syntx Gemini: respons tidak valid, lanjut fallback...", "warning");
+      } catch (err) {
+        log(`⚠️ Syntx.ai Gemini gagal: ${err.message?.substring(0, 150)}`, "warning");
+        errors.push({ provider: "syntx-gemini", error: err.message });
+      }
+
+      // 2. Coba Syntx Claude
+      try {
+        log("📡 [2/3] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
+        const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
+        if (isValid(result, "Syntx Claude")) {
+          log("✅ Sukses menggunakan Syntx Claude untuk TSX!", "success");
+          return result;
+        }
+        log("⚠️ Syntx Claude: respons tidak valid, lanjut fallback...", "warning");
+      } catch (err) {
+        log(`⚠️ Syntx.ai Claude gagal: ${err.message?.substring(0, 150)}`, "warning");
+        errors.push({ provider: "syntx-claude", error: err.message });
+      }
+
+      // 3. Coba 9Router
       try {
         if (NINEROUTER_API_KEY) {
-          log("📡 [1/3] Mencoba 9Router...", "info");
+          log("📡 [3/3] Mencoba 9Router...", "info");
           const result = await callNineRouter(prompt);
           if (isValid(result, "9Router")) {
             log("✅ Sukses menggunakan 9Router untuk TSX!", "success");
@@ -345,65 +373,17 @@ async function callAIWithFallback(prompt, options = {}) {
         errors.push({ provider: "9router", error: err.message });
       }
 
-      // 2. Coba Syntx Gemini
-      try {
-        log("📡 [2/3] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
-        const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
-        if (isValid(result, "Syntx Gemini")) {
-          log("✅ Sukses menggunakan Syntx Gemini untuk TSX!", "success");
-          return result;
-        }
-        log("⚠️ Syntx Gemini: respons tidak valid, lanjut fallback...", "warning");
-      } catch (err) {
-        log(`⚠️ Syntx.ai Gemini gagal: ${err.message?.substring(0, 150)}`, "warning");
-        errors.push({ provider: "syntx-gemini", error: err.message });
-      }
-
-      // 3. Coba Syntx Claude
-      try {
-        log("📡 [3/3] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
-        const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
-        if (isValid(result, "Syntx Claude")) {
-          log("✅ Sukses menggunakan Syntx Claude untuk TSX!", "success");
-          return result;
-        }
-        log("⚠️ Syntx Claude: respons tidak valid, lanjut fallback...", "warning");
-      } catch (err) {
-        log(`⚠️ Syntx.ai Claude gagal: ${err.message?.substring(0, 150)}`, "warning");
-        errors.push({ provider: "syntx-claude", error: err.message });
-      }
-
-      log("⚠️ Semua model TSX (9Router, Gemini, Claude) gagal, lanjut ke standard auto-fallback...", "warning");
+      log("⚠️ Semua model TSX (Gemini, Claude, 9Router) gagal, lanjut ke standard auto-fallback...", "warning");
     }
   }
 
-  // Auto-fallback mode (default) — coba 9Router lalu Syntx
-  log("Memulai pencarian model otomatis dengan fallback (9Router -> Syntx)...", "info");
+  // Auto-fallback mode (default) — coba Syntx lalu 9Router
+  log("Memulai pencarian model otomatis dengan fallback (Syntx -> 9Router)...", "info");
 
-  // 1. Coba 9Router dulu
-  if (preferModel !== '9router') {
-    try {
-      if (NINEROUTER_API_KEY) {
-        log("📡 [1/3] Mencoba 9Router...", "info");
-        const result = await callNineRouter(prompt);
-        if (isValid(result, "9Router")) {
-          log("✅ Sukses menggunakan 9Router!", "success");
-          return result;
-        }
-        log("⚠️ 9Router: respons tidak valid, lanjut fallback...", "warning");
-      } else {
-        log("⏩ Skip 9Router (API Key kosong)", "info");
-      }
-    } catch (err) {
-      log(`⚠️ 9Router gagal: ${err.message?.substring(0, 150)}`, "warning");
-      errors.push({ provider: "9router", error: err.message });
-    }
-  }
-
-  // 2. Syntx.ai Claude
+  // 1. Syntx.ai Claude
   if (preferModel !== 'syntx-claude') {
     try {
-      log("📡 [2/3] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
+      log("📡 [1/3] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
       const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
       if (isValid(result, "Syntx Claude")) {
         log("✅ Sukses menggunakan Syntx Claude!", "success");
@@ -416,19 +396,39 @@ async function callAIWithFallback(prompt, options = {}) {
     }
   }
 
-  // 3. Syntx.ai Gemini
+  // 2. Syntx.ai Gemini
   if (preferModel !== 'syntx-gemini') {
     try {
-      log("📡 [3/3] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
+      log("📡 [2/3] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
       const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
       if (isValid(result, "Syntx Gemini")) {
         log("✅ Sukses menggunakan Syntx Gemini!", "success");
         return result;
       }
-      log("⚠️ Syntx Gemini: respons tidak valid", "warning");
+      log("⚠️ Syntx Gemini: respons tidak valid, lanjut fallback...", "warning");
     } catch (err) {
       log(`⚠️ Syntx.ai Gemini gagal: ${err.message?.substring(0, 150)}`, "warning");
       errors.push({ provider: "syntx-gemini", error: err.message });
+    }
+  }
+
+  // 3. Coba 9Router
+  if (preferModel !== '9router') {
+    try {
+      if (NINEROUTER_API_KEY) {
+        log("📡 [3/3] Mencoba 9Router...", "info");
+        const result = await callNineRouter(prompt);
+        if (isValid(result, "9Router")) {
+          log("✅ Sukses menggunakan 9Router!", "success");
+          return result;
+        }
+        log("⚠️ 9Router: respons tidak valid");
+      } else {
+        log("⏩ Skip 9Router (API Key kosong)", "info");
+      }
+    } catch (err) {
+      log(`⚠️ 9Router gagal: ${err.message?.substring(0, 150)}`, "warning");
+      errors.push({ provider: "9router", error: err.message });
     }
   }
 
@@ -940,7 +940,7 @@ app.post("/api/convert-html-to-tsx", async (req, res) => {
       .replace(/{{DURATION_FRAMES}}/g, String(durationFrames))
       .replace(/{{HTML_CONTENT}}/g, item.htmlPreview || "");
 
-    const aiResponse = await callAIWithFallback(conversionPrompt, { preferModel: 'tsx-default' });
+    const aiResponse = await callAIWithFallback(conversionPrompt, { preferModel: 'syntx-gemini' });
 
     let tsxCode = aiResponse.trim();
     if (tsxCode.startsWith("```typescript") || tsxCode.startsWith("```tsx")) {
@@ -1448,7 +1448,19 @@ function saveOrUpdateItem(item) {
         const index = items.findIndex(i => i.id === id);
         if (index !== -1) {
           items[index] = { ...items[index], ...pendingItem };
+          if (taskLogs[id]) {
+            items[index].logs = taskLogs[id];
+            if (taskLogs[id].length > 0) {
+              items[index].lastLogMessage = taskLogs[id][taskLogs[id].length - 1].message;
+            }
+          }
         } else {
+          if (taskLogs[id]) {
+            pendingItem.logs = taskLogs[id];
+            if (taskLogs[id].length > 0) {
+              pendingItem.lastLogMessage = taskLogs[id][taskLogs[id].length - 1].message;
+            }
+          }
           items.push(pendingItem);
         }
       });
@@ -1466,9 +1478,28 @@ function addTaskLog(itemId, message, type = 'info') {
   const time = new Date().toLocaleTimeString('id-ID');
   const logEntry = { message, type, time };
 
-  if (!taskLogs[itemId]) {
-    taskLogs[itemId] = [];
+  let currentLogs = [];
+  try {
+    const dbPath = path.join(__dirname, "saved-items.json");
+    if (fs.existsSync(dbPath)) {
+      const data = fs.readFileSync(dbPath, "utf-8");
+      const items = JSON.parse(data);
+      const item = items.find(i => i.id === itemId);
+      if (item && item.logs) {
+        currentLogs = [...item.logs];
+      }
+    }
+  } catch (e) {
+    console.error("Gagal menyinkronkan logs dari DB:", e);
   }
+
+  // Jika memori sudah ada dan lebih panjang dari DB, gunakan memori.
+  // Jika DB lebih panjang (misal karena ada push logs baru dari route lain), gunakan DB.
+  if (taskLogs[itemId] && taskLogs[itemId].length > currentLogs.length) {
+    currentLogs = taskLogs[itemId];
+  }
+
+  taskLogs[itemId] = currentLogs;
   taskLogs[itemId].push(logEntry);
 
   if (taskLogs[itemId].length > 500) {
@@ -2102,7 +2133,7 @@ async function executeSingleTask(itemId) {
       // Jalankan callAI dengan pembatalan (abortable)
       let aiResponse = "";
       try {
-        aiResponse = await runAbortable(callAIWithFallback(seoPrompt, { preferModel: item.aiModel || 'auto', signal, taskId: itemId }), signal);
+        aiResponse = await runAbortable(callAIWithFallback(seoPrompt, { preferModel: (!item.aiModel || item.aiModel === 'auto') ? '9router' : item.aiModel, signal, taskId: itemId }), signal);
       } catch (err) {
         throw new Error(`Gagal menghasilkan metadata SEO: ${err.message}`);
       }
@@ -2258,7 +2289,7 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
       try {
         tsxResponse = await runAbortable(
           callAIWithFallback(conversionPrompt, { 
-            preferModel: (!item.aiModel || item.aiModel === 'auto') ? 'tsx-default' : item.aiModel,
+            preferModel: (!item.aiModel || item.aiModel === 'auto') ? 'syntx-gemini' : item.aiModel,
             validator: tsxValidator,
             taskId: itemId
           }),
@@ -2644,9 +2675,7 @@ app.post("/api/retry-task/:id", (req, res) => {
   item.lastLogMessage = "Mengulang proses...";
 
   // Simpan ke DB
-  const index = items.findIndex(i => i.id === id);
-  items[index] = item;
-  fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+  saveOrUpdateItem(item);
 
   // Inisialisasi logs memori
   taskLogs[id] = [...item.logs];
@@ -3252,7 +3281,7 @@ async function executeSingleSeoTask(id, aiModel) {
     const cleanHtml = stripScripts(item.htmlPreview);
     const activeSeoPrompt = promptsData.seoPrompt.replace("{{HTML_CONTENT}}", cleanHtml);
 
-    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: aiModel || 'auto', taskId: id });
+    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: (!aiModel || aiModel === 'auto') ? '9router' : aiModel, taskId: id });
     
     let jsonText = aiResponse.trim();
     if (jsonText.startsWith("```json")) {
@@ -3820,9 +3849,7 @@ app.post("/api/start-task/:id", (req, res) => {
   item.lastLogMessage = "Memulai proses...";
 
   // Simpan ke DB
-  const index = items.findIndex(i => i.id === id);
-  items[index] = item;
-  fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+  saveOrUpdateItem(item);
 
   // Inisialisasi logs memori
   taskLogs[id] = [...item.logs];
@@ -4212,7 +4239,7 @@ app.post("/api/regenerate-seo/:id", async (req, res) => {
     const cleanHtml = stripScripts(item.htmlPreview);
     const activeSeoPrompt = promptsData.seoPrompt.replace("{{HTML_CONTENT}}", cleanHtml);
 
-    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: aiModel || 'auto', taskId: id });
+    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: (!aiModel || aiModel === 'auto') ? '9router' : aiModel, taskId: id });
     
     let jsonText = aiResponse.trim();
     if (jsonText.startsWith("```json")) {
