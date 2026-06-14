@@ -64,6 +64,7 @@ jobs:
               --props=temp-props.json \
               --codec=h264 \
               --scale=0.5 \
+              --gl=swiftshader \
               --muted \
               --log=verbose
           else
@@ -72,6 +73,7 @@ jobs:
               "out/${{ github.event.client_payload.item.id }}.mov" \
               --props=temp-props.json \
               --codec=prores4444 \
+              --gl=swiftshader \
               --muted \
               --log=verbose
           fi
