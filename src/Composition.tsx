@@ -1,312 +1,371 @@
 import React, { useRef, useEffect } from 'react';
-import { useVideoConfig, useCurrentFrame } from 'remotion';
+import { useVideoConfig, useCurrentFrame, interpolate } from 'remotion';
 
-// Strict 4K Dimensions
-const ORIGINAL_WIDTH = 3840;
-const ORIGINAL_HEIGHT = 2160;
-const COLUMNS = 140;
-const COL_WIDTH = Math.floor(ORIGINAL_WIDTH / COLUMNS); // ~27px
+const ORIGINAL_WIDTH = 1920;
+const ORIGINAL_HEIGHT = 1080;
 
-// Premium Luminous Color Palette (RGB for dynamic opacity control)
+// Deterministic Pseudo-Random Seed Generator
+function seededRandom(seed: number) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
 const COLORS = [
-    { r: 255, g: 215, b: 0 },   // Luminous Gold
-    { r: 75, g: 0, b: 130 },    // Deep Amethyst Purple
-    { r: 255, g: 165, b: 0 },   // Amber Core Highlight
-    { r: 180, g: 100, b: 240 }  // Violet Highlight
+  'rgba(0, 234, 255, ',   // cyan
+  'rgba(255, 0, 212, ',   // magenta
+  'rgba(120, 80, 255, ',  // ungu
+  'rgba(255, 255, 255, ', // putih
+  'rgba(40, 60, 120, '    // biru gelap
 ];
 
-// Seed-based Deterministic Random Generator (LCG)
-// Ensures reproducible visual state during frame-by-frame renders
-function createDeterministicRandom(seed: number) {
-    let s = seed;
-    return () => {
-        s = (s * 1664525 + 1013904223) % 4294967296;
-        return s / 4294967296;
+// Pre-calculate 160 lines to avoid Math.random during render
+const linesConfig = Array.from({ length: 160 }).map((_, idx) => {
+  const r1 = seededRandom(idx * 7 + 1);
+  const r2 = seededRandom(idx * 13 + 2);
+  const r3 = seededRandom(idx * 17 + 3);
+  const r4 = seededRandom(idx * 23 + 4);
+  const r5 = seededRandom(idx * 29 + 5);
+  const r6 = seededRandom(idx * 31 + 6);
+
+  // Loop-safe periodic oscillation variables (must align to a 600 frame cycle)
+  const cyclesX1 = Math.floor(r1 * 3) + 1; // 1 to 3 full cycles
+  const cyclesX2 = Math.floor(r2 * 5) + 2; // 2 to 6 full cycles
+  const ampX1 = 120 + r3 * 350;
+  const ampX2 = 30 + r4 * 90;
+
+  return {
+    y: r1 * ORIGINAL_HEIGHT,
+    initialX: r2 * ORIGINAL_WIDTH,
+    cyclesX1,
+    cyclesX2,
+    ampX1,
+    ampX2,
+    w: 60 + r3 * 450,
+    thickness: 3 + r4 * 8,
+    color: COLORS[Math.floor(r5 * COLORS.length)],
+    alpha: 0.3 + r6 * 0.6,
+  };
+});
+
+// Pre-calculate deterministic glitches and sweeps for all 600 frames
+const frameGlitches = Array.from({ length: 600 }).map((_, f) => {
+  const rBlock = seededRandom(f * 19 + 77);
+  const rSweep = seededRandom(f * 29 + 103);
+
+  let block = null;
+  if (rBlock < 0.20) { // 20% deterministic chance
+    const r1 = seededRandom(f * 41 + 1);
+    const r2 = seededRandom(f * 43 + 2);
+    const r3 = seededRandom(f * 47 + 3);
+    const r4 = seededRandom(f * 53 + 4);
+    const r5 = seededRandom(f * 59 + 5);
+
+    block = {
+      y: r1 * ORIGINAL_HEIGHT,
+      h: 6 + r2 * 60,
+      x: r3 * ORIGINAL_WIDTH,
+      w: 100 + r4 * 600,
+      color: COLORS[Math.floor(r5 * COLORS.length)] + (0.25 + r1 * 0.45) + ')',
     };
-}
+  }
 
-const rand = createDeterministicRandom(10139);
+  let sweep = null;
+  if (rSweep < 0.09) { // 9% deterministic chance
+    const r1 = seededRandom(f * 61 + 6);
+    const r2 = seededRandom(f * 67 + 7);
+    const r3 = seededRandom(f * 71 + 8);
 
-interface Fragment {
-    offset: number;
-    h: number;
-    alpha: number;
-    isHead: boolean;
-    bits: boolean[];
-    hexCount: number;
-}
-
-interface StreamInfo {
-    x: number;
-    depthLayer: number;
-    width: number;
-    cycles: number;
-    maxAlpha: number;
-    glow: number;
-    baseY: number;
-    color: { r: number; g: number; b: number };
-    type: number;
-    fragments: Fragment[];
-}
-
-// Generate the static layout configurations outside the render scope to keep drawing deterministic
-const STREAMS_DATA: StreamInfo[] = [];
-
-function generateStream(colIndex: number, depthLayer: number, nextRand: () => number): StreamInfo {
-    let x = colIndex * COL_WIDTH;
-    let width = 0;
-    let cycles = 0;
-    let maxAlpha = 0;
-    let glow = 0;
-
-    if (depthLayer === 0) {
-        width = COL_WIDTH * 0.25;
-        cycles = 1;
-        maxAlpha = 0.2;
-        glow = 1;
-    } else if (depthLayer === 1) {
-        width = COL_WIDTH * 0.5;
-        cycles = 2;
-        maxAlpha = 0.5;
-        glow = 10;
-    } else {
-        width = COL_WIDTH * 0.8;
-        cycles = Math.floor(nextRand() * 2) + 3; // 3 or 4
-        maxAlpha = 1.0;
-        glow = 40;
-    }
-
-    const baseY = nextRand();
-    const color = COLORS[Math.floor(nextRand() * COLORS.length)];
-    x += (COL_WIDTH - width) / 2;
-
-    const type = Math.floor(nextRand() * 4);
-    const fragments: Fragment[] = [];
-    const numFrags = Math.floor(nextRand() * 18) + 10; // 10 to 28
-    let currentOffset = 0;
-
-    for (let i = 0; i < numFrags; i++) {
-        const h = nextRand() * 240 + 60;
-        const gap = nextRand() * 50 + 20;
-        const alpha = maxAlpha * Math.pow(1 - (i / numFrags), 1.8);
-
-        const bits: boolean[] = [];
-        if (type === 2) {
-            for (let b = 0; b < 30; b++) {
-                bits.push(nextRand() > 0.35);
-            }
-        }
-
-        let hexCount = 0;
-        if (type === 3) {
-            hexCount = Math.floor(h / (width * 0.9)) + 1;
-        }
-
-        fragments.push({
-            offset: currentOffset,
-            h,
-            alpha,
-            isHead: i === 0,
-            bits,
-            hexCount
-        });
-
-        currentOffset += h + gap;
-    }
-
-    return {
-        x,
-        depthLayer,
-        width,
-        cycles,
-        maxAlpha,
-        glow,
-        baseY,
-        color,
-        type,
-        fragments
+    sweep = {
+      y: r1 * ORIGINAL_HEIGHT,
+      h: 12 + r2 * 70,
+      color: 'rgba(255,255,255,' + (0.05 + r3 * 0.14) + ')',
     };
-}
+  }
 
-// Populate deterministic streams
-for (let c = 0; c < COLUMNS; c++) {
-    // Background Layer
-    STREAMS_DATA.push(generateStream(c, 0, rand));
+  return { block, sweep };
+});
 
-    // Midground Layer (45% probability)
-    if (rand() > 0.55) {
-        STREAMS_DATA.push(generateStream(c, 1, rand));
+const GlitchTebal: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { width, height } = useVideoConfig();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Responsive scaling to fit perfectly into 16:9 
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+
+  // 1. TEXT SHAKE ANIMATION MAPPING (3s loop = 180 frames)
+  const shakeFrame = frame % 180;
+  const shakePct = shakeFrame / 180;
+  const shakeX = interpolate(
+    shakePct,
+    [0, 0.1, 0.2, 0.3, 0.45, 0.55, 0.7, 0.85, 1.0],
+    [0, -4, 4, -2, 5, -5, 2, -4, 0]
+  );
+  const shakeY = interpolate(
+    shakePct,
+    [0, 0.1, 0.2, 0.3, 0.45, 0.55, 0.7, 0.85, 1.0],
+    [0, 2, -2, 0, 2, -2, 3, -3, 0]
+  );
+
+  // 2. CYAN LAYER GLITCHBEFORE MAPPING (2.4s loop = 144 frames)
+  const beforeFrame = frame % 144;
+  const beforePct = beforeFrame / 144;
+  const beforeX = interpolate(
+    beforePct,
+    [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0],
+    [0, -12, 9, -14, 8, -10, 12, 0]
+  );
+  const beforeY = interpolate(
+    beforePct,
+    [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0],
+    [0, -4, 2, 0, -4, 4, 0, 0]
+  );
+  const beforeClipTop = interpolate(
+    beforePct,
+    [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0],
+    [0, 20, 60, 10, 40, 80, 30, 0]
+  );
+  const beforeClipBottom = interpolate(
+    beforePct,
+    [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0],
+    [0, 50, 10, 70, 30, 5, 45, 0]
+  );
+
+  // 3. MAGENTA LAYER GLITCHAFTER MAPPING (2s loop = 120 frames)
+  const afterFrame = frame % 120;
+  const afterPct = afterFrame / 120;
+  const afterX = interpolate(
+    afterPct,
+    [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0],
+    [0, 12, -9, 14, -8, 10, -12, 0]
+  );
+  const afterY = interpolate(
+    afterPct,
+    [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0],
+    [0, 4, -2, 0, 4, -4, 0, 0]
+  );
+  const afterClipTop = interpolate(
+    afterPct,
+    [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0],
+    [0, 55, 15, 70, 25, 5, 45, 0]
+  );
+  const afterClipBottom = interpolate(
+    afterPct,
+    [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0],
+    [0, 15, 60, 8, 50, 80, 30, 0]
+  );
+
+  // 4. OVERLAY FLICKER MAPPING (9s loop = 540 frames)
+  const flickerFrame = frame % 540;
+  const flickerPct = flickerFrame / 540;
+  const flickerOpacity = interpolate(
+    flickerPct,
+    [0, 0.02, 0.03, 0.04, 0.05, 0.06, 0.48, 0.49, 0.50, 0.78, 0.79, 0.80, 1.0],
+    [0, 0.06, 0, 0.14, 0.03, 0, 0, 0.2, 0, 0, 0.12, 0, 0]
+  );
+
+  // 5. SCANLINES Y MOVEMENT MAPPING (8s loop = 480 frames)
+  const scanlineFrame = frame % 480;
+  const scanlineY = interpolate(scanlineFrame, [0, 480], [0, 100]);
+
+  // Frame-locked canvas drawing
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear and Redraw frame deterministically
+    ctx.clearRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+
+    // Dark cyberpunk backdrop
+    ctx.fillStyle = '#05060a';
+    ctx.fillRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+
+    // Draw active pseudo-random horizontal lines
+    linesConfig.forEach((line) => {
+      // Loop-safe dual-sine oscillation formula for horizontal seamless movement
+      const angle1 = (frame / 600) * 2 * Math.PI * line.cyclesX1;
+      const angle2 = (frame / 600) * 2 * Math.PI * line.cyclesX2;
+      const offsetX = Math.sin(angle1) * line.ampX1 + Math.sin(angle2) * line.ampX2;
+
+      let currentX = (line.initialX + offsetX) % (ORIGINAL_WIDTH + line.w);
+      if (currentX < -line.w) currentX += (ORIGINAL_WIDTH + line.w);
+
+      // Loop-safe periodic sine for alpha flicker
+      const alphaAngle = (frame / 600) * 2 * Math.PI * 12 + (line.y * 0.02);
+      const alphaVal = line.alpha * (0.55 + 0.45 * Math.abs(Math.sin(alphaAngle)));
+
+      ctx.fillStyle = line.color + alphaVal.toFixed(3) + ')';
+      ctx.fillRect(currentX, line.y, line.w, line.thickness);
+    });
+
+    // Retreive pre-calculated transient glitches
+    const activeGlitch = frameGlitches[frame % 600];
+
+    // Heavy glitch blocks
+    if (activeGlitch.block) {
+      const { x, y, w, h, color } = activeGlitch.block;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
     }
 
-    // Foreground Layer (25% probability)
-    if (rand() > 0.75) {
-        STREAMS_DATA.push(generateStream(c, 2, rand));
+    // Wide horizontal sweeping white glints
+    if (activeGlitch.sweep) {
+      const { y, h, color } = activeGlitch.sweep;
+      ctx.fillStyle = color;
+      ctx.fillRect(0, y, ORIGINAL_WIDTH, h);
     }
-}
+  }, [frame]);
 
-// Draw a single perfect hexagon
-function drawHex(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) {
-    ctx.beginPath();
-    ctx.moveTo(x + width * 0.5, y);
-    ctx.lineTo(x + width, y + height * 0.25);
-    ctx.lineTo(x + width, y + height * 0.75);
-    ctx.lineTo(x + width * 0.5, y + height);
-    ctx.lineTo(x, y + height * 0.75);
-    ctx.lineTo(x, y + height * 0.25);
-    ctx.closePath();
-    ctx.fill();
-}
+  // CSS Styles converted to camelCased react style objects
+  const mainWrapperStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    backgroundColor: '#000000',
+  };
 
-// Render data streams into canvas viewport coordinates
-function renderStreamAt(ctx: CanvasRenderingContext2D, stream: StreamInfo, x: number, y: number) {
-    ctx.save();
-    ctx.translate(x, y);
+  const stageStyle: React.CSSProperties = {
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#05060a',
+    overflow: 'hidden',
+  };
 
-    for (const f of stream.fragments) {
-        const yDraw = -f.offset;
+  const canvasStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 1,
+  };
 
-        ctx.fillStyle = `rgba(${stream.color.r}, ${stream.color.g}, ${stream.color.b}, ${f.alpha})`;
+  const textWrapStyle: React.CSSProperties = {
+    position: 'absolute',
+    zIndex: 3,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'none',
+  };
 
-        if (stream.glow > 0) {
-            ctx.shadowBlur = f.isHead ? stream.glow : stream.glow * 0.5;
-            ctx.shadowColor = `rgb(${stream.color.r}, ${stream.color.g}, ${stream.color.b})`;
-            ctx.shadowOffsetX = f.isHead ? 2 : 1;
-            ctx.shadowOffsetY = f.isHead ? 2 : 1;
-        } else {
-            ctx.shadowBlur = 0;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 0;
-        }
+  const textGlitchStyle: React.CSSProperties = {
+    position: 'relative',
+    fontSize: '120px', 
+    fontWeight: 800,
+    letterSpacing: '0.12em',
+    color: '#f5f5ff',
+    textTransform: 'uppercase',
+    textShadow: '0 0 4px rgba(255,255,255,0.4), 0 0 12px rgba(0,234,255,0.3)',
+    transform: `translate(${shakeX}px, ${shakeY}px)`,
+    fontFamily: 'Arial, sans-serif',
+  };
 
-        if (stream.type === 0) {
-            ctx.fillRect(0, yDraw - f.h, stream.width, f.h);
-        } else if (stream.type === 1) {
-            const dashHeight = 5;
-            const space = 7;
-            for (let dy = 0; dy < f.h; dy += dashHeight + space) {
-                const actualH = Math.min(dashHeight, f.h - dy);
-                ctx.fillRect(0, yDraw - dy - actualH, stream.width, actualH);
-            }
-        } else if (stream.type === 2) {
-            const laneW = (stream.width / 2) - 3;
-            if (laneW > 3) {
-                const cellH = laneW;
-                const space = 4;
-                let bitIndex = 0;
-                for (let dy = 0; dy < f.h; dy += cellH + space) {
-                    const actualH = Math.min(cellH, f.h - dy);
-                    if (f.bits[bitIndex % f.bits.length]) {
-                        ctx.fillRect(0, yDraw - dy - actualH, laneW, actualH);
-                    }
-                    if (f.bits[(bitIndex + 1) % f.bits.length]) {
-                        ctx.fillRect(laneW + 6, yDraw - dy - actualH, laneW, actualH);
-                    }
-                    bitIndex += 2;
-                }
-            } else {
-                ctx.fillRect(0, yDraw - f.h, stream.width, f.h);
-            }
-        } else if (stream.type === 3) {
-            const hexW = stream.width;
-            const hexH = hexW * 0.866;
-            const space = hexH * 0.2;
-            let yOffset = 0;
-            for (let i = 0; i < f.hexCount; i++) {
-                const drawY = yDraw - yOffset - hexH;
-                if (drawY + hexH > yDraw - f.h) {
-                    drawHex(ctx, 0, drawY, hexW, hexH);
-                }
-                yOffset += hexH + space;
-            }
-        }
-    }
-    ctx.restore();
-}
+  const pseudoBeforeStyle: React.CSSProperties = {
+    content: 'attr(data-text)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+    color: '#00eaff',
+    textShadow: '0 0 10px rgba(0,234,255,0.6)',
+    zIndex: -1,
+    transform: `translate(${beforeX}px, ${beforeY}px)`,
+    clipPath: `inset(${beforeClipTop}% 0% ${beforeClipBottom}% 0%)`,
+  };
 
-export const CyberDataStreamOverlay: React.FC = () => {
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const frame = useCurrentFrame();
-    const { width, height } = useVideoConfig();
+  const pseudoAfterStyle: React.CSSProperties = {
+    content: 'attr(data-text)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+    color: '#ff00d4',
+    textShadow: '0 0 10px rgba(255,0,212,0.6)',
+    zIndex: -2,
+    transform: `translate(${afterX}px, ${afterY}px)`,
+    clipPath: `inset(${afterClipTop}% 0% ${afterClipBottom}% 0%)`,
+  };
 
-    // Scale dynamically to fill outer container with 16:9 ratio
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+  const scanlinesStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 4,
+    pointerEvents: 'none',
+    background: 'linear-gradient(rgba(0,0,0,0) 50%, rgba(0,0,0,0.35) 50%)',
+    backgroundSize: '100% 4px',
+    backgroundPosition: `0px ${scanlineY}px`,
+    opacity: 0.5,
+  };
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d', { alpha: false });
-        if (!ctx) return;
+  const vignetteStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 5,
+    pointerEvents: 'none',
+    background: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,0.7) 100%)',
+  };
 
-        // Reset composition & render deep background
-        ctx.globalCompositeOperation = 'source-over';
+  const flickerStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 6,
+    backgroundColor: '#ffffff',
+    mixBlendMode: 'overlay',
+    opacity: flickerOpacity,
+    pointerEvents: 'none',
+  };
 
-        const bgGrad = ctx.createRadialGradient(
-            ORIGINAL_WIDTH / 2,
-            ORIGINAL_HEIGHT / 2,
-            0,
-            ORIGINAL_WIDTH / 2,
-            ORIGINAL_HEIGHT / 2,
-            ORIGINAL_WIDTH
-        );
-        bgGrad.addColorStop(0, '#1A102A');
-        bgGrad.addColorStop(1, '#050308');
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+  return (
+    <div style={mainWrapperStyle}>
+      <div style={stageStyle}>
+        <canvas
+          ref={canvasRef}
+          width={ORIGINAL_WIDTH}
+          height={ORIGINAL_HEIGHT}
+          style={canvasStyle}
+        />
 
-        // Dot Matrix Background Pattern Overlay
-        ctx.fillStyle = 'rgba(50, 20, 80, 0.1)';
-        for (let dx = 0; dx < ORIGINAL_WIDTH; dx += 64) {
-            for (let dy = 0; dy < ORIGINAL_HEIGHT; dy += 64) {
-                ctx.fillRect(dx, dy, 2, 2);
-            }
-        }
-
-        // Composite Mode Screen for Luminous Visual Glows
-        ctx.globalCompositeOperation = 'screen';
-
-        // Map looping state deterministically over 10 seconds cycles (600 frames at 60fps)
-        // Loops perfectly twice across a 20-second (1200 frames) total composition duration
-        const t = (frame % 600) / 600;
-
-        for (const stream of STREAMS_DATA) {
-            const yNorm = (stream.baseY + t * stream.cycles) % 1.0;
-            const yBase = yNorm * ORIGINAL_HEIGHT;
-
-            // Quad-draw vertical stack offsets to enable flawless infinite boundary transitions
-            renderStreamAt(ctx, stream, stream.x, yBase - ORIGINAL_HEIGHT);
-            renderStreamAt(ctx, stream, stream.x, yBase);
-            renderStreamAt(ctx, stream, stream.x, yBase + ORIGINAL_HEIGHT);
-            renderStreamAt(ctx, stream, stream.x, yBase + (ORIGINAL_HEIGHT * 2));
-        }
-    }, [frame]);
-
-    return (
-        <div
-            style={{
-                width: ORIGINAL_WIDTH,
-                height: ORIGINAL_HEIGHT,
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-                transformOrigin: 'center center',
-                overflow: 'hidden',
-                backgroundColor: '#050308',
-            }}
-        >
-            <canvas
-                ref={canvasRef}
-                width={ORIGINAL_WIDTH}
-                height={ORIGINAL_HEIGHT}
-                style={{
-                    display: 'block',
-                    width: ORIGINAL_WIDTH,
-                    height: ORIGINAL_HEIGHT,
-                }}
-            />
+        <div style={textWrapStyle}>
+          <div style={textGlitchStyle} data-text="THE END">
+            THE END
+            <div style={pseudoBeforeStyle}>THE END</div>
+            <div style={pseudoAfterStyle}>THE END</div>
+          </div>
         </div>
-    );
+
+        <div style={scanlinesStyle} />
+        <div style={vignetteStyle} />
+        <div style={flickerStyle} />
+      </div>
+    </div>
+  );
 };
 
-export default CyberDataStreamOverlay;
+export default GlitchTebal;
 // END_OF_FILE
