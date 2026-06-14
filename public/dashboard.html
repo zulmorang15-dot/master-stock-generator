@@ -4283,8 +4283,52 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       }
     });
 
-    // Take top 6 recommendations to avoid clutter
-    const topRecs = recommendations.slice(0, 6);
+    // Group recommendations by time period to ensure balanced representation across the month
+    const periods = {
+      week1: [], // Days 1-7
+      week2: [], // Days 8-14
+      week3: [], // Days 15-21
+      week4: [], // Days 22-31
+      monthLong: [] // Month-long (day 99)
+    };
+
+    recommendations.forEach(rec => {
+      const day = parseInt((rec.event.rawDate || '').match(/^\d+/)?.[0] || '99');
+      if (day >= 1 && day <= 7) {
+        periods.week1.push(rec);
+      } else if (day >= 8 && day <= 14) {
+        periods.week2.push(rec);
+      } else if (day >= 15 && day <= 21) {
+        periods.week3.push(rec);
+      } else if (day >= 22 && day <= 31) {
+        periods.week4.push(rec);
+      } else {
+        periods.monthLong.push(rec);
+      }
+    });
+
+    // Select a balanced mix of 6 recommendations across periods
+    const topRecs = [];
+    const keys = ['week1', 'week2', 'week3', 'week4', 'monthLong'];
+    
+    let added = true;
+    while (topRecs.length < 6 && added) {
+      added = false;
+      for (const key of keys) {
+        if (topRecs.length >= 6) break;
+        if (periods[key].length > 0) {
+          topRecs.push(periods[key].shift());
+          added = true;
+        }
+      }
+    }
+
+    // Sort the selected 6 recommendations chronologically by date
+    topRecs.sort((a, b) => {
+      const dayA = parseInt((a.event.rawDate || '').match(/^\d+/)?.[0] || '99');
+      const dayB = parseInt((b.event.rawDate || '').match(/^\d+/)?.[0] || '99');
+      return dayA - dayB;
+    });
 
     suggestionsGrid.innerHTML = topRecs.map((rec, index) => {
       const e = rec.event;
