@@ -5,22 +5,115 @@ import * as THREE from 'three';
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-export const GalaxyNebulaFluid: React.FC = () => {
-  const { width, height, fps } = useVideoConfig();
+const FLOOR_RES = 80;
+const FLOOR_WIDTH = 4500;
+const FLOOR_DEPTH = 4500;
+
+const CyberspaceBackground: React.FC = () => {
+  const { width, height, fps, durationInFrames } = useVideoConfig();
   const frame = useCurrentFrame();
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Keep references to Three.js objects
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
-  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const floorGeometryRef = useRef<THREE.PlaneGeometry | null>(null);
+  const pointLight1Ref = useRef<THREE.PointLight | null>(null);
+  const pointLight2Ref = useRef<THREE.PointLight | null>(null);
 
+  // Scaling logic to maintain aspect ratio with no black bars
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
+  // Initialize Three.js Scene (Runs once)
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    // Initialize WebGL Renderer
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020205);
+    scene.fog = new THREE.FogExp2(0x020205, 0.0007);
+    sceneRef.current = scene;
+
+    const camera = new THREE.PerspectiveCamera(60, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 1, 4000);
+    camera.position.set(0, 250, 1200);
+    camera.lookAt(0, 50, 0);
+    cameraRef.current = camera;
+
+    const ambientLight = new THREE.AmbientLight(0x111122, 1.5);
+    scene.add(ambientLight);
+
+    const pointLight1 = new THREE.PointLight(0x00ffff, 4, 3000);
+    scene.add(pointLight1);
+    pointLight1Ref.current = pointLight1;
+
+    const pointLight2 = new THREE.PointLight(0xff00ff, 4, 3000);
+    scene.add(pointLight2);
+    pointLight2Ref.current = pointLight2;
+
+    const floorGroup = new THREE.Group();
+    scene.add(floorGroup);
+
+    const floorGeometry = new THREE.PlaneGeometry(FLOOR_WIDTH, FLOOR_DEPTH, FLOOR_RES, FLOOR_RES);
+    floorGeometryRef.current = floorGeometry;
+
+    const solidMaterial = new THREE.MeshPhongMaterial({
+      color: 0x050515,
+      emissive: 0x000000,
+      side: THREE.DoubleSide,
+      flatShading: true,
+    });
+
+    // Multiple wireframe layers to simulate a rich glowing neon bloom effect
+    const wireframeMaterial1 = new THREE.MeshPhongMaterial({
+      color: 0x00ffff,
+      emissive: 0x005577,
+      side: THREE.DoubleSide,
+      wireframe: true,
+      transparent: true,
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending,
+    });
+
+    const wireframeMaterial2 = new THREE.MeshPhongMaterial({
+      color: 0x00aaff,
+      emissive: 0x002244,
+      side: THREE.DoubleSide,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending,
+    });
+
+    const wireframeMaterial3 = new THREE.MeshPhongMaterial({
+      color: 0xff00ff,
+      emissive: 0x440044,
+      side: THREE.DoubleSide,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.3,
+      blending: THREE.AdditiveBlending,
+    });
+
+    const solidMesh = new THREE.Mesh(floorGeometry, solidMaterial);
+    const wireframeMesh1 = new THREE.Mesh(floorGeometry, wireframeMaterial1);
+    const wireframeMesh2 = new THREE.Mesh(floorGeometry, wireframeMaterial2);
+    const wireframeMesh3 = new THREE.Mesh(floorGeometry, wireframeMaterial3);
+
+    wireframeMesh1.position.z = 2;
+    wireframeMesh2.position.z = 4;
+    wireframeMesh2.scale.set(1.002, 1.002, 1.002);
+    wireframeMesh3.position.z = 6;
+    wireframeMesh3.scale.set(1.004, 1.004, 1.004);
+
+    floorGroup.add(solidMesh);
+    floorGroup.add(wireframeMesh1);
+    floorGroup.add(wireframeMesh2);
+    floorGroup.add(wireframeMesh3);
+
+    floorGroup.rotation.x = -Math.PI / 2;
+    floorGroup.position.y = -100;
+
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
       antialias: true,
@@ -30,140 +123,93 @@ export const GalaxyNebulaFluid: React.FC = () => {
     renderer.setPixelRatio(1);
     rendererRef.current = renderer;
 
-    // Initialize Scene
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
-
-    // Camera
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    camera.position.z = 1;
-    cameraRef.current = camera;
-
-    // Vert shader
-    const vertexShader = `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = vec4(position, 1.0);
-      }
-    `;
-
-    // Frag shader
-    const fragmentShader = `
-      precision highp float;
-      varying vec2 vUv;
-      uniform float time;
-      uniform vec2 resolution;
-      const float PI = 3.141592654;
-      const float scale = 0.6; // Lebih rapat untuk tekstur debu kosmik
-      
-      float cheapNoise(vec3 stp){
-        vec3 p = vec3(stp.st, stp.p); 
-        vec4 a = vec4(5., 7., 9., 13.);
-        return mix(
-          sin(p.z + p.x * a.x + cos(p.x * a.x - p.z)) * cos(p.z + p.y * a.y + cos(p.y * a.x + p.z)),
-          sin(1. + p.x * a.z + p.z + cos(p.y * a.w - p.z)) * cos(1. + p.y * a.w + p.z + cos(p.x * a.x - p.z)),
-          0.436
-        );
-      }
-      
-      void main(){
-        vec2 aR = vec2(resolution.x / resolution.y, 1.);
-        vec2 st = vUv * aR * scale;
-        float duration = 20.0; // Adjusted from 35.0 to 20.0 to match seamless loop duration
-        float theta = 2. * PI * fract(time / duration);
-        vec2 move1 = vec2(sin(theta) * 0.4, cos(theta) * 0.4);
-        vec2 move2 = vec2(cos(theta * 2.) * 0.6, sin(theta * 2.) * 0.5);
-        vec2 v1 = vec2(cheapNoise(vec3(st + move1, theta * 2.)), cheapNoise(vec3(st - move1, theta * 1.)));
-        vec2 v2 = vec2(cheapNoise(vec3(st + v1 + move2, theta * 2.)), cheapNoise(vec3(st + v1 - move2, theta * 3.)));
-        float n = 0.5 + 0.5 * cheapNoise(vec3(st + v2, theta * 1.));
-        
-        // PALET GALAKSI
-        vec3 c1 = vec3(0.02, 0.0, 0.05);   // Void / Luar angkasa gelap
-        vec3 c2 = vec3(0.2, 0.0, 0.4);     // Ungu tua
-        vec3 c3 = vec3(0.8, 0.1, 0.5);     // Magenta / Pink nebula
-        vec3 c4 = vec3(0.9, 0.85, 1.0);    // Inti cahaya bintang
-        
-        vec3 color = mix(c1, c2, clamp((n * n) * 8., 0., 1.));
-        color = mix(color, c3, clamp(length(v1), 0., 1.));
-        color = mix(color, c4, clamp(length(v2.x), 0., 1.));
-        color /= n * n + n * 7.; 
-        color = pow(color, vec3(0.85)); 
-        color *= 1.6;
-        
-        float vig = 1. - length(vUv - 0.5) * 1.1; 
-        color *= clamp(vig, 0.1, 1.);
-        
-        gl_FragColor = vec4(color, 1.0);
-      }
-    `;
-
-    const uniforms = {
-      time: { value: 0.0 },
-      resolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) },
-    };
-
-    const material = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader,
-      uniforms,
-      depthWrite: false,
-      depthTest: false,
-    });
-    materialRef.current = material;
-
-    const geometry = new THREE.PlaneGeometry(2, 2);
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
-
     return () => {
-      geometry.dispose();
-      material.dispose();
       renderer.dispose();
+      floorGeometry.dispose();
+      solidMaterial.dispose();
+      wireframeMaterial1.dispose();
+      wireframeMaterial2.dispose();
+      wireframeMaterial3.dispose();
     };
   }, []);
 
-  // Frame-locked deterministic rendering
+  // Frame-locked render loop matching exact loop cycle of the video
   useEffect(() => {
-    const material = materialRef.current;
-    const renderer = rendererRef.current;
     const scene = sceneRef.current;
     const camera = cameraRef.current;
+    const renderer = rendererRef.current;
+    const floorGeometry = floorGeometryRef.current;
+    const pointLight1 = pointLight1Ref.current;
+    const pointLight2 = pointLight2Ref.current;
 
-    if (material && renderer && scene && camera) {
-      const cycleDuration = 20; // 20 seconds loop period
-      const localFrame = frame % (fps * cycleDuration);
-      const timeValue = localFrame / fps;
+    if (!scene || !camera || !renderer || !floorGeometry || !pointLight1 || !pointLight2) return;
 
-      material.uniforms.time.value = timeValue;
-      renderer.render(scene, camera);
+    // Symmetrical progress looping over durationInFrames to prevent frame jumps
+    const progress = frame / durationInFrames;
+    const angle = progress * Math.PI * 2;
+
+    // Replicate lights circular orbit
+    pointLight1.position.x = Math.cos(angle) * 1500;
+    pointLight1.position.y = 300;
+    pointLight1.position.z = Math.sin(angle) * 1500;
+
+    pointLight2.position.x = Math.cos(-angle) * 1500;
+    pointLight2.position.y = 300;
+    pointLight2.position.z = Math.sin(-angle) * 1500;
+
+    // Wave computation for mesh vertices
+    const positionAttribute = floorGeometry.attributes.position;
+    const vertex = new THREE.Vector3();
+
+    for (let i = 0; i < positionAttribute.count; i++) {
+      vertex.fromBufferAttribute(positionAttribute, i);
+
+      const wave1 = Math.sin(vertex.x * 0.003 + angle) * 150;
+      const wave2 = Math.cos(vertex.y * 0.003 + angle * 2) * 100;
+
+      positionAttribute.setZ(i, wave1 + wave2);
     }
-  }, [frame, fps]);
+    positionAttribute.needsUpdate = true;
+    floorGeometry.computeVertexNormals();
 
-  const containerStyle: React.CSSProperties = {
-    width: ORIGINAL_WIDTH,
-    height: ORIGINAL_HEIGHT,
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-    transformOrigin: 'center center',
-    overflow: 'hidden',
-    backgroundColor: '#000',
-  };
-
-  const canvasStyle: React.CSSProperties = {
-    display: 'block',
-    width: '100%',
-    height: '100%',
-  };
+    // Deterministically draw the current frame
+    renderer.render(scene, camera);
+  }, [frame, durationInFrames]);
 
   return (
-    <div style={containerStyle}>
-      <canvas ref={canvasRef} style={canvasStyle} />
+    <div
+      style={{
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+        backgroundColor: '#020205',
+      }}
+    >
+      <div
+        id="canvas-container"
+        style={{
+          width: '100%',
+          height: '100%',
+          position: 'relative',
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          style={{
+            display: 'block',
+            width: '100%',
+            height: '100%',
+          }}
+        />
+      </div>
     </div>
   );
 };
 
-export default GalaxyNebulaFluid;
+export default CyberspaceBackground;
 // END_OF_FILE
