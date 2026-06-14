@@ -1,454 +1,294 @@
 import React, { useRef, useEffect } from 'react';
-import { useVideoConfig, useCurrentFrame, interpolate } from 'remotion';
-import * as THREE from 'three';
+import { useVideoConfig, useCurrentFrame } from 'remotion';
+
+interface FragmentSpec {
+    offset: number;
+    h: number;
+    alpha: number;
+    isHead: boolean;
+    bits: boolean[];
+    hexCount: number;
+}
+
+interface StreamSpec {
+    x: number;
+    width: number;
+    cycles: number;
+    maxAlpha: number;
+    glow: number;
+    baseY: number;
+    color: { r: number; g: number; b: number };
+    type: number;
+    fragments: FragmentSpec[];
+}
+
+const COLORS = [
+    { r: 255, g: 215, b: 0 },   // Luminous Gold
+    { r: 75, g: 0, b: 130 },    // Deep Amethyst Purple
+    { r: 255, g: 165, b: 0 },   // Amber Core Highlight
+    { r: 180, g: 100, b: 240 }  // Violet Highlight
+];
+
+const COLUMNS = 140;
+const W = 3840;
+const H = 2160;
+const COL_WIDTH = Math.floor(W / COLUMNS);
+
+function createPRNG(seed: number) {
+    let s = seed;
+    return function() {
+        s = Math.sin(s) * 10000;
+        return s - Math.floor(s);
+    };
+}
+
+const random = createPRNG(98765);
+
+const STREAMS_DATA: StreamSpec[] = [];
+
+function createStreamSpec(colIndex: number, depthLayer: number): StreamSpec {
+    let width = 0;
+    let cycles = 1;
+    let maxAlpha = 0.2;
+    let glow = 1;
+
+    if (depthLayer === 0) {
+        width = COL_WIDTH * 0.25;
+        cycles = 1;
+        maxAlpha = 0.2;
+        glow = 1;
+    } else if (depthLayer === 1) {
+        width = COL_WIDTH * 0.5;
+        cycles = 2;
+        maxAlpha = 0.5;
+        glow = 10;
+    } else {
+        width = COL_WIDTH * 0.8;
+        cycles = Math.floor(random() * 2) + 3; // 3 or 4
+        maxAlpha = 1.0;
+        glow = 40;
+    }
+
+    const baseY = random();
+    const color = COLORS[Math.floor(random() * COLORS.length)];
+    let x = colIndex * COL_WIDTH + (COL_WIDTH - width) / 2;
+    const type = Math.floor(random() * 4);
+
+    const fragments: FragmentSpec[] = [];
+    const numFrags = Math.floor(random() * 18) + 10; // 10 to 27
+    let currentOffset = 0;
+
+    for (let i = 0; i < numFrags; i++) {
+        const h = random() * 240 + 60;
+        const gap = random() * 50 + 20;
+        const alpha = maxAlpha * Math.pow(1 - (i / numFrags), 1.8);
+        const bitPattern: boolean[] = [];
+        if (type === 2) {
+            for (let b = 0; b < 30; b++) {
+                bitPattern.push(random() > 0.35);
+            }
+        }
+        let hexCount = 0;
+        if (type === 3) {
+            hexCount = Math.floor(h / (width * 0.9)) + 1;
+        }
+
+        fragments.push({
+            offset: currentOffset,
+            h,
+            alpha,
+            isHead: i === 0,
+            bits: bitPattern,
+            hexCount
+        });
+
+        currentOffset += h + gap;
+    }
+
+    return {
+        x,
+        width,
+        cycles,
+        maxAlpha,
+        glow,
+        baseY,
+        color,
+        type,
+        fragments
+    };
+}
+
+// Strictly pre-generate deterministically outside render
+for (let c = 0; c < COLUMNS; c++) {
+    STREAMS_DATA.push(createStreamSpec(c, 0));
+    
+    if (random() > 0.55) {
+        STREAMS_DATA.push(createStreamSpec(c, 1));
+    }
+    
+    if (random() > 0.75) {
+        STREAMS_DATA.push(createStreamSpec(c, 2));
+    }
+}
+
+function drawHex(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) {
+    ctx.beginPath();
+    ctx.moveTo(x + width * 0.5, y);
+    ctx.lineTo(x + width, y + height * 0.25);
+    ctx.lineTo(x + width, y + height * 0.75);
+    ctx.lineTo(x + width * 0.5, y + height);
+    ctx.lineTo(x, y + height * 0.75);
+    ctx.lineTo(x, y + height * 0.25);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function renderStreamAt(ctx: CanvasRenderingContext2D, stream: StreamSpec, x: number, y: number) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    for (const f of stream.fragments) {
+        const yDraw = -f.offset; 
+        
+        ctx.fillStyle = `rgba(${stream.color.r}, ${stream.color.g}, ${stream.color.b}, ${f.alpha})`;
+        
+        if (stream.glow > 0) {
+            ctx.shadowBlur = f.isHead ? stream.glow : stream.glow * 0.5;
+            ctx.shadowColor = `rgb(${stream.color.r}, ${stream.color.g}, ${stream.color.b})`;
+            ctx.shadowOffsetX = f.isHead ? 2 : 1;
+            ctx.shadowOffsetY = f.isHead ? 2 : 1;
+        } else {
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+        }
+
+        if (stream.type === 0) {
+            ctx.fillRect(0, yDraw - f.h, stream.width, f.h);
+        } 
+        else if (stream.type === 1) {
+            const dashHeight = 5;
+            const space = 7;
+            for (let dy = 0; dy < f.h; dy += dashHeight + space) {
+                const actualH = Math.min(dashHeight, f.h - dy);
+                ctx.fillRect(0, yDraw - dy - actualH, stream.width, actualH);
+            }
+        } 
+        else if (stream.type === 2) {
+            const laneW = (stream.width / 2) - 3;
+            if (laneW > 3) {
+                const cellH = laneW;
+                const space = 4;
+                let bitIndex = 0;
+                for (let dy = 0; dy < f.h; dy += cellH + space) {
+                    const actualH = Math.min(cellH, f.h - dy);
+                    if (f.bits[bitIndex % f.bits.length]) {
+                        ctx.fillRect(0, yDraw - dy - actualH, laneW, actualH);
+                    }
+                    if (f.bits[(bitIndex + 1) % f.bits.length]) {
+                        ctx.fillRect(laneW + 6, yDraw - dy - actualH, laneW, actualH);
+                    }
+                    bitIndex += 2;
+                }
+            } else {
+                ctx.fillRect(0, yDraw - f.h, stream.width, f.h);
+            }
+        }
+        else if (stream.type === 3) {
+            const hexW = stream.width;
+            const hexH = hexW * 0.866;
+            const space = hexH * 0.2;
+            let yOffset = 0;
+            for (let i = 0; i < f.hexCount; i++) {
+                const drawY = yDraw - yOffset - hexH;
+                if (drawY + hexH > yDraw - f.h) {
+                    drawHex(ctx, 0, drawY, hexW, hexH);
+                }
+                yOffset += hexH + space;
+            }
+        }
+    }
+    ctx.restore();
+}
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const STAR_COUNT = 1000;
-const STAR_POSITIONS = (() => {
-  const pos = new Float32Array(STAR_COUNT * 3);
-  let seed = 12345;
-  function random() {
-    const x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
-  }
-  for (let i = 0; i < STAR_COUNT; i++) {
-    pos[i * 3 + 0] = (random() - 0.5) * 100;
-    pos[i * 3 + 1] = (random() - 0.5) * 70;
-    pos[i * 3 + 2] = -random() * 150 + 20;
-  }
-  return pos;
-})();
+export const CyberDataStreamOverlay: React.FC = () => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const { width, height, fps } = useVideoConfig();
+    const frame = useCurrentFrame();
 
-const CYAN = '#19b6ff';
-const CYAN_BRIGHT = '#5ad8ff';
+    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-export const SplitGridOutro: React.FC = () => {
-  const { width, height, fps } = useVideoConfig();
-  const frame = useCurrentFrame();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) return;
 
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const gridARef = useRef<THREE.GridHelper | null>(null);
-  const gridBRef = useRef<THREE.GridHelper | null>(null);
-  const starsRef = useRef<THREE.Points | null>(null);
+        // Exactly 20 seconds loop (1200 frames at 60fps)
+        const totalLoopFrames = fps * 20; 
+        const localFrame = frame % totalLoopFrames;
+        const t = localFrame / totalLoopFrames;
 
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+        ctx.globalCompositeOperation = 'source-over';
 
-  useEffect(() => {
-    if (!canvasRef.current) return;
+        // Draw deep cinematic gradient background with purple tint
+        const bgGrad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W);
+        bgGrad.addColorStop(0, '#1A102A');
+        bgGrad.addColorStop(1, '#050308');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, W, H);
 
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x02040a, 10, 60);
+        // Dot matrix overlay
+        ctx.fillStyle = "rgba(50, 20, 80, 0.1)";
+        for (let dx = 0; dx < W; dx += 64) {
+            for (let dy = 0; dy < H; dy += 64) {
+                ctx.fillRect(dx, dy, 2, 2);
+            }
+        }
 
-    const camera = new THREE.PerspectiveCamera(68, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 200);
-    camera.position.set(0, 0, 14);
-    camera.lookAt(0, 0, -30);
+        ctx.globalCompositeOperation = 'screen';
 
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      antialias: true,
-      alpha: true,
-    });
-    renderer.setPixelRatio(2);
-    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-    renderer.setClearColor(0x02040a, 1);
+        for (const stream of STREAMS_DATA) {
+            const yNorm = (stream.baseY + t * stream.cycles) % 1.0;
+            const yBase = yNorm * H;
 
-    const makeGrid = () => {
-      const g = new THREE.GridHelper(140, 70, 0x5ad8ff, 0x1b8cff);
-      const mat = g.material as THREE.LineBasicMaterial;
-      mat.transparent = true;
-      mat.opacity = 0.6;
-      g.rotation.x = Math.PI / 2;
-      g.position.y = 0;
-      return g;
-    };
+            renderStreamAt(ctx, stream, stream.x, yBase - H);
+            renderStreamAt(ctx, stream, stream.x, yBase);
+            renderStreamAt(ctx, stream, stream.x, yBase + H);
+            renderStreamAt(ctx, stream, stream.x, yBase + (H * 2));
+        }
+    }, [frame, fps]);
 
-    const gridA = makeGrid();
-    const gridB = makeGrid();
-    gridB.position.z = -140;
-    gridA.position.x = -6;
-    gridB.position.x = -6;
-    scene.add(gridA, gridB);
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(STAR_POSITIONS, 3));
-    const mat = new THREE.PointsMaterial({
-      color: 0xdfefff,
-      size: 0.4,
-      transparent: true,
-      opacity: 0.9,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    const stars = new THREE.Points(geo, mat);
-    scene.add(stars);
-
-    sceneRef.current = scene;
-    cameraRef.current = camera;
-    rendererRef.current = renderer;
-    gridARef.current = gridA;
-    gridBRef.current = gridB;
-    starsRef.current = stars;
-
-    return () => {
-      renderer.dispose();
-      geo.dispose();
-      mat.dispose();
-    };
-  }, []);
-
-  useEffect(() => {
-    const scene = sceneRef.current;
-    const camera = cameraRef.current;
-    const renderer = rendererRef.current;
-    const gridA = gridARef.current;
-    const gridB = gridBRef.current;
-    const stars = starsRef.current;
-
-    if (!scene || !camera || !renderer || !gridA || !gridB || !stars) return;
-
-    const elapsedTime = frame / fps;
-    const speed = 14;
-    const span = 140;
-
-    gridA.position.z = (elapsedTime * speed) % span;
-    gridB.position.z = ((elapsedTime * speed) % span) - span;
-
-    const starMat = stars.material as THREE.PointsMaterial;
-    starMat.opacity = 0.6 + 0.3 * Math.sin(elapsedTime * (Math.PI * 2 / 5));
-    stars.position.z = (elapsedTime * 4) % 40;
-
-    camera.position.y = Math.sin(elapsedTime * (Math.PI * 2 / 10)) * 0.4;
-    camera.position.x = Math.sin(elapsedTime * (Math.PI * 4 / 10)) * 0.5;
-    camera.lookAt(0, 0, -30);
-
-    renderer.render(scene, camera);
-  }, [frame, fps]);
-
-  const rightPanelX = interpolate(frame, [0, 30, 270, 300], [300, 0, 0, 300], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const rightPanelOpacity = interpolate(frame, [0, 30, 270, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
-  const diagLineOpacity = interpolate(frame, [0, 36, 264, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
-  const diagGlowOpacity = interpolate(frame, [0, 36, 264, 300], [0, 0.55, 0.55, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
-  const titleX = interpolate(frame, [0, 42, 258, 300], [120, 0, 0, 120], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const titleOpacity = interpolate(frame, [0, 42, 258, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
-  const titlePulse = Math.sin((frame / 300) * Math.PI * 2 * 3);
-  const titleGlow = interpolate(titlePulse, [-1, 1], [18, 32]);
-  const titleTextShadow = `0 0 ${titleGlow}px rgba(90, 216, 255, 1), 0 0 4px #fff`;
-
-  const playBtnBaseScale = interpolate(frame, [0, 48, 252, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const playBtnOpacity = interpolate(frame, [0, 48, 252, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const playPulse = Math.sin((frame / 300) * Math.PI * 2 * 6);
-  const playBtnScale = playBtnBaseScale * (1 + playPulse * 0.03);
-
-  const glowSpread = interpolate(playPulse, [-1, 1], [35, 65]);
-  const glowSpreadOuter = interpolate(playPulse, [-1, 1], [50, 90]);
-  const playBtnBoxShadow = `0 0 ${glowSpread}px ${CYAN}, 0 0 ${glowSpreadOuter}px rgba(25, 182, 255, 0.6), inset 0 0 25px rgba(0, 0, 0, 0.55)`;
-
-  const subscribeY = interpolate(frame, [0, 54, 246, 300], [50, 0, 0, 50], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const subscribeOpacity = interpolate(frame, [0, 54, 246, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const subPulse = Math.sin((frame / 300) * Math.PI * 2 * 5);
-  const subGlow1 = interpolate(subPulse, [-1, 1], [22, 40]);
-  const subGlow2 = interpolate(subPulse, [-1, 1], [16, 25]);
-  const subscribeBoxShadow = `0 0 ${subGlow1}px ${CYAN}, inset 0 0 ${subGlow2}px rgba(25, 182, 255, 0.5)`;
-
-  const ctaOpacity = interpolate(frame, [0, 60, 240, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const ctaPulse = Math.sin((frame / 300) * Math.PI * 2 * 4);
-  const ctaGlow = interpolate(ctaPulse, [-1, 1], [14, 28]);
-  const ctaTextShadow = `0 0 ${ctaGlow}px rgba(90, 216, 255, 1), 0 2px 5px rgba(0, 0, 0, 0.6)`;
-
-  const prevLabelX = interpolate(frame, [0, 45, 255, 300], [-60, 0, 0, -60], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const prevLabelOpacity = interpolate(frame, [0, 45, 255, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
-  const nextLabelY = interpolate(frame, [0, 50, 250, 300], [60, 0, 0, 60], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const nextLabelOpacity = interpolate(frame, [0, 50, 250, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
-  const cornersOpacity = interpolate(frame, [0, 55, 245, 300], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-
-  return (
-    <div
-      style={{
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        background: '#000',
-        fontFamily: '"Arial Black", Arial, sans-serif',
-      }}
-    >
-      <canvas
-        ref={canvasRef}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'block',
-          zIndex: 0,
-          width: '100%',
-          height: '100%',
-        }}
-      />
-
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          zIndex: 2,
-        }}
-      >
+    return (
         <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            clipPath: 'polygon(58% 0, 63% 0, 47% 100%, 42% 100%)',
-            background: 'linear-gradient(180deg, rgba(90,216,255,0.0), rgba(27,140,255,0.55))',
-            opacity: diagGlowOpacity,
-          }}
-        />
-
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            clipPath: 'polygon(58% 0, 100% 0, 100% 100%, 42% 100%)',
-            background: 'radial-gradient(ellipse at 75% 40%, #0a1424 0%, #02040a 70%, #000 100%)',
-            transform: `translateX(${rightPanelX}px)`,
-            opacity: rightPanelOpacity,
-          }}
-        />
-
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            clipPath: 'polygon(57.4% 0, 58.6% 0, 42.6% 100%, 41.4% 100%)',
-            background: 'linear-gradient(180deg, #5ad8ff, #1b8cff)',
-            boxShadow: `0 0 30px ${CYAN}`,
-            filter: 'blur(0.4px)',
-            opacity: diagLineOpacity,
-          }}
-        />
-
-        <div
-          style={{
-            position: 'absolute',
-            top: '18%',
-            left: '5%',
-            color: '#fff',
-            fontSize: 40,
-            letterSpacing: 2,
-            writingMode: 'vertical-rl',
-            transform: `rotate(180deg) translateX(${prevLabelX}px)`,
-            opacity: prevLabelOpacity,
-            textShadow: '0 0 12px rgba(25,182,255,0.6), 0 2px 5px rgba(0,0,0,0.6)',
-          }}
-        >
-          Previous Video
-        </div>
-
-        <div
-          style={{
-            position: 'absolute',
-            top: '14%',
-            left: '46%',
-            width: 90,
-            height: 220,
-            borderRight: `6px solid ${CYAN_BRIGHT}`,
-            borderTop: `6px solid ${CYAN_BRIGHT}`,
-            boxShadow: `0 0 18px ${CYAN}`,
-            filter: 'drop-shadow(0 0 6px ${CYAN})',
-            opacity: cornersOpacity,
-          }}
-        />
-
-        <div
-          style={{
-            position: 'absolute',
-            top: '48%',
-            left: '38%',
-            color: '#fff',
-            fontSize: 40,
-            letterSpacing: 2,
-            writingMode: 'vertical-rl',
-            transform: `rotate(180deg) translateY(${nextLabelY}px)`,
-            opacity: nextLabelOpacity,
-            textShadow: '0 0 12px rgba(90,216,255,0.7), 0 2px 5px rgba(0,0,0,0.6)',
-          }}
-        >
-          Next Video
-        </div>
-
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '30%',
-            width: 120,
-            height: 240,
-            borderLeft: `6px solid ${CYAN_BRIGHT}`,
-            borderBottom: `6px solid ${CYAN_BRIGHT}`,
-            boxShadow: `0 0 18px ${CYAN}`,
-            filter: `drop-shadow(0 0 6px ${CYAN})`,
-            opacity: cornersOpacity,
-          }}
-        />
-
-        <div
-          style={{
-            position: 'absolute',
-            top: '7%',
-            right: '4%',
-            textAlign: 'right',
-            lineHeight: 0.98,
-            transform: `translateX(${titleX}px)`,
-            opacity: titleOpacity,
-          }}
-        >
-          <h1
             style={{
-              margin: 0,
-              color: '#dff1ff',
-              fontSize: 58,
-              letterSpacing: 1,
-              textShadow: titleTextShadow,
+                width: ORIGINAL_WIDTH,
+                height: ORIGINAL_HEIGHT,
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+                transformOrigin: 'center center',
+                overflow: 'hidden',
+                backgroundColor: '#050308',
             }}
-          >
-            THANKS FOR<br />WATCHING
-          </h1>
-        </div>
-
-        <div
-          style={{
-            position: 'absolute',
-            top: '26%',
-            right: '12%',
-            width: 210,
-            height: 210,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle at 42% 38%, #8c9094 0%, #5c6064 55%, #3a3d40 100%)',
-            border: `7px solid ${CYAN}`,
-            boxShadow: playBtnBoxShadow,
-            opacity: playBtnOpacity,
-            transform: `scale(${playBtnScale})`,
-            transformOrigin: 'center center',
-          }}
         >
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '54%',
-              transform: 'translate(-50%, -50%)',
-              width: 0,
-              height: 0,
-              borderLeft: '38px solid rgba(255, 255, 255, 0.85)',
-              borderTop: '26px solid transparent',
-              borderBottom: '26px solid transparent',
-              filter: 'drop-shadow(0 0 6px rgba(25, 182, 255, 0.7))',
-            }}
-          />
+            <canvas
+                ref={canvasRef}
+                width={W}
+                height={H}
+                style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                }}
+            />
         </div>
-
-        <div
-          style={{
-            position: 'absolute',
-            top: '62%',
-            right: '13%',
-            padding: '20px 55px',
-            color: '#fff',
-            fontSize: 34,
-            letterSpacing: 2,
-            background: 'rgba(2, 8, 18, 0.35)',
-            border: `4px solid ${CYAN_BRIGHT}`,
-            borderRadius: 14,
-            boxShadow: subscribeBoxShadow,
-            textShadow: '0 0 10px rgba(25, 182, 255, 0.7)',
-            transform: `translateY(${subscribeY}px)`,
-            opacity: subscribeOpacity,
-          }}
-        >
-          SUBSCRIBE
-        </div>
-
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '5%',
-            right: '3%',
-            color: '#fff',
-            fontStyle: 'italic',
-            letterSpacing: 2,
-            fontSize: 34,
-            whiteSpace: 'nowrap',
-            textShadow: ctaTextShadow,
-            opacity: ctaOpacity,
-          }}
-        >
-          LIKE - COMMENT - SHARE
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
-export default SplitGridOutro;
+export default CyberDataStreamOverlay;
 // END_OF_FILE
