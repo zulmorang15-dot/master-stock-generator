@@ -1,258 +1,269 @@
-import React, { useRef, useEffect } from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import React, { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 
-// Define static dimensions for consistent fullscreen scale math
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-// Deterministic Wave Particles Pre-calculation
-const WAVE_COUNT = 3000;
-const WAVE_X_Z_PHASES = Array.from({ length: WAVE_COUNT }, (_, idx) => {
-    // Standard deterministic pseudo-random sequences
-    const x = (((idx * 17.31) % 40) - 20) * 5;
-    const z = (((idx * 29.73) % 40) - 20) * 5;
-    const phase = ((idx * 3.1415) % (Math.PI * 2));
-    return { x, z, phase };
-});
+const PARTICLE_COUNT = 2000;
 
-// Deterministic Dust Particles Pre-calculation
-const DUST_COUNT = 300;
-const DUST_POSITIONS = Array.from({ length: DUST_COUNT }, (_, idx) => {
-    const x = (((idx * 43.19) % 150) - 75);
-    const y = (((idx * 71.83) % 100) - 50);
-    const z = (((idx * 113.27) % 150) - 75);
+// Deterministic Pseudo-Random Generation
+const STATIC_PARTICLES = Array.from({ length: PARTICLE_COUNT }).map((_, i) => {
+    const r1 = Math.sin(i * 12.9898) * 43758.5453123;
+    const r2 = Math.sin(i * 78.233) * 43758.5453123;
+    const r3 = Math.sin(i * 99.123) * 43758.5453123;
+    const x = (r1 - Math.floor(r1) - 0.5) * 200;
+    const y = (r2 - Math.floor(r2) - 0.5) * 100;
+    const z = (r3 - Math.floor(r3) - 0.5) * 200;
     return { x, y, z };
 });
 
-const FuturisticEsportsEndScreen: React.FC = () => {
+const RING_ROTATIONS = Array.from({ length: 5 }).map((_, i) => {
+    const r1 = Math.sin(i * 45.12) * 1000;
+    const r2 = Math.cos(i * 89.23) * 1000;
+    return {
+        x: (r1 - Math.floor(r1)) * Math.PI,
+        y: (r2 - Math.floor(r2)) * Math.PI,
+    };
+});
+
+const STREAK_Y_OFFSETS = Array.from({ length: 100 }).map((_, i) => {
+    const r = Math.sin(i * 14.5) * 1000;
+    return (r - Math.floor(r) - 0.5) * 200;
+});
+
+export const CyberpunkEsportsEndscreen: React.FC = () => {
     const { width, height, fps } = useVideoConfig();
     const frame = useCurrentFrame();
 
+    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+
+    // Canvas & Three.js Refs
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-    const gridHelperRef = useRef<THREE.GridHelper | null>(null);
-    const waveMeshRef = useRef<THREE.Points | null>(null);
-    const backgroundCoreRef = useRef<THREE.Mesh | null>(null);
-    const outerCoreRef = useRef<THREE.Mesh | null>(null);
-    const dustSystemRef = useRef<THREE.Points | null>(null);
+    const gridRef = useRef<THREE.GridHelper | null>(null);
+    const gridMagentaRef = useRef<THREE.GridHelper | null>(null);
+    const ringsGroupRef = useRef<THREE.Group | null>(null);
+    const particlesRef = useRef<THREE.Points | null>(null);
+    const pointLightCyanRef = useRef<THREE.PointLight | null>(null);
+    const pointLightMagentaRef = useRef<THREE.PointLight | null>(null);
 
-    // Dynamic scale factor calculation for filling the rendering target canvas
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
-
-    // Initialize Three.js environment once on mount
+    // Three.js Scene Initialization
     useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
+        if (!canvasRef.current) return;
+        const currentCanvas = canvasRef.current;
         const scene = new THREE.Scene();
-        sceneRef.current = scene;
-        scene.fog = new THREE.FogExp2(0x010308, 0.003);
-
+        scene.fog = new THREE.FogExp2(0x01020a, 0.004);
+        
         const camera = new THREE.PerspectiveCamera(60, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 1000);
         camera.position.set(0, 15, 60);
-        cameraRef.current = camera;
+        camera.lookAt(0, 0, 0);
 
-        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        const renderer = new THREE.WebGLRenderer({ canvas: currentCanvas, antialias: true, alpha: true });
         renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-        renderer.setPixelRatio(1);
-        rendererRef.current = renderer;
+        renderer.setPixelRatio(2);
+        renderer.toneMapping = THREE.ReinhardToneMapping;
+        renderer.toneMappingExposure = 1.5;
 
-        // Animated Cyber Grid Floor
-        const gridHelper = new THREE.GridHelper(400, 100, 0x00ffff, 0x002266);
-        gridHelper.position.y = -15;
-        if (gridHelper.material instanceof THREE.Material) {
-            gridHelper.material.transparent = true;
-            gridHelper.material.opacity = 0.4;
-            gridHelper.material.blending = THREE.AdditiveBlending;
-        }
+        // Holographic Grid Floor
+        const gridHelper = new THREE.GridHelper(300, 100, 0x00ffff, 0x002244);
+        gridHelper.position.y = -20;
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.4;
         scene.add(gridHelper);
-        gridHelperRef.current = gridHelper;
 
-        // Wave Particle Grid Setup
-        const waveGeometry = new THREE.BufferGeometry();
-        const wavePositionsArr = new Float32Array(WAVE_COUNT * 3);
-        WAVE_X_Z_PHASES.forEach((p, idx) => {
-            wavePositionsArr[idx * 3] = p.x;
-            wavePositionsArr[idx * 3 + 1] = 0;
-            wavePositionsArr[idx * 3 + 2] = p.z;
-        });
-        waveGeometry.setAttribute('position', new THREE.BufferAttribute(wavePositionsArr, 3));
+        const gridHelperMagenta = new THREE.GridHelper(300, 30, 0xff00ff, 0x330033);
+        gridHelperMagenta.position.y = -20.1;
+        gridHelperMagenta.material.transparent = true;
+        gridHelperMagenta.material.opacity = 0.2;
+        scene.add(gridHelperMagenta);
 
-        const particleMat = new THREE.PointsMaterial({
-            color: 0x00aaff,
-            size: 0.6,
-            transparent: true,
-            opacity: 0.8,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-        });
-        const waveMesh = new THREE.Points(waveGeometry, particleMat);
-        waveMesh.position.y = -10;
-        scene.add(waveMesh);
-        waveMeshRef.current = waveMesh;
+        // Massive Rotating Background Rings
+        const ringsGroup = new THREE.Group();
+        const ringGeom = new THREE.TorusGeometry(40, 0.5, 16, 100);
+        const matCyan = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+        const matMagenta = new THREE.MeshBasicMaterial({ color: 0xff00ff });
 
-        // Cyber Center Core Spheres
-        const coreGeo = new THREE.SphereGeometry(8, 32, 32);
-        const coreMat = new THREE.MeshBasicMaterial({
-            color: 0x0055ff,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.15,
-            blending: THREE.AdditiveBlending,
-        });
-        const backgroundCore = new THREE.Mesh(coreGeo, coreMat);
-        scene.add(backgroundCore);
-        backgroundCoreRef.current = backgroundCore;
+        for (let i = 0; i < 5; i++) {
+            const ring = new THREE.Mesh(ringGeom, i % 2 === 0 ? matCyan : matMagenta);
+            ring.rotation.x = RING_ROTATIONS[i].x;
+            ring.rotation.y = RING_ROTATIONS[i].y;
+            ring.scale.setScalar(1 + (i * 0.5));
+            ring.position.z = -50 - (i * 20);
+            ringsGroup.add(ring);
+        }
+        scene.add(ringsGroup);
 
-        const outerCoreGeo = new THREE.IcosahedronGeometry(14, 1);
-        const outerCoreMat = new THREE.MeshBasicMaterial({
-            color: 0x00ffff,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.1,
-            blending: THREE.AdditiveBlending,
-        });
-        const outerCore = new THREE.Mesh(outerCoreGeo, outerCoreMat);
-        scene.add(outerCore);
-        outerCoreRef.current = outerCore;
-
-        // Holographic Floating Dust
-        const dustGeo = new THREE.BufferGeometry();
-        const dustPositionsArr = new Float32Array(DUST_COUNT * 3);
-        DUST_POSITIONS.forEach((p, idx) => {
-            dustPositionsArr[idx * 3] = p.x;
-            dustPositionsArr[idx * 3 + 1] = p.y;
-            dustPositionsArr[idx * 3 + 2] = p.z;
-        });
-        dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositionsArr, 3));
-
-        const dustMat = new THREE.PointsMaterial({
+        // Volumetric Particles
+        const particleGeometry = new THREE.BufferGeometry();
+        const particlePositions = new Float32Array(PARTICLE_COUNT * 3);
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            particlePositions[i * 3] = STATIC_PARTICLES[i].x;
+            particlePositions[i * 3 + 1] = STATIC_PARTICLES[i].y;
+            particlePositions[i * 3 + 2] = STATIC_PARTICLES[i].z;
+        }
+        particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        const particleMaterial = new THREE.PointsMaterial({
             color: 0x00ffff,
             size: 0.8,
             transparent: true,
-            opacity: 0.6,
-            blending: THREE.AdditiveBlending,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
         });
-        const dustSystem = new THREE.Points(dustGeo, dustMat);
-        scene.add(dustSystem);
-        dustSystemRef.current = dustSystem;
+        const particles = new THREE.Points(particleGeometry, particleMaterial);
+        scene.add(particles);
+
+        // Ambient & Point Lights
+        const ambientLight = new THREE.AmbientLight(0x010210);
+        scene.add(ambientLight);
+
+        const pointLightCyan = new THREE.PointLight(0x00ffff, 5, 200);
+        pointLightCyan.position.set(-50, 20, 0);
+        scene.add(pointLightCyan);
+
+        const pointLightMagenta = new THREE.PointLight(0xff00ff, 5, 200);
+        pointLightMagenta.position.set(50, -20, -20);
+        scene.add(pointLightMagenta);
+
+        // Store instances
+        sceneRef.current = scene;
+        cameraRef.current = camera;
+        rendererRef.current = renderer;
+        gridRef.current = gridHelper;
+        gridMagentaRef.current = gridHelperMagenta;
+        ringsGroupRef.current = ringsGroup;
+        particlesRef.current = particles;
+        pointLightCyanRef.current = pointLightCyan;
+        pointLightMagentaRef.current = pointLightMagenta;
+
+        renderer.render(scene, camera);
 
         return () => {
             renderer.dispose();
-            gridHelper.geometry.dispose();
-            if (Array.isArray(gridHelper.material)) {
-                gridHelper.material.forEach((m) => m.dispose());
-            } else {
-                gridHelper.material.dispose();
-            }
-            waveGeometry.dispose();
-            particleMat.dispose();
-            coreGeo.dispose();
-            coreMat.dispose();
-            outerCoreGeo.dispose();
-            outerCoreMat.dispose();
-            dustGeo.dispose();
-            dustMat.dispose();
+            ringGeom.dispose();
+            matCyan.dispose();
+            matMagenta.dispose();
+            particleGeometry.dispose();
+            particleMaterial.dispose();
         };
     }, []);
 
-    // Deterministic Frame Render Effect (Ensures frame-locking, eliminates drift and jitter)
+    // Frame-Locked Render Effect
     useEffect(() => {
         const scene = sceneRef.current;
         const camera = cameraRef.current;
         const renderer = rendererRef.current;
-        const backgroundCore = backgroundCoreRef.current;
-        const outerCore = outerCoreRef.current;
-        const waveMesh = waveMeshRef.current;
-        const gridHelper = gridHelperRef.current;
-        const dustSystem = dustSystemRef.current;
+        const gridHelper = gridRef.current;
+        const gridHelperMagenta = gridMagentaRef.current;
+        const ringsGroup = ringsGroupRef.current;
+        const particles = particlesRef.current;
+        const pointLightCyan = pointLightCyanRef.current;
+        const pointLightMagenta = pointLightMagentaRef.current;
 
-        if (!scene || !camera || !renderer || !backgroundCore || !outerCore || !waveMesh || !gridHelper || !dustSystem) {
-            return;
-        }
+        if (!scene || !camera || !renderer) return;
 
         const elapsedTime = frame / fps;
 
-        // Loop aligned rotations
-        backgroundCore.rotation.y = elapsedTime * 0.2;
-        backgroundCore.rotation.x = elapsedTime * 0.1;
+        // Camera floating loop
+        camera.position.x = Math.sin(elapsedTime * 0.3) * 10;
+        camera.position.y = 15 + Math.cos(elapsedTime * 0.4) * 5;
+        camera.lookAt(0, 0, 0);
 
-        outerCore.rotation.y = -elapsedTime * 0.15;
-        outerCore.rotation.z = elapsedTime * 0.1;
-
-        // Dynamic 3D Camera Loop Pathing (20 seconds precise duration)
-        const cycleRatio = (frame / (fps * 20)) * Math.PI * 2;
-        camera.position.x = Math.sin(cycleRatio) * 5;
-        camera.position.y = 15 + Math.cos(cycleRatio) * 3;
-        camera.position.z = 60;
-        camera.rotation.z = Math.sin(cycleRatio) * 0.02;
-        camera.rotation.x = -0.05 + Math.cos(cycleRatio) * 0.02;
-
-        // Wave heights calculations matching standard CSS/JS deterministic curves
-        const positions = waveMesh.geometry.attributes.position.array as Float32Array;
-        const tWave1 = (frame / (fps * 20)) * Math.PI * 2 * 30;
-        const tWave2 = (frame / (fps * 20)) * Math.PI * 2 * 15;
-
-        for (let i = 0; i < WAVE_COUNT; i++) {
-            const x = WAVE_X_Z_PHASES[i].x;
-            const z = WAVE_X_Z_PHASES[i].z;
-            positions[i * 3 + 1] = Math.sin(x * 0.05 + tWave1) * 4 + Math.cos(z * 0.05 + tWave2) * 4;
+        // Seamless Grid Loop
+        if (gridHelper) {
+            gridHelper.position.z = (elapsedTime * 15) % 6;
         }
-        waveMesh.geometry.attributes.position.needsUpdate = true;
+        if (gridHelperMagenta) {
+            gridHelperMagenta.position.z = (elapsedTime * 15) % 30;
+        }
 
-        // Move Grid Forward continuously (seamlessly loops step size)
-        const gridStep = 4;
-        gridHelper.position.z = (elapsedTime * 5) % gridStep;
+        // Seamless Ring Rotation (Multiples of 2PI over 20s)
+        if (ringsGroup) {
+            ringsGroup.rotation.z = elapsedTime * (Math.PI * 2 / 20);
+            ringsGroup.rotation.y = elapsedTime * (Math.PI * 2 / 20);
+            ringsGroup.children.forEach((ring, index) => {
+                ring.rotation.x = RING_ROTATIONS[index].x + elapsedTime * (Math.PI * 4 / 20) * (index % 2 === 0 ? 1 : -1);
+            });
+        }
 
-        // Dust Slow Rotation
-        const dustAngle = (frame / (fps * 20)) * Math.PI * 2 * 2;
-        dustSystem.rotation.y = dustAngle;
+        // Seamless Particles Loop (wraps over 200 units span smoothly in 20s)
+        if (particles) {
+            const positions = particles.geometry.attributes.position.array as Float32Array;
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const initialZ = STATIC_PARTICLES[i].z;
+                positions[i * 3 + 2] = -120 + ((initialZ + 120 + elapsedTime * 10) % 200);
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+        }
+
+        // Seamless Point Light Intensities
+        if (pointLightCyan) {
+            pointLightCyan.intensity = 5 + Math.sin(elapsedTime * Math.PI * 2 / 5) * 2;
+        }
+        if (pointLightMagenta) {
+            pointLightMagenta.intensity = 5 + Math.cos(elapsedTime * Math.PI * 2 / 4) * 2;
+        }
 
         renderer.render(scene, camera);
     }, [frame, fps]);
 
-    // Precise UI Timings (Driven natively via Remotion interpolation)
-    const scanFrameLeft = frame % (fps * 4);
-    const scanFrameRight = (frame + fps * 2) % (fps * 4);
-    const scanYLeft = interpolate(scanFrameLeft, [0, fps * 4], [-100, 100]);
-    const scanYRight = interpolate(scanFrameRight, [0, fps * 4], [-100, 100]);
+    // UI Frame-Locked Animations
+    // 1. Scanning Line Translation
+    const scanlineY = interpolate(frame % (fps * 4), [0, fps * 4], [-100, 438], { easing: Easing.linear });
 
-    const sweepFrameLeft = frame % (fps * 6);
-    const sweepFrameRight = (frame + fps * 3) % (fps * 6);
-    const sweepXLeft = interpolate(sweepFrameLeft, [0, fps * 1.2, fps * 6], [-100, 200, 200], { easing: Easing.bezier(0.19, 1, 0.22, 1) });
-    const sweepXRight = interpolate(sweepFrameRight, [0, fps * 1.2, fps * 6], [-100, 200, 200], { easing: Easing.bezier(0.19, 1, 0.22, 1) });
+    // 2. High Frequency Hologram Border Pulse (Cyberpunk flicker effect)
+    const basePulse = interpolate(frame % 30, [0, 15, 30], [0.4, 0.8, 0.4], { easing: Easing.sin });
+    const flickerNoise = Math.sin(frame * 1.5) * 0.15 + Math.cos(frame * 0.7) * 0.1;
+    const computedGlow = Math.max(0.3, Math.min(1.0, basePulse + flickerNoise));
+    const activeGlowBoxShadow = `0 0 ${30 + computedGlow * 40}px rgba(0, 255, 255, ${computedGlow}), inset 0 0 ${40 + computedGlow * 40}px rgba(0, 255, 255, ${computedGlow * 0.5})`;
 
-    const outerRot = interpolate(frame % (fps * 12), [0, fps * 12], [0, 360]);
-    const innerRot = interpolate(frame % (fps * 8), [0, fps * 8], [360, 0]);
-    const dashedRot = interpolate(frame % (fps * 20), [0, fps * 20], [0, 360]);
+    // 3. Reactor Ring Rotations
+    const ringOuterRotation = (frame / (fps * 8)) * 360;
+    const ringInnerRotation = (frame / (fps * 12)) * -360;
 
-    const crosshairPulse = frame % (fps * 2);
-    const crosshairScale = interpolate(crosshairPulse, [0, fps * 1, fps * 2], [1.0, 1.2, 1.0], { easing: Easing.inOut(Easing.quad) });
-    const crosshairOpacity = interpolate(crosshairPulse, [0, fps * 1, fps * 2], [0.5, 0.4, 0.5], { easing: Easing.inOut(Easing.quad) });
+    // 4. Central Hologram Core Pulses
+    const coreGlowScale = interpolate(Math.sin((frame / (fps * 2)) * Math.PI * 2), [-1, 1], [0.9, 1.1]);
+    const coreGlowBrightness = interpolate(Math.sin((frame / (fps * 2)) * Math.PI * 2), [-1, 1], [1, 1.5]);
 
-    const hoverLeftY = interpolate(frame % (fps * 6), [0, fps * 3, fps * 6], [-8, 8, -8], { easing: Easing.inOut(Easing.quad) });
-    const hoverRightY = interpolate((frame + fps * 3) % (fps * 6), [0, fps * 3, fps * 6], [-8, 8, -8], { easing: Easing.inOut(Easing.quad) });
+    // 5. Target Scaling Ease Loop
+    const coreTargetScale = interpolate(frame % fps, [0, fps], [0, 3], { easing: Easing.out(Easing.quad) });
+    const coreTargetOpacity = interpolate(frame % fps, [0, fps], [1, 0], { easing: Easing.out(Easing.quad) });
 
-    const subPulseFrame = frame % (fps * 4);
-    const subPulseScale = interpolate(subPulseFrame, [0, fps * 2, fps * 4], [1.0, 1.04, 1.0], { easing: Easing.inOut(Easing.quad) });
+    // 6. Streaks Seamless Cycles
+    // Cycle 1 (2.0s loop)
+    const cycle1 = (frame / (fps * 2.0)) % 1;
+    const streak1X = interpolate(cycle1, [0, 0.75], [-600, ORIGINAL_WIDTH + 1000], { extrapolateRight: "clamp" });
+    const streak1Opacity = interpolate(cycle1, [0, 0.1, 0.65, 0.75], [0, 1, 1, 0], { extrapolateRight: "clamp" });
+    const streak1Y = STREAK_Y_OFFSETS[Math.floor(frame / (fps * 2.0)) % STREAK_Y_OFFSETS.length];
 
-    // CSS styling presets re-engineered into safe inline Javascript camelCased styles
-    const containerStyle: React.CSSProperties = {
+    // Cycle 2 (2.5s loop)
+    const cycle2 = (frame / (fps * 2.5)) % 1;
+    const streak2X = interpolate(cycle2, [0, 0.8], [-800, ORIGINAL_WIDTH + 1000], { extrapolateRight: "clamp" });
+    const streak2Opacity = interpolate(cycle2, [0, 0.1, 0.7, 0.8], [0, 1, 1, 0], { extrapolateRight: "clamp" });
+    const streak2Y = STREAK_Y_OFFSETS[(Math.floor(frame / (fps * 2.5)) + 12) % STREAK_Y_OFFSETS.length];
+
+    // Cycle 3 (1.25s loop)
+    const cycle3 = (frame / (fps * 1.25)) % 1;
+    const streak3X = interpolate(cycle3, [0, 0.8], [-500, ORIGINAL_WIDTH + 1000], { extrapolateRight: "clamp" });
+    const streak3Opacity = interpolate(cycle3, [0, 0.1, 0.7, 0.8], [0, 1, 1, 0], { extrapolateRight: "clamp" });
+    const streak3Y = STREAK_Y_OFFSETS[(Math.floor(frame / (fps * 1.25)) + 37) % STREAK_Y_OFFSETS.length];
+
+    // Styles objects to satisfy camelCase criteria
+    const appContainerStyle: React.CSSProperties = {
         position: 'absolute',
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        background: 'radial-gradient(circle at center, #020b1f 0%, #010308 100%)',
         top: '50%',
         left: '50%',
         transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+        background: 'radial-gradient(circle at center, #020412 0%, #000000 100%)',
     };
 
-    const canvasStyle: React.CSSProperties = {
+    const webglCanvasStyle: React.CSSProperties = {
         position: 'absolute',
         top: 0,
         left: 0,
@@ -267,212 +278,188 @@ const FuturisticEsportsEndScreen: React.FC = () => {
         left: 0,
         width: '100%',
         height: '100%',
-        zIndex: 2,
+        zIndex: 10,
         pointerEvents: 'none',
     };
 
-    const getPlaceholderStyle = (isLeft: boolean, hoverY: number): React.CSSProperties => ({
+    const placeholderStyle = (isLeft: boolean): React.CSSProperties => ({
         position: 'absolute',
-        width: 580,
-        height: 326,
-        top: 377 + hoverY,
-        background: 'rgba(0, 15, 30, 0.4)',
-        border: '2px solid rgba(0, 255, 255, 0.3)',
-        boxShadow: '0 0 30px rgba(0, 255, 255, 0.1), inset 0 0 40px rgba(0, 85, 255, 0.2)',
+        width: 600,
+        height: 338,
+        top: 371,
+        left: isLeft ? 100 : undefined,
+        right: !isLeft ? 100 : undefined,
+        background: 'rgba(1, 4, 15, 0.7)',
+        border: '3px solid #00ffff',
+        boxShadow: activeGlowBoxShadow,
         backdropFilter: 'blur(8px)',
         overflow: 'hidden',
-        left: isLeft ? 140 : undefined,
-        right: !isLeft ? 140 : undefined,
     });
 
-    const cornerBaseStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: 40,
-        height: 40,
-        borderColor: '#00ffff',
-        borderStyle: 'solid',
-        borderWidth: 0,
-        boxShadow: '0 0 20px rgba(0, 255, 255, 0.8)',
-        zIndex: 3,
-    };
-
-    const tlStyle: React.CSSProperties = { ...cornerBaseStyle, top: -2, left: -2, borderTopWidth: 4, borderLeftWidth: 4 };
-    const trStyle: React.CSSProperties = { ...cornerBaseStyle, top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4 };
-    const blStyle: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4 };
-    const brStyle: React.CSSProperties = { ...cornerBaseStyle, bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4 };
-
-    const scanlineStyle = (yPercent: number): React.CSSProperties => ({
+    const gridPatternStyle: React.CSSProperties = {
         position: 'absolute',
         top: 0,
         left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundImage: `linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.1) 1px, transparent 1px)`,
+        backgroundSize: '20px 20px',
+        zIndex: 0,
+    };
+
+    const scanlineStyle: React.CSSProperties = {
+        position: 'absolute',
         width: '100%',
-        height: '100%',
-        background: 'linear-gradient(to bottom, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.1) 50%, rgba(0, 255, 255, 0) 100%)',
-        transform: `translateY(${yPercent}%)`,
-    });
+        height: 100,
+        background: 'linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.4), transparent)',
+        top: -100,
+        zIndex: 1,
+        transform: `translateY(${scanlineY}px)`,
+    };
 
-    const sweepStyle = (leftPercent: number): React.CSSProperties => ({
-        position: 'absolute',
-        top: 0,
-        left: `${leftPercent}%`,
-        width: '50%',
-        height: '100%',
-        background: 'linear-gradient(to right, rgba(0, 255, 255, 0) 0%, rgba(0, 255, 255, 0.3) 50%, rgba(0, 255, 255, 0) 100%)',
-        transform: 'skewX(-25deg)',
-    });
+    const cornerStyle = (position: 'tl' | 'tr' | 'bl' | 'br'): React.CSSProperties => {
+        const base: React.CSSProperties = {
+            position: 'absolute',
+            width: 40,
+            height: 40,
+            border: '4px solid #fff',
+            boxShadow: '0 0 15px #00ffff, 0 0 30px #00ffff',
+            zIndex: 2,
+        };
+        if (position === 'tl') return { ...base, top: -4, left: -4, borderRight: 'none', borderBottom: 'none' };
+        if (position === 'tr') return { ...base, top: -4, right: -4, borderLeft: 'none', borderBottom: 'none' };
+        if (position === 'bl') return { ...base, bottom: -4, left: -4, borderRight: 'none', borderTop: 'none' };
+        return { ...base, bottom: -4, right: -4, borderLeft: 'none', borderTop: 'none' };
+    };
 
-    const subscribeCenterStyle = (pulseScale: number): React.CSSProperties => ({
+    const subscribePortalStyle: React.CSSProperties = {
         position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${pulseScale})`,
-        width: 340,
-        height: 340,
+        width: 360,
+        height: 360,
+        left: 780,
+        top: 360,
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-    });
-
-    const hologramRingBaseStyle: React.CSSProperties = {
-        position: 'absolute',
         borderRadius: '50%',
-        border: '2px solid transparent',
     };
 
-    const ringOuterStyle = (rot: number): React.CSSProperties => ({
-        ...hologramRingBaseStyle,
-        width: 340,
-        height: 340,
-        borderTop: '4px solid #00ffff',
-        borderBottom: '4px solid #0055ff',
-        boxShadow: '0 0 40px rgba(0, 255, 255, 0.3)',
-        transform: `rotate(${rot}deg)`,
-    });
-
-    const ringInnerStyle = (rot: number): React.CSSProperties => ({
-        ...hologramRingBaseStyle,
-        width: 280,
-        height: 280,
-        borderLeft: '3px solid #0055ff',
-        borderRight: '3px solid #00ffff',
-        transform: `rotate(${rot}deg)`,
-    });
-
-    const ringDashedStyle = (rot: number): React.CSSProperties => ({
-        ...hologramRingBaseStyle,
-        width: 310,
-        height: 310,
-        border: '2px dashed rgba(0, 255, 255, 0.5)',
-        transform: `rotate(${rot}deg)`,
-    });
-
-    const subscribeCoreStyle: React.CSSProperties = {
-        width: 220,
-        height: 220,
-        borderRadius: '50%',
-        background: 'rgba(0, 20, 40, 0.6)',
-        border: '4px solid #00ffff',
-        boxShadow: '0 0 50px rgba(0, 255, 255, 0.5), inset 0 0 40px rgba(0, 85, 255, 0.5)',
-        backdropFilter: 'blur(12px)',
-        position: 'relative',
-        zIndex: 10,
-    };
-
-    const hudLineStyle = (custom: React.CSSProperties): React.CSSProperties => ({
+    const ringOuterStyle: React.CSSProperties = {
         position: 'absolute',
-        background: '#00ffff',
-        opacity: 0.2,
-        boxShadow: '0 0 10px #00ffff',
-        ...custom,
-    });
-
-    const hudCrosshairStyle = (custom: React.CSSProperties, scale: number, opacity: number): React.CSSProperties => ({
-        position: 'absolute',
-        width: 20,
-        height: 20,
-        transform: `scale(${scale})`,
-        opacity,
-        ...custom,
-    });
-
-    const crosshairHorizontal: React.CSSProperties = {
-        position: 'absolute',
-        top: '50%',
-        left: 0,
         width: '100%',
-        height: 2,
-        background: '#0055ff',
-        transform: 'translateY(-50%)',
+        height: '100%',
+        borderRadius: '50%',
+        border: '4px solid transparent',
+        borderTop: '4px solid #00ffff',
+        borderBottom: '4px solid #00ffff',
+        boxShadow: '0 0 30px #00ffff, inset 0 0 20px #00ffff',
+        transform: `rotate(${ringOuterRotation}deg)`,
     };
 
-    const crosshairVertical: React.CSSProperties = {
+    const ringInnerStyle: React.CSSProperties = {
         position: 'absolute',
-        top: 0,
-        left: '50%',
-        width: 2,
+        width: '80%',
+        height: '80%',
+        borderRadius: '50%',
+        border: '4px dashed #ff00ff',
+        boxShadow: '0 0 40px #ff00ff, inset 0 0 20px #ff00ff',
+        transform: `rotate(${ringInnerRotation}deg)`,
+    };
+
+    const coreGlowStyle: React.CSSProperties = {
+        position: 'absolute',
+        width: '45%',
+        height: '45%',
+        borderRadius: '50%',
+        background: 'radial-gradient(circle at center, #ffffff 0%, #00ffff 40%, transparent 70%)',
+        boxShadow: '0 0 80px #00ffff, 0 0 120px #00ffff',
+        transform: `scale(${coreGlowScale})`,
+        filter: `brightness(${coreGlowBrightness})`,
+    };
+
+    const coreTargetStyle: React.CSSProperties = {
+        position: 'absolute',
+        width: '25%',
+        height: '25%',
+        borderRadius: '50%',
+        border: '6px solid #fff',
+        boxShadow: '0 0 20px #fff',
+        transform: `scale(${coreTargetScale})`,
+        opacity: coreTargetOpacity,
+    };
+
+    const lightStreakStyle = (y: number, x: number, opacity: number, widthVal: number, isMagenta: boolean): React.CSSProperties => ({
+        position: 'absolute',
+        height: 2,
+        width: widthVal,
+        background: isMagenta 
+            ? 'linear-gradient(90deg, transparent, #ff00ff, #ffffff)'
+            : 'linear-gradient(90deg, transparent, #00ffff, #ffffff)',
+        boxShadow: isMagenta
+            ? '0 0 20px #ff00ff, 0 0 40px #ff00ff'
+            : '0 0 20px #00ffff, 0 0 40px #00ffff',
+        borderRadius: '50%',
+        top: y,
+        left: 0,
+        transform: `translateX(${x}px)`,
+        zIndex: 5,
+        opacity,
+        mixBlendMode: 'screen',
+    });
+
+    const vignetteStyle: React.CSSProperties = {
+        position: 'absolute',
+        width: '100%',
         height: '100%',
-        background: '#0055ff',
-        transform: 'translateX(-50%)',
+        boxShadow: 'inset 0 0 250px rgba(0, 0, 0, 0.9)',
+        zIndex: 20,
+        pointerEvents: 'none',
     };
 
     return (
-        <div style={containerStyle}>
-            <canvas ref={canvasRef} style={canvasStyle} />
-
+        <div style={appContainerStyle}>
+            <canvas ref={canvasRef} style={webglCanvasStyle} />
+            
             <div style={uiLayerStyle}>
-                {/* Horizontal HUD Guide Lines */}
-                <div style={hudLineStyle({ top: '150px', left: 0, width: '100%', height: '1px' })} />
-                <div style={hudLineStyle({ bottom: '150px', left: 0, width: '100%', height: '1px' })} />
-
-                {/* HUD Corners Crosshairs */}
-                <div style={hudCrosshairStyle({ top: '140px', left: '140px' }, crosshairScale, crosshairOpacity)}>
-                    <div style={crosshairHorizontal} />
-                    <div style={crosshairVertical} />
-                </div>
-                <div style={hudCrosshairStyle({ top: '140px', right: '140px' }, crosshairScale, crosshairOpacity)}>
-                    <div style={crosshairHorizontal} />
-                    <div style={crosshairVertical} />
-                </div>
-                <div style={hudCrosshairStyle({ bottom: '140px', left: '140px' }, crosshairScale, crosshairOpacity)}>
-                    <div style={crosshairHorizontal} />
-                    <div style={crosshairVertical} />
-                </div>
-                <div style={hudCrosshairStyle({ bottom: '140px', right: '140px' }, crosshairScale, crosshairOpacity)}>
-                    <div style={crosshairHorizontal} />
-                    <div style={crosshairVertical} />
+                
+                {/* Left Video Box */}
+                <div style={placeholderStyle(true)}>
+                    <div style={gridPatternStyle} />
+                    <div style={cornerStyle('tl')} />
+                    <div style={cornerStyle('tr')} />
+                    <div style={cornerStyle('bl')} />
+                    <div style={cornerStyle('br')} />
+                    <div style={scanlineStyle} />
                 </div>
 
-                {/* Left Placement Window */}
-                <div style={getPlaceholderStyle(true, hoverLeftY)}>
-                    <div style={tlStyle} />
-                    <div style={trStyle} />
-                    <div style={blStyle} />
-                    <div style={brStyle} />
-                    <div style={scanlineStyle(scanYLeft)} />
-                    <div style={sweepStyle(sweepXLeft)} />
+                {/* Right Video Box */}
+                <div style={placeholderStyle(false)}>
+                    <div style={gridPatternStyle} />
+                    <div style={cornerStyle('tl')} />
+                    <div style={cornerStyle('tr')} />
+                    <div style={cornerStyle('bl')} />
+                    <div style={cornerStyle('br')} />
+                    <div style={scanlineStyle} />
                 </div>
 
-                {/* Right Placement Window */}
-                <div style={getPlaceholderStyle(false, hoverRightY)}>
-                    <div style={tlStyle} />
-                    <div style={trStyle} />
-                    <div style={blStyle} />
-                    <div style={brStyle} />
-                    <div style={scanlineStyle(scanYRight)} />
-                    <div style={sweepStyle(sweepXRight)} />
+                {/* Central Subscriber Hub */}
+                <div style={subscribePortalStyle}>
+                    <div style={ringOuterStyle} />
+                    <div style={ringInnerStyle} />
+                    <div style={coreGlowStyle} />
+                    <div style={coreTargetStyle} />
                 </div>
 
-                {/* Centered Futuristic Interactive Hub */}
-                <div style={subscribeCenterStyle(subPulseScale)}>
-                    <div style={ringOuterStyle(outerRot)} />
-                    <div style={ringDashedStyle(dashedRot)} />
-                    <div style={ringInnerStyle(innerRot)} />
-                    <div style={subscribeCoreStyle} />
-                </div>
+                {/* Cyber VFX Sparks / Light Streaks */}
+                <div style={lightStreakStyle(250 + streak1Y, streak1X, streak1Opacity, 600, false)} />
+                <div style={lightStreakStyle(850 + streak2Y, streak2X, streak2Opacity, 800, true)} />
+                <div style={lightStreakStyle(450 + streak3Y, streak3X, streak3Opacity, 500, false)} />
             </div>
+
+            <div style={vignetteStyle} />
         </div>
     );
 };
 
-export default FuturisticEsportsEndScreen;
+export default CyberpunkEsportsEndscreen;
 // END_OF_FILE
