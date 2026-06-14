@@ -2498,6 +2498,20 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
       throw new Error('TSX yang dihasilkan tidak valid (bracket tidak balance atau tidak ada export default). Batalkan.');
     }
 
+    // --- AUTOMATED TSX COMPILATION CHECK ---
+    addTaskLog(itemId, "Melakukan pemeriksaan kompilasi TSX lokal menggunakan TypeScript compiler...", "info");
+    fs.writeFileSync("src/Composition.tsx", tsxCode);
+    try {
+      execSync("npx tsc --noEmit --noUnusedLocals false --noUnusedParameters false", { stdio: "pipe" });
+      addTaskLog(itemId, "✅ Pemeriksaan kompilasi sukses! Kode valid.", "success");
+    } catch (tscErr) {
+      const errMsg = tscErr.stdout ? tscErr.stdout.toString() : tscErr.message;
+      console.error("TypeScript compilation failed:\n", errMsg);
+      const formattedErrors = errMsg.split('\n').filter(line => line.includes('error TS')).slice(0, 5).join('\n');
+      throw new Error(`TypeScript compilation failed:\n${formattedErrors || errMsg.substring(0, 200)}`);
+    }
+    // --- END OF AUTOMATED TSX COMPILATION CHECK ---
+
     item.promptCode = tsxCode;
     saveOrUpdateItem(item);
 
@@ -3012,7 +3026,14 @@ async function runPreviewRenderBackground(itemId) {
     addTaskLog(itemId, "Mengantrekan operasi Git Push untuk sinkronisasi kode ke GitHub...", "info");
     
     await runGitTask(async () => {
-      addTaskLog(itemId, "Mulai menulis src/Composition.tsx dan git push...", "info");
+      addTaskLog(itemId, "Sinkronisasi repository dari GitHub...", "info");
+      try {
+        execSync("git pull origin main --rebase", { stdio: "inherit" });
+      } catch (pullErr) {
+        console.error("Gagal melakukan git pull:", pullErr.message);
+      }
+
+      addTaskLog(itemId, "Mulai menulis src/Composition.tsx...", "info");
       fs.writeFileSync("src/Composition.tsx", item.promptCode);
 
       execSync("git add src/Composition.tsx", { stdio: "inherit" });
@@ -3035,6 +3056,7 @@ async function runPreviewRenderBackground(itemId) {
         {
           ref: "main",
           inputs: {
+            commit_sha: sha,
             composition_id: itemId,
             duration_frames: String(item.durationInFrames || 300),
             fps: String(item.fps || 30),
@@ -3157,6 +3179,20 @@ async function comparePngs(path1, path2) {
             }
           }
 
+          const isImageBlank = (data) => {
+            const firstR = data[0];
+            const firstG = data[1];
+            const firstB = data[2];
+            const firstA = data[3];
+            for (let i = 0; i < data.length; i += 4) {
+              if (data[i] !== firstR || data[i+1] !== firstG || data[i+2] !== firstB || data[i+3] !== firstA) {
+                return false;
+              }
+            }
+            return true;
+          };
+
+          const isBlank = isImageBlank(data1) && isImageBlank(data2);
           const percentDiff = (diffPixels / totalPixels) * 100;
           const avgPercentDiff = (totalDiff / (totalPixels * 255)) * 100;
           const similarity = 100 - avgPercentDiff;
@@ -3164,7 +3200,8 @@ async function comparePngs(path1, path2) {
           resolve({
             similarity: Number(similarity.toFixed(2)),
             percentDiff: Number(percentDiff.toFixed(2)),
-            seamless: similarity >= 85 && percentDiff <= 15
+            seamless: similarity >= 85 && percentDiff <= 15,
+            blank: isBlank
           });
         }).catch(reject);
       });
@@ -3210,6 +3247,13 @@ async function run4kRenderBackground(itemId) {
 
   try {
     await runGitTask(async () => {
+      addTaskLog(itemId, "Sinkronisasi repository dari GitHub...", "info");
+      try {
+        execSync("git pull origin main --rebase", { stdio: "inherit" });
+      } catch (pullErr) {
+        console.error("Gagal melakukan git pull:", pullErr.message);
+      }
+
       addTaskLog(itemId, "Mulai menulis src/Composition.tsx...", "info");
       fs.writeFileSync("src/Composition.tsx", item.promptCode);
 
@@ -3245,7 +3289,9 @@ async function run4kRenderBackground(itemId) {
           addTaskLog(itemId, "QC Loop: Membandingkan kemiripan visual frame pertama dan terakhir...", "info");
           const qcResult = await comparePngs(frame0Path, frameLastPath);
           if (qcResult) {
-            if (qcResult.similarity >= 85) {
+            if (qcResult.blank) {
+              addTaskLog(itemId, `⚠️ QC Loop Warning: Gagal memvalidasi loop karena render frame kosong (kemungkinan kendala WebGL headless pada host).`, "warning");
+            } else if (qcResult.similarity >= 85) {
               addTaskLog(itemId, `✅ QC Loop Sukses: Kemiripan visual frame pertama dan terakhir ${qcResult.similarity}%. Loop terdeteksi mulus/seamless.`, "success");
             } else {
               addTaskLog(itemId, `⚠️ QC Loop Warning: Kemiripan visual frame pertama dan terakhir hanya ${qcResult.similarity}%. Loop mungkin tidak seamless.`, "warning");
@@ -3288,6 +3334,7 @@ async function run4kRenderBackground(itemId) {
         {
           ref: "main",
           inputs: {
+            commit_sha: sha,
             composition_id: itemId,
             duration_frames: String(item.durationInFrames || 300),
             fps: String(item.fps || 30),

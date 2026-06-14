@@ -3,6 +3,10 @@ name: Render 4K ProRes MOV
 on:
   workflow_dispatch:
     inputs:
+      commit_sha:
+        description: 'Git commit SHA containing the composition version to build'
+        required: true
+        type: string
       composition_id:
         description: 'Remotion composition ID (e.g. my_animation_001)'
         required: true
@@ -42,6 +46,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_sha }}
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
