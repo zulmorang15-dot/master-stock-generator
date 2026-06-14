@@ -2842,6 +2842,9 @@ async function runPreviewRenderBackground(itemId) {
 
       addTaskLog(itemId, "Mulai menulis src/Composition.tsx...", "info");
       fs.writeFileSync("src/Composition.tsx", item.promptCode);
+      const compSafety = fs.readFileSync("src/Composition.tsx", "utf-8").trim();
+      if (!compSafety) throw new Error("src/Composition.tsx kosong setelah write!");
+      if (compSafety.length < 100) addTaskLog(itemId, `⚠️ src/Composition.tsx hanya ${compSafety.length} karakter`, "warning");
 
       execSync("git add src/Composition.tsx", { stdio: "inherit" });
       try {
@@ -3068,6 +3071,9 @@ async function run4kRenderBackground(itemId) {
 
       addTaskLog(itemId, "Mulai menulis src/Composition.tsx...", "info");
       fs.writeFileSync("src/Composition.tsx", item.promptCode);
+      const compSafety = fs.readFileSync("src/Composition.tsx", "utf-8").trim();
+      if (!compSafety) throw new Error("src/Composition.tsx kosong setelah write!");
+      if (compSafety.length < 100) addTaskLog(itemId, `⚠️ src/Composition.tsx hanya ${compSafety.length} karakter`, "warning");
 
       // --- AUTOMATED QC VISUAL LOOP CHECK ---
       const frame0Path = path.join(__dirname, `out/temp-0-${itemId}.png`);
