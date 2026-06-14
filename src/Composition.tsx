@@ -1,387 +1,665 @@
-import React from 'react';
-import { useVideoConfig, useCurrentFrame } from 'remotion';
+import React, { useRef, useEffect } from 'react';
+import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const PARTICLE_CONFIGS = [
-    { id: 1, width: 3, height: 15, left: '20%', color: '#00ffff', duration: 300, delay: 0 },
-    { id: 2, width: 4, height: 4, left: '80%', color: '#ff00ff', duration: 600, delay: -120 },
-    { id: 3, width: 10, height: 2, left: '50%', color: '#ffff00', duration: 150, delay: -60 },
-    { id: 4, width: 2, height: 20, left: '35%', color: '#00ffff', duration: 300, delay: -180 },
-    { id: 5, width: 5, height: 5, left: '65%', color: '#ff00ff', duration: 300, delay: -240 },
+interface Particle {
+  baseX: number;
+  baseY: number;
+  index: number;
+  size: number;
+  speedX: number;
+  speedY: number;
+  hue: number;
+  x: number;
+  y: number;
+}
+
+interface DataNode {
+  angle: number;
+  radius: number;
+  index: number;
+  pulsePhase: number;
+  x: number;
+  y: number;
+  pulse: number;
+}
+
+interface EnergyWave {
+  index: number;
+  offset: number;
+}
+
+const particleCount = 150;
+const staticParticles: Omit<Particle, 'x' | 'y'>[] = [];
+for (let i = 0; i < particleCount; i++) {
+  const angle = (i / particleCount) * Math.PI * 2;
+  const radius = 300 + (i % 3) * 150;
+  staticParticles.push({
+    baseX: 960 + Math.cos(angle) * radius,
+    baseY: 540 + Math.sin(angle) * radius,
+    index: i,
+    size: 2 + (i % 3),
+    speedX: Math.cos(angle * 3) * 0.5,
+    speedY: Math.sin(angle * 3) * 0.5,
+    hue: (i / particleCount) * 360,
+  });
+}
+
+const staticDataNodes: Omit<DataNode, 'x' | 'y' | 'pulse'>[] = [];
+for (let i = 0; i < 8; i++) {
+  staticDataNodes.push({
+    angle: (i / 8) * Math.PI * 2,
+    radius: 400,
+    index: i,
+    pulsePhase: i * 0.5,
+  });
+}
+
+const staticEnergyWaves: EnergyWave[] = [
+  { index: 0, offset: 0 },
+  { index: 1, offset: 200 },
+  { index: 2, offset: 400 },
 ];
 
-export const SynthwaveEndscreen: React.FC = () => {
-    const frame = useCurrentFrame();
-    const { width, height } = useVideoConfig();
+const DigitalSpace: React.FC = () => {
+  const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+  const gridCanvasRef = useRef<HTMLCanvasElement>(null);
+  const particleCanvasRef = useRef<HTMLCanvasElement>(null);
 
-    // Master Glitch Calculation (600 frames loop)
-    const glitchFrame = frame % 600;
-    let glitchTx = 0;
-    let glitchTy = 0;
-    let glitchFilter = 'none';
+  const cycleDuration = 15;
+  const localFrame = frame % (fps * cycleDuration);
+  const time = localFrame * (1000 / fps);
 
-    if (glitchFrame >= 294 && glitchFrame < 297) {
-        // 49% analog
-        glitchTx = -3;
-        glitchTy = 2;
-        glitchFilter = 'drop-shadow(4px 0 0 #00ffff) drop-shadow(-4px 0 0 #ff00ff)';
-    } else if (glitchFrame >= 297 && glitchFrame < 300) {
-        // 50% analog
-        glitchTx = 3;
-        glitchTy = -2;
-        glitchFilter = 'drop-shadow(-4px 0 0 #00ffff) drop-shadow(4px 0 0 #ff00ff)';
-    } else if (glitchFrame >= 582 && glitchFrame < 585) {
-        // 97% analog
-        glitchTx = 2;
-        glitchTy = 3;
-        glitchFilter = 'drop-shadow(5px 0 0 #00ffff) drop-shadow(-5px 0 0 #ff00ff)';
-    } else if (glitchFrame >= 585 && glitchFrame < 588) {
-        // 98% analog
-        glitchTx = -4;
-        glitchTy = -1;
-        glitchFilter = 'drop-shadow(-5px 0 0 #00ffff) drop-shadow(5px 0 0 #ff00ff)';
+  useEffect(() => {
+    const gridCanvas = gridCanvasRef.current;
+    const particleCanvas = particleCanvasRef.current;
+    if (!gridCanvas || !particleCanvas) return;
+
+    const gridCtx = gridCanvas.getContext('2d');
+    const ctx = particleCanvas.getContext('2d');
+    if (!gridCtx || !ctx) return;
+
+    gridCanvas.width = ORIGINAL_WIDTH;
+    gridCanvas.height = ORIGINAL_HEIGHT;
+    particleCanvas.width = ORIGINAL_WIDTH;
+    particleCanvas.height = ORIGINAL_HEIGHT;
+
+    gridCtx.clearRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+    ctx.clearRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+
+    // Draw grid
+    gridCtx.strokeStyle = 'rgba(0, 242, 254, 0.1)';
+    gridCtx.lineWidth = 1;
+
+    const gridSize = 60;
+    const offsetX = (localFrame * 0.5) % gridSize;
+    const offsetY = (localFrame * 0.5) % gridSize;
+
+    for (let x = -gridSize + offsetX; x < ORIGINAL_WIDTH + gridSize; x += gridSize) {
+      gridCtx.beginPath();
+      gridCtx.moveTo(x, 0);
+      gridCtx.lineTo(x, ORIGINAL_HEIGHT);
+      gridCtx.stroke();
     }
 
-    // Grid movement loop (300 frames)
-    const gridProgress = (frame % 300) / 300;
-
-    // Ambient Lights Loop (300 frames)
-    const leftPhase = (frame / 300) * Math.PI * 2;
-    const leftLightOpacity = 0.25 + 0.1 * Math.sin(leftPhase);
-    const leftLightScale = 1.0 + 0.1 * Math.sin(leftPhase);
-
-    const rightPhase = ((frame + 150) / 300) * Math.PI * 2;
-    const rightLightOpacity = 0.25 + 0.1 * Math.sin(rightPhase);
-    const rightLightScale = 1.0 + 0.1 * Math.sin(rightPhase);
-
-    // Rotations (300 frames loop / 150 frames loop)
-    const rotateLeft = (frame % 300) * (360 / 300);
-    const rotateRight = 360 - rotateLeft;
-    const rotateSub = (frame % 150) * (360 / 150);
-
-    // Glitch Line jump (300 frames loop)
-    const lineFrame = frame % 300;
-    let glitchLineOpacity = 0;
-    let glitchLineTop = 0;
-    if (lineFrame >= 273 && lineFrame < 276) {
-        glitchLineOpacity = 1;
-        glitchLineTop = 20;
-    } else if (lineFrame >= 279 && lineFrame < 282) {
-        glitchLineOpacity = 1;
-        glitchLineTop = 75;
-    } else if (lineFrame >= 285 && lineFrame < 288) {
-        glitchLineOpacity = 1;
-        glitchLineTop = 40;
+    for (let y = -gridSize + offsetY; y < ORIGINAL_HEIGHT + gridSize; y += gridSize) {
+      gridCtx.beginPath();
+      gridCtx.moveTo(0, y);
+      gridCtx.lineTo(ORIGINAL_WIDTH, y);
+      gridCtx.stroke();
     }
 
-    // Styles
-    const containerStyle: React.CSSProperties = {
-        position: 'absolute',
+    // Draw energy waves
+    staticEnergyWaves.forEach((wave) => {
+      const progress = ((time * 0.0005 + wave.offset) % 1000) / 1000;
+      const radius = 100 + progress * 600;
+      const opacity = 1 - progress;
+
+      const gradient = ctx.createRadialGradient(960, 540, radius - 20, 960, 540, radius + 20);
+      gradient.addColorStop(0, `rgba(79, 172, 254, 0)`);
+      gradient.addColorStop(0.5, `rgba(79, 172, 254, ${opacity * 0.4})`);
+      gradient.addColorStop(1, `rgba(79, 172, 254, 0)`);
+
+      ctx.strokeStyle = gradient;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(960, 540, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    // Update and draw particles
+    const particles: Particle[] = staticParticles.map((sp) => {
+      const oscillation = Math.sin(time * 0.001 + sp.index * 0.1) * 30;
+      const x = sp.baseX + Math.cos(time * 0.0005 + sp.index) * 100 + oscillation;
+      const y = sp.baseY + Math.sin(time * 0.0007 + sp.index) * 100 + oscillation;
+      return { ...sp, x, y };
+    });
+
+    // Draw connections
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < 150) {
+          const opacity = (1 - distance / 150) * 0.3;
+          const gradient = ctx.createLinearGradient(
+            particles[i].x,
+            particles[i].y,
+            particles[j].x,
+            particles[j].y
+          );
+          gradient.addColorStop(0, `hsla(${particles[i].hue}, 100%, 60%, ${opacity})`);
+          gradient.addColorStop(1, `hsla(${particles[j].hue}, 100%, 60%, ${opacity})`);
+
+          ctx.strokeStyle = gradient;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw particles
+    particles.forEach((particle) => {
+      const gradient = ctx.createRadialGradient(
+        particle.x,
+        particle.y,
+        0,
+        particle.x,
+        particle.y,
+        particle.size * 4
+      );
+      gradient.addColorStop(0, `hsla(${particle.hue}, 100%, 70%, 1)`);
+      gradient.addColorStop(0.5, `hsla(${particle.hue}, 100%, 60%, 0.5)`);
+      gradient.addColorStop(1, `hsla(${particle.hue}, 100%, 50%, 0)`);
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, particle.size * 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = `hsla(${particle.hue}, 100%, 80%, 1)`;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Update and draw data nodes
+    const dataNodes: DataNode[] = staticDataNodes.map((sdn) => {
+      const rotation = time * 0.0003;
+      const x = 960 + Math.cos(sdn.angle + rotation) * sdn.radius;
+      const y = 540 + Math.sin(sdn.angle + rotation) * sdn.radius;
+      const pulse = Math.sin(time * 0.003 + sdn.pulsePhase) * 0.5 + 0.5;
+      return { ...sdn, x, y, pulse };
+    });
+
+    dataNodes.forEach((node) => {
+      const size = 8 + node.pulse * 6;
+      const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, size * 3);
+      gradient.addColorStop(0, `rgba(0, 242, 254, ${0.8 * node.pulse})`);
+      gradient.addColorStop(1, 'rgba(0, 242, 254, 0)');
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, size * 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(0, 242, 254, ${0.8 + node.pulse * 0.2})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, size, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.6 * node.pulse})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, size + 5, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+  }, [localFrame, time]);
+
+  const titleBrightness = interpolate(
+    localFrame,
+    [0, fps * cycleDuration * 0.5, fps * cycleDuration],
+    [1, 1.3, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.ease) }
+  );
+
+  const titleShadowBlur = interpolate(
+    localFrame,
+    [0, fps * cycleDuration * 0.5, fps * cycleDuration],
+    [40, 60, 40],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.ease) }
+  );
+
+  const subtitleShadowBlur = interpolate(
+    localFrame,
+    [0, fps * cycleDuration * 0.5, fps * cycleDuration],
+    [20, 30, 20],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.ease) }
+  );
+
+  const scanLineTop = interpolate(
+    localFrame,
+    [0, fps * cycleDuration * 0.1, fps * cycleDuration * 0.5, fps * cycleDuration * 0.9, fps * cycleDuration],
+    ['20%', '20%', '80%', '80%', '20%'],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.ease) }
+  );
+
+  const scanLineOpacity = interpolate(
+    localFrame,
+    [0, fps * cycleDuration * 0.1, fps * cycleDuration * 0.9, fps * cycleDuration],
+    [0, 1, 1, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.ease) }
+  );
+
+  const dataStreamPositions = [
+    { left: '15%', delay: 0, color: 'rgba(0, 242, 254, 0.6)' },
+    { left: '35%', delay: 0.5, color: 'rgba(255, 8, 68, 0.6)' },
+    { left: '55%', delay: 1, color: 'rgba(0, 242, 254, 0.6)' },
+    { left: '75%', delay: 1.5, color: 'rgba(138, 43, 226, 0.6)' },
+    { left: '85%', delay: 2, color: 'rgba(0, 242, 254, 0.6)' },
+  ];
+
+  const orb1Transform = interpolate(
+    localFrame,
+    [0, fps * cycleDuration * 0.33, fps * cycleDuration * 0.66, fps * cycleDuration],
+    [0, 50, -30, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.ease) }
+  );
+
+  const orb1TransformY = interpolate(
+    localFrame,
+    [0, fps * cycleDuration * 0.33, fps * cycleDuration * 0.66, fps * cycleDuration],
+    [0, -30, 40, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.ease) }
+  );
+
+  const orb2Transform = interpolate(
+    localFrame,
+    [0, fps * cycleDuration * 0.33, fps * cycleDuration * 0.66, fps * cycleDuration],
+    [0, 50, -30, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.ease) }
+  );
+
+  const orb2TransformY = interpolate(
+    localFrame,
+    [0, fps * cycleDuration * 0.33, fps * cycleDuration * 0.66, fps * cycleDuration],
+    [0, -30, 40, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.ease) }
+  );
+
+  const ring1Rotation = interpolate(
+    localFrame,
+    [0, fps * cycleDuration],
+    [0, 360],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.linear }
+  );
+
+  const ring2Rotation = interpolate(
+    localFrame,
+    [0, fps * cycleDuration],
+    [0, -360],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.linear }
+  );
+
+  const ring3Rotation = interpolate(
+    localFrame,
+    [0, fps * cycleDuration],
+    [0, 360],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.linear }
+  );
+
+  return (
+    <div
+      style={{
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
+        position: 'absolute',
         top: '50%',
         left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor}) translate(${glitchTx}px, ${glitchTy}px)`,
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
         overflow: 'hidden',
-        backgroundColor: '#050505',
-        boxShadow: 'inset 0 0 100px rgba(0, 0, 0, 0.9)',
-        filter: glitchFilter,
-    };
+        background: 'radial-gradient(ellipse at center, #0a0e27 0%, #050716 100%)',
+        fontFamily: "'Orbitron', sans-serif",
+      }}
+    >
+      <canvas
+        ref={gridCanvasRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0.3,
+        }}
+      />
+      <canvas
+        ref={particleCanvasRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+        }}
+      />
 
-    const lightLeftStyle: React.CSSProperties = {
-        position: 'absolute',
-        borderRadius: '50%',
-        filter: 'blur(80px)',
-        zIndex: 0,
-        top: '10%',
-        left: '5%',
-        width: '40%',
-        height: '60%',
-        background: '#00ffff',
-        opacity: leftLightOpacity,
-        transform: `scale(${leftLightScale})`,
-    };
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            width: 300,
+            height: 300,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(0, 242, 254, 0.3) 0%, transparent 70%)',
+            filter: 'blur(60px)',
+            top: '10%',
+            left: '20%',
+            transform: `translate(${orb1Transform}px, ${orb1TransformY}px)`,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            width: 300,
+            height: 300,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(255, 8, 68, 0.3) 0%, transparent 70%)',
+            filter: 'blur(60px)',
+            top: '60%',
+            right: '15%',
+            transform: `translate(${orb2Transform}px, ${orb2TransformY}px)`,
+          }}
+        />
 
-    const lightRightStyle: React.CSSProperties = {
-        position: 'absolute',
-        borderRadius: '50%',
-        filter: 'blur(80px)',
-        zIndex: 0,
-        top: '10%',
-        right: '5%',
-        width: '40%',
-        height: '60%',
-        background: '#ff00ff',
-        opacity: rightLightOpacity,
-        transform: `scale(${rightLightScale})`,
-    };
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 400,
+            height: 400,
+            border: '1px solid rgba(0, 242, 254, 0.15)',
+            borderRadius: '50%',
+            transform: `translate(-50%, -50%) rotate(${ring1Rotation}deg)`,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 600,
+            height: 600,
+            border: '1px solid rgba(255, 8, 68, 0.15)',
+            borderRadius: '50%',
+            transform: `translate(-50%, -50%) rotate(${ring2Rotation}deg)`,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 800,
+            height: 800,
+            border: '1px solid rgba(138, 43, 226, 0.15)',
+            borderRadius: '50%',
+            transform: `translate(-50%, -50%) rotate(${ring3Rotation}deg)`,
+          }}
+        />
 
-    const gridWrapperStyle: React.CSSProperties = {
-        position: 'absolute',
-        bottom: '-20%',
-        left: '-50%',
-        width: '200%',
-        height: '70%',
-        perspective: '800px',
-        zIndex: 1,
-    };
+        <div
+          style={{
+            position: 'absolute',
+            width: 200,
+            height: 200,
+            border: '1px solid rgba(0, 242, 254, 0.3)',
+            top: 60,
+            left: 60,
+            borderRight: 'none',
+            borderBottom: 'none',
+            boxShadow: '0 0 30px rgba(0, 242, 254, 0.2)',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            width: 200,
+            height: 200,
+            border: '1px solid rgba(0, 242, 254, 0.3)',
+            top: 60,
+            right: 60,
+            borderLeft: 'none',
+            borderBottom: 'none',
+            boxShadow: '0 0 30px rgba(255, 8, 68, 0.2)',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            width: 200,
+            height: 200,
+            border: '1px solid rgba(0, 242, 254, 0.3)',
+            bottom: 60,
+            left: 60,
+            borderRight: 'none',
+            borderTop: 'none',
+            boxShadow: '0 0 30px rgba(79, 172, 254, 0.2)',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            width: 200,
+            height: 200,
+            border: '1px solid rgba(0, 242, 254, 0.3)',
+            bottom: 60,
+            right: 60,
+            borderLeft: 'none',
+            borderTop: 'none',
+            boxShadow: '0 0 30px rgba(138, 43, 226, 0.2)',
+          }}
+        />
 
-    const gridSurfaceStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: '100%',
-        height: '100%',
-        backgroundImage: `
-            linear-gradient(to right, rgba(0, 255, 255, 0.2) 2px, transparent 2px),
-            linear-gradient(to top, rgba(255, 0, 255, 0.4) 2px, transparent 2px)
-        `,
-        backgroundSize: '3% 15%',
-        transform: 'rotateX(75deg)',
-        transformOrigin: 'center top',
-        boxShadow: 'inset 0 100px 100px #050505',
-        backgroundPositionY: `${gridProgress * 15}%`,
-    };
+        {dataStreamPositions.map((stream, idx) => {
+          const streamDelay = stream.delay * fps;
+          const streamDuration = 3 * fps;
+          const streamLocalFrame = (localFrame - streamDelay + fps * cycleDuration) % (fps * cycleDuration);
 
-    const particlesStyle: React.CSSProperties = {
-        position: 'absolute',
-        inset: 0,
-        zIndex: 5,
-    };
+          const streamTop = interpolate(
+            streamLocalFrame,
+            [0, streamDuration * 0.1, streamDuration * 0.9, streamDuration],
+            [-100, -100, 1180, 1180],
+            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.linear }
+          );
 
-    const glitchLineStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: '100%',
-        height: '2px',
-        background: 'rgba(255, 255, 255, 0.8)',
-        boxShadow: '0 0 10px #00ffff, 0 0 10px #ff00ff',
-        zIndex: 90,
-        opacity: glitchLineOpacity,
-        top: `${glitchLineTop}%`,
-    };
+          const streamOpacity = interpolate(
+            streamLocalFrame,
+            [0, streamDuration * 0.1, streamDuration * 0.9, streamDuration],
+            [0, 0.7, 0.7, 0],
+            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.linear }
+          );
 
-    const videoLeftStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: '36%',
-        aspectRatio: '16 / 9',
-        top: '16%',
-        zIndex: 10,
-        left: '9%',
-    };
+          return (
+            <div
+              key={idx}
+              style={{
+                position: 'absolute',
+                background:
+                  stream.color === 'rgba(255, 8, 68, 0.6)'
+                    ? 'linear-gradient(180deg, rgba(255, 8, 68, 0) 0%, rgba(255, 8, 68, 0.6) 50%, rgba(255, 8, 68, 0) 100%)'
+                    : stream.color === 'rgba(138, 43, 226, 0.6)'
+                    ? 'linear-gradient(180deg, rgba(138, 43, 226, 0) 0%, rgba(138, 43, 226, 0.6) 50%, rgba(138, 43, 226, 0) 100%)'
+                    : 'linear-gradient(180deg, rgba(0, 242, 254, 0) 0%, rgba(0, 242, 254, 0.6) 50%, rgba(0, 242, 254, 0) 100%)',
+                width: 2,
+                height: 100,
+                left: stream.left,
+                top: streamTop,
+                opacity: streamOpacity,
+              }}
+            />
+          );
+        })}
 
-    const videoRightStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: '36%',
-        aspectRatio: '16 / 9',
-        top: '16%',
-        zIndex: 10,
-        right: '9%',
-    };
+        <div
+          style={{
+            position: 'absolute',
+            width: '100%',
+            height: 2,
+            background:
+              'linear-gradient(90deg, transparent 0%, rgba(0, 242, 254, 0.8) 50%, transparent 100%)',
+            boxShadow: '0 0 20px rgba(0, 242, 254, 0.6)',
+            top: scanLineTop,
+            opacity: scanLineOpacity,
+          }}
+        />
 
-    const borderWrapperLeftStyle: React.CSSProperties = {
-        position: 'absolute',
-        inset: -4,
-        background: '#222',
-        overflow: 'hidden',
-        zIndex: -1,
-        boxShadow: '0 0 25px rgba(0, 255, 255, 0.4)',
-    };
-
-    const borderWrapperRightStyle: React.CSSProperties = {
-        position: 'absolute',
-        inset: -4,
-        background: '#222',
-        overflow: 'hidden',
-        zIndex: -1,
-        boxShadow: '0 0 25px rgba(255, 0, 255, 0.4)',
-    };
-
-    const conicLeftStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: '-50%',
-        left: '-50%',
-        width: '200%',
-        height: '200%',
-        background: 'conic-gradient(from 0deg, transparent 60%, #00ffff 100%)',
-        transform: `rotate(${rotateLeft}deg)`,
-    };
-
-    const conicRightStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: '-50%',
-        left: '-50%',
-        width: '200%',
-        height: '200%',
-        background: 'conic-gradient(from 0deg, transparent 60%, #ff00ff 100%)',
-        transform: `rotate(${rotateRight}deg)`,
-    };
-
-    const greenScreenRectStyle: React.CSSProperties = {
-        position: 'absolute',
-        inset: 0,
-        backgroundColor: '#00FF00',
-        zIndex: 2,
-    };
-
-    const techCornersStyle: React.CSSProperties = {
-        position: 'absolute',
-        inset: -10,
-        zIndex: 3,
-    };
-
-    const techCornerBeforeStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: 20,
-        height: 20,
-        border: '2px solid #fff',
-        opacity: 0.7,
-        top: 0,
-        left: 0,
-        borderRight: 'none',
-        borderBottom: 'none',
-    };
-
-    const techCornerAfterStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: 20,
-        height: 20,
-        border: '2px solid #fff',
-        opacity: 0.7,
-        bottom: 0,
-        right: 0,
-        borderLeft: 'none',
-        borderTop: 'none',
-    };
-
-    const subscribeBoxStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: '14%',
-        aspectRatio: '1 / 1',
-        bottom: '12%',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 10,
-        borderRadius: '50%',
-    };
-
-    const borderCircleStyle: React.CSSProperties = {
-        position: 'absolute',
-        inset: -4,
-        borderRadius: '50%',
-        overflow: 'hidden',
-        boxShadow: '0 0 30px rgba(255, 255, 0, 0.4)',
-        zIndex: -1,
-    };
-
-    const conicCircleStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: '-50%',
-        left: '-50%',
-        width: '200%',
-        height: '200%',
-        background: 'conic-gradient(from 0deg, transparent 40%, #00ffff 60%, #ff00ff 80%, #ffff00 100%)',
-        transform: `rotate(${rotateSub}deg)`,
-    };
-
-    const greenScreenCircleStyle: React.CSSProperties = {
-        position: 'absolute',
-        inset: 0,
-        backgroundColor: '#00FF00',
-        borderRadius: '50%',
-        zIndex: 2,
-    };
-
-    const scanlinesStyle: React.CSSProperties = {
-        position: 'absolute',
-        inset: 0,
-        background: 'repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 2px, rgba(0, 0, 0, 0.2) 3px, rgba(0, 0, 0, 0.2) 4px)',
-        zIndex: 100,
-        opacity: 0.6,
-        pointerEvents: 'none',
-    };
-
-    return (
-        <div style={containerStyle}>
-            <div style={lightLeftStyle} />
-            <div style={lightRightStyle} />
-
-            <div style={gridWrapperStyle}>
-                <div style={gridSurfaceStyle} />
-            </div>
-
-            <div style={particlesStyle}>
-                {PARTICLE_CONFIGS.map((p) => {
-                    const pFrame = (frame + p.delay + 1200) % p.duration;
-                    const progress = pFrame / p.duration;
-
-                    let opacity = 0;
-                    if (progress <= 0.1) {
-                        opacity = (progress / 0.1) * 0.8;
-                    } else if (progress <= 0.9) {
-                        opacity = 0.8;
-                    } else {
-                        opacity = 0.8 - ((progress - 0.9) / 0.1) * 0.8;
-                    }
-
-                    const scale = 1.0 - progress * 0.5;
-                    const translateY = (1 - progress) * -1180; // Starts below 1080 and floats out of screen
-
-                    return (
-                        <div
-                            key={p.id}
-                            style={{
-                                position: 'absolute',
-                                width: p.width,
-                                height: p.height,
-                                left: p.left,
-                                bottom: '-10%',
-                                backgroundColor: p.color,
-                                opacity,
-                                transform: `translateY(${translateY}px) scale(${scale})`,
-                            }}
-                        />
-                    );
-                })}
-            </div>
-
-            <div style={glitchLineStyle} />
-
-            <div style={videoLeftStyle}>
-                <div style={borderWrapperLeftStyle}>
-                    <div style={conicLeftStyle} />
-                </div>
-                <div style={greenScreenRectStyle} />
-                <div style={techCornersStyle}>
-                    <div style={techCornerBeforeStyle} />
-                    <div style={techCornerAfterStyle} />
-                </div>
-            </div>
-
-            <div style={videoRightStyle}>
-                <div style={borderWrapperRightStyle}>
-                    <div style={conicRightStyle} />
-                </div>
-                <div style={greenScreenRectStyle} />
-                <div style={techCornersStyle}>
-                    <div style={techCornerBeforeStyle} />
-                    <div style={techCornerAfterStyle} />
-                </div>
-            </div>
-
-            <div style={subscribeBoxStyle}>
-                <div style={borderCircleStyle}>
-                    <div style={conicCircleStyle} />
-                </div>
-                <div style={greenScreenCircleStyle} />
-            </div>
-
-            <div style={scanlinesStyle} />
+        <div
+          style={{
+            position: 'absolute',
+            top: 120,
+            left: 80,
+            padding: '15px 25px',
+            background: 'rgba(10, 14, 39, 0.6)',
+            backdropFilter: 'blur(15px)',
+            border: '1px solid rgba(0, 242, 254, 0.2)',
+            borderRadius: 8,
+            boxShadow:
+              '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+            fontFamily: "'Inter', sans-serif",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: 2,
+              color: 'rgba(255, 255, 255, 0.5)',
+              marginBottom: 5,
+            }}
+          >
+            Network Status
+          </div>
+          <div
+            style={{
+              fontSize: 28,
+              fontWeight: 600,
+              background: 'linear-gradient(90deg, #00f2fe 0%, #4facfe 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            ONLINE
+          </div>
         </div>
-    );
+
+        <div
+          style={{
+            position: 'absolute',
+            top: 120,
+            right: 80,
+            padding: '15px 25px',
+            background: 'rgba(10, 14, 39, 0.6)',
+            backdropFilter: 'blur(15px)',
+            border: '1px solid rgba(0, 242, 254, 0.2)',
+            borderRadius: 8,
+            boxShadow:
+              '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+            fontFamily: "'Inter', sans-serif",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              textTransform: 'uppercase',
+              letterSpacing: 2,
+              color: 'rgba(255, 255, 255, 0.5)',
+              marginBottom: 5,
+            }}
+          >
+            Data Flow
+          </div>
+          <div
+            style={{
+              fontSize: 28,
+              fontWeight: 600,
+              background: 'linear-gradient(90deg, #00f2fe 0%, #4facfe 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}
+          >
+            982 GB/s
+          </div>
+        </div>
+
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            textAlign: 'center',
+            zIndex: 10,
+          }}
+        >
+          <h1
+            style={{
+              fontSize: 72,
+              fontWeight: 900,
+              letterSpacing: 8,
+              textTransform: 'uppercase',
+              background: 'linear-gradient(135deg, #00f2fe 0%, #4facfe 50%, #ff0844 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              filter: `brightness(${titleBrightness}) drop-shadow(0 0 ${titleShadowBlur}px rgba(0, 242, 254, 0.6))`,
+              marginBottom: 20,
+            }}
+          >
+            DIGITAL SPACE
+          </h1>
+          <p
+            style={{
+              fontFamily: "'Inter', sans-serif",
+              fontSize: 24,
+              fontWeight: 300,
+              letterSpacing: 4,
+              color: 'rgba(255, 255, 255, 0.6)',
+              textTransform: 'uppercase',
+              textShadow: `0 0 ${subtitleShadowBlur}px rgba(79, 172, 254, 0.5)`,
+            }}
+          >
+            Abstract Technology Network
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 };
 
-export default SynthwaveEndscreen;
+export default DigitalSpace;
 // END_OF_FILE

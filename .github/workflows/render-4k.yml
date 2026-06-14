@@ -62,7 +62,7 @@ jobs:
             libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
             libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
             libxrandr2 libgbm1 libasound2t64 libpango-1.0-0 \
-            libcairo2 libxshmfence1 libgl1 ffmpeg
+            libcairo2 libxshmfence1 libgl1 libegl1 libgles2-mesa-dev ffmpeg xvfb
 
       - name: Install Project Dependencies
         run: npm ci
@@ -100,12 +100,12 @@ jobs:
             PIXEL_FORMAT="yuva444p10le"
             echo "=== Transparent background requested. Using yuva444p10le. ==="
           fi
-          npx remotion render Composition \
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npx remotion render Composition \
             "out/${{ github.event.inputs.composition_id }}-4k.mov" \
             --props=temp-props.json \
             --codec=prores \
             --pixel-format=$PIXEL_FORMAT \
-            --gl=swiftshader \
+            --gl=swangle \
             --muted \
             --log=verbose
 
