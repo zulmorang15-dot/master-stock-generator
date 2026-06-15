@@ -1,209 +1,287 @@
-import { useVideoConfig, useCurrentFrame } from 'remotion';
 import React, { useRef, useEffect } from 'react';
+import { useVideoConfig, useCurrentFrame } from 'remotion';
 import * as THREE from 'three';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const PremiumAbstractNeonShader: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const uniformsRef = useRef<{ uTime: { value: number }; uResolution: { value: THREE.Vector2 } } | null>(null);
+const vertexShader = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const fragmentShader = `
+  uniform float uTime;
+  uniform float uLoopDuration;
+  uniform vec2 uResolution;
+  varying vec2 vUv;
+
+  // ── Permutation helpers ──────────────────────────────────────────────
+  vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
+  vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+  vec3 fade(vec3 t){ return t*t*t*(t*(t*6.0-15.0)+10.0); }
+
+  // ── Classic Perlin 3D ────────────────────────────────────────────────
+  float cnoise(vec3 P){
+    vec3 Pi0 = floor(P);
+    vec3 Pi1 = Pi0 + vec3(1.0);
+    Pi0 = mod(Pi0, 289.0); Pi1 = mod(Pi1, 289.0);
+    vec3 Pf0 = fract(P);
+    vec3 Pf1 = Pf0 - vec3(1.0);
+    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+    vec4 iy = vec4(Pi0.yy, Pi1.yy);
+    vec4 iz0 = Pi0.zzzz;
+    vec4 iz1 = Pi1.zzzz;
+    vec4 ixy  = permute(permute(ix) + iy);
+    vec4 ixy0 = permute(ixy + iz0);
+    vec4 ixy1 = permute(ixy + iz1);
+    vec4 gx0 = ixy0 / 7.0;
+    vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+    gx0 = fract(gx0);
+    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+    vec4 sz0 = step(gz0, vec4(0.0));
+    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+    vec4 gx1 = ixy1 / 7.0;
+    vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+    gx1 = fract(gx1);
+    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+    vec4 sz1 = step(gz1, vec4(0.0));
+    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+    vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+    vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+    vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+    vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+    vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+    vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+    vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+    vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+    vec4 norm0 = taylorInvSqrt(vec4(dot(g000,g000),dot(g010,g010),dot(g100,g100),dot(g110,g110)));
+    g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
+    vec4 norm1 = taylorInvSqrt(vec4(dot(g001,g001),dot(g011,g011),dot(g101,g101),dot(g111,g111)));
+    g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
+    float n000 = dot(g000, Pf0);
+    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+    float n111 = dot(g111, Pf1);
+    vec3 fade_xyz = fade(Pf0);
+    vec4 n_z = mix(vec4(n000,n100,n010,n110), vec4(n001,n101,n011,n111), fade_xyz.z);
+    vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+    return 2.2 * n_xyz;
+  }
+
+  // ── FBM (fractal Brownian motion) ────────────────────────────────────
+  float fbm(vec3 p) {
+    float value = 0.0;
+    float amp   = 0.5;
+    float freq  = 1.0;
+    for (int i = 0; i < 6; i++) {
+      value += amp * cnoise(p * freq);
+      freq  *= 2.0;
+      amp   *= 0.5;
+    }
+    return value;
+  }
+
+  // ── Colour palette (cosine) ──────────────────────────────────────────
+  vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
+    return a + b * cos(6.28318 * (c * t + d));
+  }
+
+  // ── Color generator for looping ──────────────────────────────────────
+  vec3 getColorForTime(vec2 uv, float t) {
+    // ── Domain‐warped FBM layers ─────────────────────────────────────
+    vec3 q = vec3(uv, t);
+    float qx = fbm(q);
+    float qy = fbm(q + vec3(5.2, 1.3, 2.8));
+    float qz = fbm(q + vec3(2.4, 6.1, 4.0));
+
+    vec3 r = vec3(uv, t);
+    float rx = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(1.7, 9.2, 0.5));
+    float ry = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(8.3, 2.8, 7.1));
+    float rz = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(3.1, 4.4, 5.9));
+
+    // Third warp pass for extra complexity
+    vec3 s = vec3(uv, t);
+    float f = fbm(s + 3.5 * vec3(rx, ry, rz));
+
+    // ── Deep-sea colour palette: dark teal → electric blue → magenta ──
+    float idx = f * 0.5 + 0.5;
+    idx = pow(idx, 1.1);
+
+    // Primary palette: midnight ocean
+    vec3 colA = palette(
+      idx,
+      vec3(0.02, 0.03, 0.08),   // dark base
+      vec3(0.15, 0.25, 0.45),   // amplitude
+      vec3(1.0,  1.0,  1.0 ),   // frequency
+      vec3(0.00, 0.20, 0.50)    // phase
+    );
+
+    // Accent layer: electric / neon edges
+    float edge = smoothstep(0.3, 0.8, abs(f));
+    vec3 neon  = palette(
+      idx + t * 0.05,
+      vec3(0.05, 0.00, 0.12),
+      vec3(0.30, 0.20, 0.40),
+      vec3(0.80, 1.20, 0.90),
+      vec3(0.55, 0.80, 0.30)
+    );
+
+    vec3 col = mix(colA, neon, edge * 0.65);
+
+    // ── Thin glowing ridges ──────────────────────────────────────────
+    float ridge = 1.0 - abs(f);
+    ridge = pow(clamp(ridge, 0.0, 1.0), 18.0);
+    col  += ridge * vec3(0.05, 0.25, 0.55) * 1.8;
+    return col;
+  }
+
+  void main() {
+    vec2 uv  = vUv;
+    float ar = uResolution.x / uResolution.y;
+    uv.x    *= ar;
+
+    float t1 = uTime * 0.18;
+    float t2 = (uTime - uLoopDuration) * 0.18;
+    float progress = uTime / uLoopDuration;
+
+    float blend = smoothstep(0.0, 1.0, progress);
+
+    vec3 col1 = getColorForTime(uv, t1);
+    vec3 col2 = getColorForTime(uv, t2);
+    vec3 col = mix(col1, col2, blend);
+
+    // ── Vignette ────────────────────────────────────────────────────
+    vec2 vUv2 = vUv - 0.5;
+    float vign = 1.0 - dot(vUv2, vUv2) * 1.6;
+    col *= clamp(vign, 0.0, 1.0);
+
+    // ── Gamma & exposure ────────────────────────────────────────────
+    col = pow(max(col, 0.0), vec3(0.85));
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+interface ShaderUniforms {
+  [uniform: string]: THREE.IUniform;
+  uTime: THREE.IUniform<number>;
+  uLoopDuration: THREE.IUniform<number>;
+  uResolution: THREE.IUniform<THREE.Vector2>;
+}
+
+export const Displex: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
+
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const uniformsRef = useRef<ShaderUniforms | null>(null);
 
-  const frame = useCurrentFrame();
-  const { width, height, durationInFrames } = useVideoConfig();
-
-  // Create the 16:9 responsive scale factor
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
+  // Initialize Three.js scene
   useEffect(() => {
-    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: true,
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(width, height);
+    rendererRef.current = renderer;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    
-    const renderer = new THREE.WebGLRenderer({ 
-      canvas: canvasRef.current,
-      antialias: true, 
-      alpha: false,
-      powerPreference: "high-performance" 
-    });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(1);
+    sceneRef.current = scene;
 
-    const uniforms = {
-      uTime: { value: 0.0 },
-      uResolution: { value: new THREE.Vector2(width, height) }
-    };
-
-    const material = new THREE.ShaderMaterial({
-      uniforms: uniforms,
-      vertexShader: `
-        void main() {
-            gl_Position = vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float uTime;
-        uniform vec2 uResolution;
-
-        // Simplex 2D noise
-        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-        vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-        vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
-
-        float snoise(vec2 v) {
-            const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
-            vec2 i  = floor(v + dot(v, C.yy) );
-            vec2 x0 = v -   i + dot(i, C.xx);
-            vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-            vec4 x12 = x0.xyxy + C.xxzz;
-            x12.xy -= i1;
-            i = mod289(i);
-            vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));
-            vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
-            m = m*m;
-            m = m*m;
-            vec3 x = 2.0 * fract(p * C.www) - 1.0;
-            vec3 h = abs(x) - 0.5;
-            vec3 ox = floor(x + 0.5);
-            vec3 a0 = x - ox;
-            m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
-            vec3 g;
-            g.x  = a0.x  * x0.x  + h.x  * x0.y;
-            g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-            return 130.0 * dot(m, g);
-        }
-
-        // Fractal Brownian Motion for organic liquid feel
-        float fbm(vec2 p) {
-            float value = 0.0;
-            float amplitude = 0.5;
-            vec2 shift = vec2(100.0);
-            mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-            for (int i = 0; i < 5; i++) {
-                value += amplitude * snoise(p);
-                p = rot * p * 2.0 + shift;
-                amplitude *= 0.5;
-            }
-            return value;
-        }
-
-        // Ribbon generator with boosted glow to emulate UnrealBloomPass
-        vec3 getRibbon(vec2 uv, float t, float offset, vec3 color) {
-            // Animated UV warping
-            vec2 q = vec2(
-                fbm(uv + vec2(0.0, offset) + t * 0.4),
-                fbm(uv + vec2(offset, 0.0) - t * 0.3)
-            );
-            vec2 r = vec2(
-                fbm(q + uv * 2.0 + t * 0.2),
-                fbm(q - uv * 1.5 - t * 0.25)
-            );
-
-            // Morphing curves
-            float line = sin(r.x * 6.0 + r.y * 4.0 + t * 1.5 + offset * 2.0);
-            
-            // Boosted neon glow calculation
-            float intensity = 0.045 / (abs(line) + 0.012);
-            
-            // Subtle pulsing
-            float pulse = 0.7 + 0.3 * sin(t * 2.5 + offset * 3.0);
-            
-            return color * intensity * pulse;
-        }
-
-        void main() {
-            // Center UVs and fix aspect ratio
-            vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
-            
-            // Slow flowing time
-            float t = uTime * 0.15;
-            
-            // Cinematic camera drift
-            uv += vec2(sin(t * 0.3), cos(t * 0.2)) * 0.3;
-            uv *= 1.2; // slight zoom out
-
-            vec3 finalColor = vec3(0.0);
-
-            // Additive blending of holographic light trails
-            finalColor += getRibbon(uv, t, 0.0, vec3(0.7, 0.1, 0.9)); // Purple
-            finalColor += getRibbon(uv, t, 1.2, vec3(0.1, 0.9, 0.9)); // Cyan
-            finalColor += getRibbon(uv, t, 2.4, vec3(0.1, 0.3, 1.0)); // Blue
-            finalColor += getRibbon(uv, t, 3.6, vec3(1.0, 0.1, 0.3)); // Red
-
-            // Boost contrast and color saturation for cinematic look
-            finalColor = pow(finalColor, vec3(1.3));
-
-            gl_FragColor = vec4(finalColor, 1.0);
-        }
-      `,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      depthTest: false
-    });
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.z = 1;
+    cameraRef.current = camera;
 
     const geometry = new THREE.PlaneGeometry(2, 2);
+    const uniforms: ShaderUniforms = {
+      uTime: { value: 0.0 },
+      uLoopDuration: { value: 15.0 },
+      uResolution: { value: new THREE.Vector2(width, height) }
+    };
+    uniformsRef.current = uniforms;
+
+    const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms
+    });
+
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
-    sceneRef.current = scene;
-    cameraRef.current = camera;
-    rendererRef.current = renderer;
-    uniformsRef.current = uniforms;
-
     return () => {
-      renderer.dispose();
       geometry.dispose();
       material.dispose();
+      renderer.dispose();
     };
   }, [width, height]);
 
-  // Frame-locked update for WebGL rendering
+  // Handle deterministic frame rendering
   useEffect(() => {
-    if (!rendererRef.current || !sceneRef.current || !cameraRef.current || !uniformsRef.current) {
-      return;
-    }
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const renderer = rendererRef.current;
+    const uniforms = uniformsRef.current;
 
-    // Seamless loop: map the 15-second timeline to a symmetric cosine curve.
-    // This allows uTime to start at 0, smoothly accelerate, slow down, and reverse back to 0.
-    const progress = frame / durationInFrames;
-    const loopMultiplier = 0.5 * (1.0 - Math.cos(progress * 2 * Math.PI));
-    const maxSimulatedTime = 40.0;
-    const computedTime = loopMultiplier * maxSimulatedTime;
+    if (!scene || !camera || !renderer || !uniforms) return;
 
-    uniformsRef.current.uTime.value = computedTime;
+    // Loop duration: 15 seconds
+    const totalFrames = 15 * fps;
+    const localFrame = frame % totalFrames;
+    const time = (localFrame / totalFrames) * 15.0; // Map loop progress exactly to 15s
 
-    rendererRef.current.render(sceneRef.current, cameraRef.current);
-  }, [frame, durationInFrames]);
+    uniforms.uTime.value = time;
+    uniforms.uLoopDuration.value = 15.0;
+    uniforms.uResolution.value.set(width, height);
+
+    renderer.render(scene, camera);
+  }, [frame, fps, width, height]);
+
+  const wrapperStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  };
 
   return (
-    <div
-      style={{
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        backgroundColor: '#000000',
-      }}
-    >
+    <div style={wrapperStyle}>
       <canvas
         ref={canvasRef}
         style={{
           width: '100%',
           height: '100%',
-          display: 'block',
+          display: 'block'
         }}
       />
     </div>
   );
 };
 
-export default PremiumAbstractNeonShader;
-// END_OF_FILE
+export default Displex;
