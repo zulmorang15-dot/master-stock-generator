@@ -4,150 +4,212 @@ import * as THREE from 'three';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
-const LOOP_DURATION = 15.0; // 15 seconds loop
 
-export const MonoInk: React.FC = () => {
-  const { width, height, fps } = useVideoConfig();
-  const frame = useCurrentFrame();
+const vertexShader = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const fragmentShader = `
+  uniform float uTime1;
+  uniform float uTime2;
+  uniform float uBlend;
+  uniform vec2 uResolution;
+  varying vec2 vUv;
+
+  vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
+  vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+  vec3 fade(vec3 t){ return t*t*t*(t*(t*6.0-15.0)+10.0); }
+
+  float cnoise(vec3 P){
+    vec3 Pi0 = floor(P);
+    vec3 Pi1 = Pi0 + vec3(1.0);
+    Pi0 = mod(Pi0, 289.0); Pi1 = mod(Pi1, 289.0);
+    vec3 Pf0 = fract(P);
+    vec3 Pf1 = Pf0 - vec3(1.0);
+    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+    vec4 iy = vec4(Pi0.yy, Pi1.yy);
+    vec4 iz0 = Pi0.zzzz;
+    vec4 iz1 = Pi1.zzzz;
+    vec4 ixy  = permute(permute(ix) + iy);
+    vec4 ixy0 = permute(ixy + iz0);
+    vec4 ixy1 = permute(ixy + iz1);
+    vec4 gx0 = ixy0 / 7.0;
+    vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+    gx0 = fract(gx0);
+    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+    vec4 sz0 = step(gz0, vec4(0.0));
+    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+    vec4 gx1 = ixy1 / 7.0;
+    vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+    gx1 = fract(gx1);
+    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+    vec4 sz1 = step(gz1, vec4(0.0));
+    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+    vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+    vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+    vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+    vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+    vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+    vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+    vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+    vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+    vec4 norm0 = taylorInvSqrt(vec4(dot(g000,g000),dot(g010,g010),dot(g100,g100),dot(g110,g110)));
+    g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
+    vec4 norm1 = taylorInvSqrt(vec4(dot(g001,g001),dot(g011,g011),dot(g101,g101),dot(g111,g111)));
+    g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
+    float n000 = dot(g000, Pf0);
+    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+    float n111 = dot(g111, Pf1);
+    vec3 fade_xyz = fade(Pf0);
+    vec4 n_z = mix(vec4(n000,n100,n010,n110), vec4(n001,n101,n011,n111), fade_xyz.z);
+    vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+    return 2.2 * n_xyz;
+  }
+
+  float fbm(vec3 p) {
+    float value = 0.0;
+    float amp   = 0.5;
+    float freq  = 1.0;
+    for (int i = 0; i < 6; i++) {
+      value += amp * cnoise(p * freq);
+      freq  *= 2.0;
+      amp   *= 0.5;
+    }
+    return value;
+  }
+
+  vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
+    return a + b * cos(6.28318 * (c * t + d));
+  }
+
+  vec3 getProceduralColor(vec2 uv, float customTime) {
+    float ar = uResolution.x / uResolution.y;
+    vec2 localUv = uv;
+    localUv.x *= ar;
+
+    float t = customTime * 0.18;
+
+    vec3 q = vec3(localUv, t);
+    float qx = fbm(q);
+    float qy = fbm(q + vec3(5.2, 1.3, 2.8));
+    float qz = fbm(q + vec3(2.4, 6.1, 4.0));
+
+    vec3 r = vec3(localUv, t);
+    float rx = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(1.7, 9.2, 0.5));
+    float ry = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(8.3, 2.8, 7.1));
+    float rz = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(3.1, 4.4, 5.9));
+
+    vec3 s = vec3(localUv, t);
+    float f = fbm(s + 3.5 * vec3(rx, ry, rz));
+
+    float idx = f * 0.5 + 0.5;
+    idx = pow(idx, 1.1);
+
+    vec3 colA = palette(
+      idx,
+      vec3(0.02, 0.03, 0.08),
+      vec3(0.15, 0.25, 0.45),
+      vec3(1.0,  1.0,  1.0 ),
+      vec3(0.00, 0.20, 0.50)
+    );
+
+    float edge = smoothstep(0.3, 0.8, abs(f));
+    vec3 neon  = palette(
+      idx + t * 0.05,
+      vec3(0.05, 0.00, 0.12),
+      vec3(0.30, 0.20, 0.40),
+      vec3(0.80, 1.20, 0.90),
+      vec3(0.55, 0.80, 0.30)
+    );
+
+    vec3 col = mix(colA, neon, edge * 0.65);
+
+    float ridge = 1.0 - abs(f);
+    ridge = pow(clamp(ridge, 0.0, 1.0), 18.0);
+    col  += ridge * vec3(0.05, 0.25, 0.55) * 1.8;
+
+    return col;
+  }
+
+  void main() {
+    vec3 col1 = getProceduralColor(vUv, uTime1);
+    vec3 col2 = getProceduralColor(vUv, uTime2);
+    vec3 col = mix(col1, col2, uBlend);
+
+    vec2 vUv2 = vUv - 0.5;
+    float vign = 1.0 - dot(vUv2, vUv2) * 1.6;
+    col *= clamp(vign, 0.0, 1.0);
+
+    col = pow(max(col, 0.0), vec3(0.85));
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+const Displex: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
-  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const uniformsRef = useRef<{
+    uTime1: { value: number };
+    uTime2: { value: number };
+    uBlend: { value: number };
+    uResolution: { value: THREE.Vector2 };
+  } | null>(null);
+
+  const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
 
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvasRef.current) return;
 
     const renderer = new THREE.WebGLRenderer({
-      canvas,
+      canvas: canvasRef.current,
       antialias: true,
       alpha: true,
     });
-    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT, false);
-    renderer.setPixelRatio(1);
+    renderer.setPixelRatio(2);
+    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
     rendererRef.current = renderer;
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.z = 1;
     cameraRef.current = camera;
 
+    const geometry = new THREE.PlaneGeometry(2, 2);
+
     const uniforms = {
-      uTime: { value: 0 },
-      uLoop: { value: LOOP_DURATION },
+      uTime1: { value: 0.0 },
+      uTime2: { value: 0.0 },
+      uBlend: { value: 0.0 },
       uResolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) },
-      uMode: { value: 1 },
-      uC0: { value: new THREE.Vector3(0.85, 0.86, 0.90) },
-      uC1: { value: new THREE.Vector3(0.55, 0.58, 0.65) },
-      uC2: { value: new THREE.Vector3(0.32, 0.34, 0.40) },
-      uC3: { value: new THREE.Vector3(0.70, 0.72, 0.78) },
-      uC4: { value: new THREE.Vector3(0.95, 0.96, 1.00) },
-      uC5: { value: new THREE.Vector3(0.18, 0.19, 0.24) },
-      uCD: { value: new THREE.Vector3(0.04, 0.04, 0.06) },
     };
+    uniformsRef.current = uniforms;
 
     const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
       uniforms,
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        precision highp float;
-        varying vec2 vUv;
-        uniform float uTime, uLoop;
-        uniform vec2 uResolution;
-        uniform int uMode;
-        uniform vec3 uC0, uC1, uC2, uC3, uC4, uC5, uCD;
-        #define TAU 6.28318530718
-
-        float ph() {
-          return (uTime / uLoop) * TAU;
-        }
-
-        float inf(vec2 uv, vec2 c, float r) {
-          return 1.0 - smoothstep(0.0, r, length(uv - c));
-        }
-
-        float hash(vec2 p) {
-          p = fract(p * vec2(123.34, 456.21));
-          p += dot(p, p + 45.32);
-          return fract(p.x * p.y);
-        }
-
-        float noise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          float a = hash(i);
-          float b = hash(i + vec2(1.0, 0.0));
-          float c = hash(i + vec2(0.0, 1.0));
-          float d = hash(i + vec2(1.0, 1.0));
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-
-        float smoothGrain(vec2 uv, float p) {
-          float t = p / TAU;
-          float f = fract(t * 24.0);
-          float i = floor(t * 24.0);
-          vec2 g = uv * uResolution * 0.9;
-          return (mix(hash(g + i), hash(g + i + 1.0), smoothstep(0.0, 1.0, f))) * 2.0 - 1.0;
-        }
-
-        void main() {
-          vec2 uv = vUv;
-          float p = ph();
-          vec2 wuv = uv;
-          if (uMode == 1 || uMode == 2) {
-            float w1 = noise(uv * 3.0 + vec2(cos(p), sin(p)) * 0.6);
-            float w2 = noise(uv * 3.0 + vec2(cos(p + 2.0), sin(p + 1.3)) * 0.6 + 5.0);
-            wuv += (vec2(w1, w2) - 0.5) * 0.35;
-          }
-          vec2 c0 = vec2(0.28 + 0.10 * cos(p), 0.70 + 0.08 * sin(p));
-          vec2 c1 = vec2(0.40 + 0.09 * cos(p + 1.2), 0.78 + 0.07 * sin(p + 0.6));
-          vec2 c2 = vec2(0.82 + 0.08 * cos(p + 2.0), 0.55 + 0.10 * sin(p + 1.5));
-          vec2 c3 = vec2(0.68 + 0.07 * cos(p + 3.1), 0.42 + 0.09 * sin(p + 2.4));
-          vec2 c4 = vec2(0.74 + 0.06 * cos(p + 4.0), 0.50 + 0.06 * sin(p + 3.3));
-          vec2 c5 = vec2(0.18 + 0.09 * cos(p + 5.0), 0.30 + 0.08 * sin(p + 4.2));
-          vec2 cd = vec2(0.30 + 0.08 * cos(p + 0.7), 0.10 + 0.07 * sin(p + 5.1));
-          float r = 0.55 + 0.06 * sin(p);
-          vec3 col = uCD;
-          col = mix(col, uC0, clamp(inf(wuv, c0, r + 0.05), 0.0, 1.0));
-          col = mix(col, uC1, clamp(inf(wuv, c1, r), 0.0, 1.0) * 0.95);
-          col = mix(col, uC5, clamp(inf(wuv, c5, r - 0.05), 0.0, 1.0) * 0.9);
-          col = mix(col, uC3, clamp(inf(wuv, c3, r - 0.08), 0.0, 1.0) * 0.95);
-          col = mix(col, uC4, clamp(inf(wuv, c4, r - 0.18), 0.0, 1.0) * 0.85);
-          col = mix(col, uC2, clamp(inf(wuv, c2, r + 0.02), 0.0, 1.0) * 0.95);
-          col = mix(col, uCD, clamp(inf(wuv, cd, 0.32), 0.0, 1.0) * 0.55);
-          float lum = dot(col, vec3(0.299, 0.587, 0.114));
-          if (uMode == 2) {
-            col = mix(vec3(lum), col, 1.45);
-            col += col * col * 0.35;
-            col = pow(col, vec3(0.88));
-          } else {
-            col = mix(vec3(lum), col, 1.20);
-            col = pow(col, vec3(0.95));
-          }
-          vec2 vd = uv - 0.5;
-          vd.x *= uResolution.x / uResolution.y;
-          float vig = pow(1.0 - smoothstep(0.45, 0.95, length(vd)), 1.4);
-          col *= mix(0.55, 1.0, vig);
-          col += smoothGrain(uv, p) * mix(0.06, 0.025, lum);
-          gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
-        }
-      `,
     });
-    materialRef.current = material;
 
-    const geometry = new THREE.PlaneGeometry(2, 2);
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
@@ -159,65 +221,55 @@ export const MonoInk: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const scene = sceneRef.current;
-    const camera = cameraRef.current;
-    const renderer = rendererRef.current;
-    const material = materialRef.current;
+    if (
+      !rendererRef.current ||
+      !sceneRef.current ||
+      !cameraRef.current ||
+      !uniformsRef.current
+    ) {
+      return;
+    }
 
-    if (!scene || !camera || !renderer || !material) return;
+    const elapsedTime = frame / fps;
+    const duration = 15; // 15 seconds loop duration
+    const t = elapsedTime % duration;
 
-    const totalFrames = fps * LOOP_DURATION;
-    const localFrame = frame % totalFrames;
-    const elapsedTime = localFrame / fps;
+    // Smoothstep formulation for absolutely seamless blending transition at the boundaries
+    const progress = t / duration;
+    const smoothBlend = progress * progress * (3.0 - 2.0 * progress);
 
-    material.uniforms.uTime.value = elapsedTime;
-    renderer.render(scene, camera);
+    uniformsRef.current.uTime1.value = t;
+    uniformsRef.current.uTime2.value = t - duration;
+    uniformsRef.current.uBlend.value = smoothBlend;
+
+    rendererRef.current.render(sceneRef.current, cameraRef.current);
   }, [frame, fps]);
 
+  const containerStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    backgroundColor: '#000000',
+  };
+
   return (
-    <div
-      style={{
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        background: '#06050a',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'system-ui, sans-serif',
-      }}
-    >
+    <div style={containerStyle}>
       <canvas
         ref={canvasRef}
         style={{
+          width: ORIGINAL_WIDTH,
+          height: ORIGINAL_HEIGHT,
           display: 'block',
-          width: '100%',
-          height: '100%',
         }}
       />
-      <div
-        style={{
-          position: 'absolute',
-          left: '14px',
-          bottom: '12px',
-          color: 'rgba(255, 255, 255, 0.55)',
-          fontSize: '12px',
-          letterSpacing: '2px',
-          textTransform: 'uppercase',
-          pointerEvents: 'none',
-          mixBlendMode: 'overlay',
-        }}
-      >
-        05 · Mono Ink
-      </div>
     </div>
   );
 };
 
-export default MonoInk;
+export default Displex;
 // END_OF_FILE
