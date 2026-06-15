@@ -1,463 +1,471 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 import * as THREE from 'three';
-
-// Seeded deterministic pseudo-random function to avoid Math.random() inside the render
-function seededRandom(seed: number) {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-}
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-export const SplitGridOutro: React.FC = () => {
+// Deterministic seedable random for stars to keep output strictly frame-locked and reproducible
+const createDeterministicStars = (count: number): Float32Array => {
+  let seed = 42;
+  const random = (): number => {
+    const x = Math.sin(seed++) * 10000;
+    return x - Math.floor(x);
+  };
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    pos[i * 3 + 0] = (random() - 0.5) * 90;
+    pos[i * 3 + 1] = random() * 35; // Positioned above the floor
+    pos[i * 3 + 2] = -random() * 140 + 20;
+  }
+  return pos;
+};
+
+export const RetroGridOutro: React.FC = () => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const gridARef = useRef<THREE.GridHelper | null>(null);
-  const gridBRef = useRef<THREE.GridHelper | null>(null);
+  const gridRef = useRef<THREE.GridHelper | null>(null);
+  const grid2Ref = useRef<THREE.GridHelper | null>(null);
   const starsRef = useRef<THREE.Points | null>(null);
   const starsMaterialRef = useRef<THREE.PointsMaterial | null>(null);
 
-  // Math.min scale calculation for 16:9 fullscreen edge-to-edge cover
+  // Scale factor to preserve 16:9 full-screen aspect ratio without black bars
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // 1. Initial Three.js setup
+  // Pre-calculated deterministic stars positions
+  const starsPositions = useMemo(() => createDeterministicStars(900), []);
+
+  // Initialize Three.js Scene
   useEffect(() => {
     if (!canvasRef.current) return;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x02040a, 10, 60);
-    sceneRef.current = scene;
+    scene.fog = new THREE.Fog(0x02040a, 8, 55);
 
-    const camera = new THREE.PerspectiveCamera(68, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 200);
-    camera.position.set(0, 0, 14);
-    camera.lookAt(0, 0, -30);
-    cameraRef.current = camera;
+    const camera = new THREE.PerspectiveCamera(70, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 200);
+    camera.position.set(0, 3.2, 12);
+    camera.lookAt(0, 1.5, -30);
 
     const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
       antialias: true,
-      alpha: true,
+      alpha: false,
     });
-    renderer.setPixelRatio(2);
+    renderer.setPixelRatio(1); // Frame-by-frame rendering performance optimization
     renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
     renderer.setClearColor(0x02040a, 1);
-    rendererRef.current = renderer;
 
-    const makeGrid = () => {
-      const g = new THREE.GridHelper(140, 70, 0x5ad8ff, 0x1b8cff);
-      g.material.transparent = true;
-      g.material.opacity = 0.6;
-      g.rotation.x = Math.PI / 2;
+    const makeGrid = (): THREE.GridHelper => {
+      const size = 120;
+      const div = 60;
+      const g = new THREE.GridHelper(size, div, 0x19b6ff, 0x0f6fa0);
+      const mat = g.material as THREE.LineBasicMaterial;
+      mat.transparent = true;
+      mat.opacity = 0.55;
       g.position.y = 0;
       return g;
     };
 
-    const gridA = makeGrid();
-    gridA.position.x = -6;
-    scene.add(gridA);
-    gridARef.current = gridA;
+    const grid = makeGrid();
+    const grid2 = makeGrid();
+    grid2.position.z = -120;
+    scene.add(grid, grid2);
 
-    const gridB = makeGrid();
-    gridB.position.x = -6;
-    gridB.position.z = -140;
-    scene.add(gridB);
-    gridBRef.current = gridB;
-
-    // Generate stars using seeded random coordinates
-    const count = 1000;
     const geo = new THREE.BufferGeometry();
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      pos[i * 3 + 0] = (seededRandom(i * 3 + 0) - 0.5) * 100;
-      pos[i * 3 + 1] = (seededRandom(i * 3 + 1) - 0.5) * 70;
-      pos[i * 3 + 2] = -seededRandom(i * 3 + 2) * 150 + 20;
-    }
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const mat = new THREE.PointsMaterial({
-      color: 0xdfefff,
-      size: 0.4,
+    geo.setAttribute('position', new THREE.BufferAttribute(starsPositions, 3));
+    const starsMaterial = new THREE.PointsMaterial({
+      color: 0xcfeaff,
+      size: 0.35,
       transparent: true,
       opacity: 0.9,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    const stars = new THREE.Points(geo, mat);
+    const stars = new THREE.Points(geo, starsMaterial);
     scene.add(stars);
+
+    sceneRef.current = scene;
+    cameraRef.current = camera;
+    rendererRef.current = renderer;
+    gridRef.current = grid;
+    grid2Ref.current = grid2;
     starsRef.current = stars;
-    starsMaterialRef.current = mat;
+    starsMaterialRef.current = starsMaterial;
+
+    renderer.render(scene, camera);
 
     return () => {
       renderer.dispose();
-      gridA.geometry.dispose();
-      (gridA.material as THREE.Material).dispose();
-      gridB.geometry.dispose();
-      (gridB.material as THREE.Material).dispose();
-      geo.dispose();
-      mat.dispose();
+      grid.geometry.dispose();
+      (grid.material as THREE.Material).dispose();
+      grid2.geometry.dispose();
+      (grid2.material as THREE.Material).dispose();
+      stars.geometry.dispose();
+      starsMaterial.dispose();
     };
-  }, []);
+  }, [starsPositions]);
 
-  // 2. Deterministic frame animation updates
+  // Frame-locked render loop
   useEffect(() => {
+    const renderer = rendererRef.current;
     const scene = sceneRef.current;
     const camera = cameraRef.current;
-    const renderer = rendererRef.current;
-    const gridA = gridARef.current;
-    const gridB = gridBRef.current;
+    const grid = gridRef.current;
+    const grid2 = grid2Ref.current;
     const stars = starsRef.current;
     const starsMaterial = starsMaterialRef.current;
 
-    if (!scene || !camera || !renderer || !gridA || !gridB || !stars || !starsMaterial) {
-      return;
+    if (!renderer || !scene || !camera) return;
+
+    const t = frame / fps;
+    const speed = 16; // Set to 16 so distance traveled in 15s (240 units) is a multiple of grid span (120) for perfect looping
+    const span = 120;
+
+    // Advance floor grid seamlessly
+    if (grid) {
+      grid.position.z = (t * speed) % span;
+    }
+    if (grid2) {
+      grid2.position.z = ((t * speed) % span) - span;
     }
 
-    const elapsedTime = frame / fps;
+    // Stars drifting and fading seamlessly (using perfect divisor harmonics for 15s cycle)
+    if (stars && starsMaterial) {
+      starsMaterial.opacity = 0.6 + 0.3 * Math.sin(t * ((10 * Math.PI) / 15));
+      stars.position.z = (t * speed * 0.25) % 30; // 30 is a clean divisor of the 60 total units covered in 15s
+    }
 
-    // Seamless loop calculations for 10-second (600 frames at 60fps) timeline
-    const gridSpeed = 14;
-    const span = 140;
-    const gridOffset = (elapsedTime * gridSpeed) % span;
-    gridA.position.z = gridOffset;
-    gridB.position.z = gridOffset - span;
-
-    const starSpeed = 4;
-    stars.position.z = (elapsedTime * starSpeed) % 40;
-
-    // Stars pulsing opacity (exact integer wave frequency over 10s)
-    starsMaterial.opacity = 0.6 + 0.3 * Math.sin(elapsedTime * 2 * Math.PI * 2 / 10);
-
-    // Floating camera path that matches perfectly at frame 0 and frame 600
-    const angleY = (elapsedTime * 2 * Math.PI * 1) / 10;
-    const angleX = (elapsedTime * 2 * Math.PI * 2) / 10;
-    camera.position.y = Math.sin(angleY) * 0.4;
-    camera.position.x = Math.sin(angleX) * 0.5;
-    camera.lookAt(0, 0, -30);
+    // Cinematic camera bobbing (seamlessly loops with custom harmonic frequencies)
+    camera.position.y = 3.2 + Math.sin(t * ((4 * Math.PI) / 15)) * 0.25;
+    camera.position.x = Math.sin(t * ((2 * Math.PI) / 15)) * 0.6;
+    camera.lookAt(0, 1.5, -30);
 
     renderer.render(scene, camera);
   }, [frame, fps]);
 
-  // 3. Staggered GSAP Entrance & Exit animations mapped to Remotion interpolation
-  const rightPanelX = interpolate(frame, [0, 60, 540, 600], [300, 0, 0, 300], {
+  // =========================================================================
+  // INTERPOLATIONS & EASINGS (Replaces GSAP & CSS animations for frame-safety)
+  // =========================================================================
+
+  // 1. SUBSCRIBE PILL ENTRANCE & EXIT (Symmetric and loops perfectly at 15s / 900f)
+  const subWrapOpacity = interpolate(frame, [0, 60, 840, 900], [0, 1, 1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
+  const subWrapX = interpolate(frame, [0, 60, 840, 900], [-200, 0, 0, -200], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
+
+  // SUBSCRIBE PILL PULSE GLOW (loops every 90 frames / 1.5 seconds)
+  const subPillPulseGlow = 0.5 + 0.5 * Math.sin((frame / 90) * 2 * Math.PI);
+  const subPillGlowRadius1 = interpolate(subPillPulseGlow, [0, 1], [25, 40]);
+  const subPillGlowRadius2 = interpolate(subPillPulseGlow, [0, 1], [50, 70]);
+  const subPillColor1 = subPillPulseGlow < 0.5 ? '#19b6ff' : '#5ad8ff';
+  const subPillColor2 = subPillPulseGlow < 0.5 ? 'rgba(25,182,255,0.5)' : 'rgba(25,182,255,0.7)';
+  const subPillBoxShadow = `0 0 ${subPillGlowRadius1}px ${subPillColor1}, 0 0 ${subPillGlowRadius2}px ${subPillColor2}, inset 0 0 30px rgba(0,0,0,0.25)`;
+
+  // 2. TITLE ENTRANCE & EXIT (Delayed entrance, symmetric exit)
+  const titleOpacity = interpolate(frame, [12, 72, 828, 888], [0, 1, 1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
+  const titleX = interpolate(frame, [12, 72, 828, 888], [200, 0, 0, 200], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
+
+  // TITLE PULSE GLOW (loops every 100 frames)
+  const titlePulseGlow = 0.5 + 0.5 * Math.sin((frame / 100) * 2 * Math.PI);
+  const titleGlowRadius = interpolate(titlePulseGlow, [0, 1], [18, 28]);
+  const titleGlowColor = titlePulseGlow < 0.5 ? 'rgba(25,182,255,0.9)' : 'rgba(90,216,255,1)';
+  const titleWhiteGlow = interpolate(titlePulseGlow, [0, 1], [4, 6]);
+  const titleTextShadow = `0 0 ${titleGlowRadius}px ${titleGlowColor}, 0 0 ${titleWhiteGlow}px #fff`;
+
+  // 3. NEXT VIDEO FRAME ENTRANCE & EXIT (Scale & fade, delayed)
+  const nextFrameOpacity = interpolate(frame, [30, 90, 810, 870], [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
     easing: Easing.out(Easing.quad),
   });
-  const rightPanelOpacity = interpolate(frame, [0, 60, 540, 600], [0, 1, 1, 0], {
+  const nextFrameScale = interpolate(frame, [30, 90, 810, 870], [0.6, 1.0, 1.0, 0.6], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.back(1.6),
   });
 
-  const diagLineOpacity = interpolate(frame, [15, 70, 530, 585], [0, 1, 1, 0], {
+  // 4. CTA SPANS ENTRANCE, EXIT & PULSES (Staggered offsets, symmetric loop)
+  const cta1Opacity = interpolate(frame, [42, 84, 816, 858], [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
-
-  const titleX = interpolate(frame, [20, 75, 525, 580], [120, 0, 0, 120], {
+  const cta1X = interpolate(frame, [42, 84, 816, 858], [-80, 0, 0, -80], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
-    easing: Easing.out(Easing.quad),
+    easing: Easing.out(Easing.cubic),
   });
-  const titleOpacity = interpolate(frame, [20, 75, 525, 580], [0, 1, 1, 0], {
+
+  const cta2Opacity = interpolate(frame, [53, 95, 805, 847], [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
-
-  const playEntranceScale = interpolate(frame, [30, 90], [0, 1], {
+  const cta2X = interpolate(frame, [53, 95, 805, 847], [-80, 0, 0, -80], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
-    easing: Easing.back(1.7),
+    easing: Easing.out(Easing.cubic),
   });
-  const playExitScale = interpolate(frame, [510, 570], [1, 0], {
+
+  const cta3Opacity = interpolate(frame, [64, 106, 794, 836], [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
-    easing: Easing.in(Easing.quad),
+    easing: Easing.out(Easing.cubic),
   });
-  const playScale = frame < 300 ? playEntranceScale : playExitScale;
-  const playOpacity = interpolate(frame, [30, 90, 510, 570], [0, 1, 1, 0], {
+  const cta3X = interpolate(frame, [64, 106, 794, 836], [-80, 0, 0, -80], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
   });
 
-  const subY = interpolate(frame, [40, 95, 505, 560], [50, 0, 0, 50], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-    easing: Easing.out(Easing.quad),
-  });
-  const subOpacity = interpolate(frame, [40, 95, 505, 560], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  // CTA Pulse glows (loops every 150 frames, cleanly repeating 6 times in 900f)
+  const ctaPulseGlow1 = 0.5 + 0.5 * Math.sin(((frame - 0) / 150) * 2 * Math.PI);
+  const ctaPulseGlow2 = 0.5 + 0.5 * Math.sin(((frame - 15) / 150) * 2 * Math.PI);
+  const ctaPulseGlow3 = 0.5 + 0.5 * Math.sin(((frame - 30) / 150) * 2 * Math.PI);
 
-  const ctaOpacity = interpolate(frame, [50, 105, 495, 550], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const ctaGlowRadius1 = interpolate(ctaPulseGlow1, [0, 1], [14, 24]);
+  const ctaGlowColor1 = ctaPulseGlow1 < 0.5 ? 'rgba(25,182,255,0.7)' : 'rgba(90,216,255,1)';
+  const ctaTextShadow1 = `0 0 ${ctaGlowRadius1}px ${ctaGlowColor1}, 0 2px 5px rgba(0,0,0,0.6)`;
 
-  const prevLabelX = interpolate(frame, [25, 80, 520, 575], [-60, 0, 0, -60], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-    easing: Easing.out(Easing.quad),
-  });
-  const prevLabelOpacity = interpolate(frame, [25, 80, 520, 575], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const prevCornerOpacity = interpolate(frame, [45, 100, 500, 555], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const ctaGlowRadius2 = interpolate(ctaPulseGlow2, [0, 1], [14, 24]);
+  const ctaGlowColor2 = ctaPulseGlow2 < 0.5 ? 'rgba(25,182,255,0.7)' : 'rgba(90,216,255,1)';
+  const ctaTextShadow2 = `0 0 ${ctaGlowRadius2}px ${ctaGlowColor2}, 0 2px 5px rgba(0,0,0,0.6)`;
 
-  const nextLabelY = interpolate(frame, [35, 90, 515, 570], [60, 0, 0, 60], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-    easing: Easing.out(Easing.quad),
-  });
-  const nextLabelOpacity = interpolate(frame, [35, 90, 515, 570], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const nextCornerOpacity = interpolate(frame, [55, 110, 490, 545], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const ctaGlowRadius3 = interpolate(ctaPulseGlow3, [0, 1], [14, 24]);
+  const ctaGlowColor3 = ctaPulseGlow3 < 0.5 ? 'rgba(25,182,255,0.7)' : 'rgba(90,216,255,1)';
+  const ctaTextShadow3 = `0 0 ${ctaGlowRadius3}px ${ctaGlowColor3}, 0 2px 5px rgba(0,0,0,0.6)`;
 
-  // 4. Symmetrical loop-aligned continuous pulsing glow values
-  const playPulse = 0.5 + 0.5 * Math.sin((frame * 2 * Math.PI * 5) / 600);
-  const playGlow1 = interpolate(playPulse, [0, 1], [35, 50]);
-  const playGlow2 = interpolate(playPulse, [0, 1], [60, 80]);
-
-  const subPulse = 0.5 + 0.5 * Math.sin((frame * 2 * Math.PI * 6) / 600);
-  const subGlow1 = interpolate(subPulse, [0, 1], [22, 40]);
-  const subGlow2 = interpolate(subPulse, [0, 1], [16, 22]);
-
-  const titlePulse = 0.5 + 0.5 * Math.sin((frame * 2 * Math.PI * 4) / 600);
-  const textShadowGlowValue = interpolate(titlePulse, [0, 1], [18, 28]);
-
-  const ctaPulse = 0.5 + 0.5 * Math.sin((frame * 2 * Math.PI * 3) / 600);
-  const ctaTextShadowGlowValue = interpolate(ctaPulse, [0, 1], [14, 26]);
-
-  // CSS Styles converted to camelCase React.CSSProperties
-  const containerStyle: React.CSSProperties = {
-    width: ORIGINAL_WIDTH,
-    height: ORIGINAL_HEIGHT,
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-    transformOrigin: 'center center',
-    overflow: 'hidden',
-    backgroundColor: '#000',
-    fontFamily: "'Arial Black', Arial, sans-serif",
-  };
-
-  const canvasStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    display: 'block',
-    zIndex: 0,
-  };
-
-  const uiStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none',
-    zIndex: 2,
-  };
-
-  const rightPanelStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    clipPath: 'polygon(58% 0, 100% 0, 100% 100%, 42% 100%)',
-    background: 'radial-gradient(ellipse at 75% 40%, #0a1424 0%, #02040a 70%, #000 100%)',
-    transform: `translateX(${rightPanelX}px)`,
-    opacity: rightPanelOpacity,
-  };
-
-  const diagLineStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    clipPath: 'polygon(57.4% 0, 58.6% 0, 42.6% 100%, 41.4% 100%)',
-    background: 'linear-gradient(180deg, #5ad8ff, #1b8cff)',
-    boxShadow: '0 0 30px #19b6ff',
-    filter: 'blur(0.4px)',
-    opacity: diagLineOpacity,
-  };
-
-  const diagGlowStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    clipPath: 'polygon(58% 0, 63% 0, 47% 100%, 42% 100%)',
-    background: 'linear-gradient(180deg, rgba(90,216,255,0.0), rgba(27,140,255,0.55))',
-    opacity: diagLineOpacity,
-  };
-
-  const titleStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '7.5%',
-    right: '4%',
-    textAlign: 'right',
-    lineHeight: 0.98,
-    transform: `translateX(${titleX}px)`,
-    opacity: titleOpacity,
-  };
-
-  const h1Style: React.CSSProperties = {
-    color: '#dff1ff',
-    fontSize: '56px',
-    letterSpacing: '1px',
-    margin: 0,
-    textShadow: `0 0 ${textShadowGlowValue}px rgba(25,182,255,0.95), 0 0 4px #fff`,
-  };
-
-  const playBtnStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '26%',
-    right: '12%',
-    width: '200px',
-    height: '200px',
-    borderRadius: '50%',
-    background: 'radial-gradient(circle at 42% 38%, #8c9094 0%, #5c6064 55%, #3a3d40 100%)',
-    border: '7px solid #19b6ff',
-    boxShadow: `0 0 ${playGlow1}px #19b6ff, 0 0 ${playGlow2}px rgba(25,182,255,0.5), inset 0 0 25px rgba(0,0,0,0.55)`,
-    transform: `scale(${playScale})`,
-    transformOrigin: '50% 50%',
-    opacity: playOpacity,
-  };
-
-  const playTriangleStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    left: '54%',
-    transform: 'translate(-50%, -50%)',
-    borderLeft: '32px solid rgba(255,255,255,0.85)',
-    borderTop: '22px solid transparent',
-    borderBottom: '22px solid transparent',
-    filter: 'drop-shadow(0 0 6px rgba(25,182,255,0.7))',
-  };
-
-  const subscribeStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '62%',
-    right: '13%',
-    padding: '16px 48px',
-    color: '#fff',
-    fontSize: '30px',
-    letterSpacing: '2px',
-    background: 'rgba(2,8,18,0.35)',
-    border: '4px solid #5ad8ff',
-    borderRadius: '14px',
-    boxShadow: `0 0 ${subGlow1}px #19b6ff, inset 0 0 ${subGlow2}px rgba(25,182,255,0.25)`,
-    textShadow: '0 0 10px rgba(25,182,255,0.7)',
-    transform: `translateY(${subY}px)`,
-    opacity: subOpacity,
-  };
-
-  const ctaStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: '5%',
-    right: '3%',
-    color: '#fff',
-    fontStyle: 'italic',
-    letterSpacing: '2px',
-    fontSize: '28px',
-    whiteSpace: 'nowrap',
-    textShadow: `0 0 ${ctaTextShadowGlowValue}px rgba(25,182,255,0.8), 0 2px 5px rgba(0,0,0,0.6)`,
-    opacity: ctaOpacity,
-  };
-
-  const prevLabelStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '18%',
-    left: '5%',
-    color: '#fff',
-    fontSize: '36px',
-    letterSpacing: '2px',
-    writingMode: 'vertical-rl',
-    transform: `translateX(${prevLabelX}px) rotate(180deg)`,
-    textShadow: '0 0 12px rgba(25,182,255,0.6), 0 2px 5px rgba(0,0,0,0.6)',
-    opacity: prevLabelOpacity,
-  };
-
-  const prevCornerStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '14%',
-    left: '46%',
-    width: '80px',
-    height: '220px',
-    borderRight: '6px solid #5ad8ff',
-    borderTop: '6px solid #5ad8ff',
-    boxShadow: '0 0 18px #19b6ff',
-    filter: 'drop-shadow(0 0 6px #19b6ff)',
-    opacity: prevCornerOpacity,
-  };
-
-  const nextLabelStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '48%',
-    left: '38%',
-    color: '#fff',
-    fontSize: '36px',
-    letterSpacing: '2px',
-    writingMode: 'vertical-rl',
-    transform: `translateY(${nextLabelY}px) rotate(180deg)`,
-    textShadow: '0 0 12px rgba(90,216,255,0.7), 0 2px 5px rgba(0,0,0,0.6)',
-    opacity: nextLabelOpacity,
-  };
-
-  const nextCornerStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    left: '30%',
-    width: '100px',
-    height: '240px',
-    borderLeft: '6px solid #5ad8ff',
-    borderBottom: '6px solid #5ad8ff',
-    boxShadow: '0 0 18px #19b6ff',
-    filter: 'drop-shadow(0 0 6px #19b6ff)',
-    opacity: nextCornerOpacity,
-  };
+  // =========================================================================
+  // RENDER JSX (Edge-to-edge scalable layout)
+  // =========================================================================
 
   return (
-    <div style={containerStyle}>
-      <canvas ref={canvasRef} style={canvasStyle} />
+    <div
+      style={{
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+        backgroundColor: '#000000',
+        fontFamily: "'Arial Black', Arial, sans-serif",
+      }}
+    >
+      <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, display: 'block' }} />
 
-      <div style={uiStyle}>
-        {/* Diagonal side panels */}
-        <div style={diagGlowStyle} />
-        <div style={rightPanelStyle} />
-        <div style={diagLineStyle} />
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
+        
+        {/* SUBSCRIBE pill (kiri atas) */}
+        <div
+          id="subWrap"
+          style={{
+            position: 'absolute',
+            top: '9%',
+            left: '2%',
+            width: '44%',
+            minWidth: 320,
+            display: 'flex',
+            alignItems: 'center',
+            pointerEvents: 'auto',
+            opacity: subWrapOpacity,
+            transform: `translateX(${subWrapX}px)`,
+          }}
+        >
+          <div
+            id="subPill"
+            style={{
+              position: 'relative',
+              flex: 1,
+              height: 130,
+              background: 'linear-gradient(180deg, #b9bdc1 0%, #8d9296 100%)',
+              borderRadius: '80px',
+              border: '5px solid #19b6ff',
+              boxShadow: subPillBoxShadow,
+              display: 'flex',
+              alignItems: 'center',
+              paddingLeft: '6%',
+            }}
+          >
+            <span
+              style={{
+                color: '#19b6ff',
+                fontSize: 44,
+                letterSpacing: '1px',
+                textShadow: '0 0 12px rgba(25,182,255,0.9), 0 2px 3px rgba(0,0,0,0.4)',
+              }}
+            >
+              SUBSCRIBE
+            </span>
+            <div
+              id="subKnob"
+              style={{
+                position: 'absolute',
+                right: '-4%',
+                width: 115,
+                height: 115,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle at 40% 35%, #888 0%, #555 60%, #3a3a3a 100%)',
+                border: '6px solid #19b6ff',
+                boxShadow: '0 0 30px #19b6ff, inset 0 0 20px rgba(0,0,0,0.5)',
+              }}
+            />
+          </div>
+        </div>
 
-        {/* Left Side Video Frames */}
-        <div style={prevLabelStyle}>Previous Video</div>
-        <div style={prevCornerStyle} />
-        <div style={nextLabelStyle}>Next Video</div>
-        <div style={nextCornerStyle} />
-
-        {/* Right Side Call To Actions */}
-        <div style={titleStyle}>
-          <h1 style={h1Style}>
+        {/* THANKS FOR WATCHING (kanan atas) */}
+        <div
+          id="title"
+          style={{
+            position: 'absolute',
+            top: '6%',
+            right: '3%',
+            textAlign: 'right',
+            lineHeight: 1.0,
+            opacity: titleOpacity,
+            transform: `translateX(${titleX}px)`,
+          }}
+        >
+          <h1
+            style={{
+              color: '#cfe9ff',
+              fontSize: 64,
+              letterSpacing: '1px',
+              textShadow: titleTextShadow,
+              margin: 0,
+            }}
+          >
             THANKS FOR
             <br />
             WATCHING
           </h1>
         </div>
-        <div style={playBtnStyle}>
-          {/* Inner Triangle replacing CSS ::after */}
-          <div style={playTriangleStyle} />
+
+        {/* NEXT VIDEO frame (kanan tengah-bawah) */}
+        <div
+          id="nextFrame"
+          style={{
+            position: 'absolute',
+            top: '30%',
+            right: '3%',
+            width: '42%',
+            height: 504,
+            border: '4px solid #aeb3b7',
+            borderRadius: 18,
+            backgroundColor: 'rgba(2,8,18,0.15)',
+            boxShadow: '0 0 20px rgba(25,182,255,0.5), inset 0 0 30px rgba(25,182,255,0.12)',
+            pointerEvents: 'auto',
+            opacity: nextFrameOpacity,
+            transform: `scale(${nextFrameScale})`,
+            transformOrigin: '50% 50%',
+          }}
+        >
+          {/* Cyan glow side tab */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '8%',
+              right: -7,
+              width: 7,
+              height: '22%',
+              backgroundColor: '#19b6ff',
+              borderRadius: 4,
+              boxShadow: '0 0 12px #19b6ff',
+            }}
+          />
+          <div
+            id="nextLabel"
+            style={{
+              position: 'absolute',
+              bottom: '-16%',
+              right: 0,
+              color: '#fff',
+              fontSize: 36,
+              textShadow: '0 0 12px rgba(25,182,255,0.6)',
+            }}
+          >
+            Next Video
+          </div>
         </div>
-        <div style={subscribeStyle}>SUBSCRIBE</div>
-        <div style={ctaStyle}>LIKE - COMMENT - SHARE</div>
+
+        {/* LIKE / COMMENT / SHARE (kiri bawah) */}
+        <div
+          id="cta"
+          style={{
+            position: 'absolute',
+            bottom: '6%',
+            left: '7%',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 24,
+          }}
+        >
+          <span
+            style={{
+              color: '#fff',
+              fontStyle: 'italic',
+              fontSize: 36,
+              letterSpacing: '2px',
+              opacity: cta1Opacity,
+              transform: `translateX(${cta1X}px)`,
+              textShadow: ctaTextShadow1,
+            }}
+          >
+            LIKE
+          </span>
+          <span
+            style={{
+              color: '#fff',
+              fontStyle: 'italic',
+              fontSize: 36,
+              letterSpacing: '2px',
+              opacity: cta2Opacity,
+              transform: `translateX(${cta2X}px)`,
+              textShadow: ctaTextShadow2,
+            }}
+          >
+            COMMENT
+          </span>
+          <span
+            style={{
+              color: '#fff',
+              fontStyle: 'italic',
+              fontSize: 36,
+              letterSpacing: '2px',
+              opacity: cta3Opacity,
+              transform: `translateX(${cta3X}px)`,
+              textShadow: ctaTextShadow3,
+            }}
+          >
+            SHARE
+          </span>
+        </div>
+
       </div>
     </div>
   );
 };
 
-export default SplitGridOutro;
+export default RetroGridOutro;
 // END_OF_FILE
