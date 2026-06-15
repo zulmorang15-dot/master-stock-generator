@@ -1,406 +1,467 @@
-import React, { useRef, useEffect } from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate } from 'remotion';
-import * as THREE from 'three';
+import React from 'react';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const PARTICLE_COUNT = 1000;
-const PARTICLE_POSITIONS = new Float32Array(PARTICLE_COUNT * 3);
-const PARTICLE_COLORS = new Float32Array(PARTICLE_COUNT * 3);
+// Pre-calculate deterministic particle values outside the component to prevent frame-tearing
+const PARTICLES = [
+  { id: 1, width: 3, height: 15, left: '20%', color: '#00ffff', duration: 5, delay: 0 },
+  { id: 2, width: 4, height: 4, left: '80%', color: '#ff00ff', duration: 10, delay: 2 },
+  { id: 3, width: 10, height: 2, left: '50%', color: '#ffff00', duration: 2.5, delay: 1 },
+  { id: 4, width: 2, height: 20, left: '35%', color: '#00ffff', duration: 5, delay: 3 },
+  { id: 5, width: 5, height: 5, left: '65%', color: '#ff00ff', duration: 5, delay: 4 },
+];
 
-// Deterministic Pseudo-Random Generator (LCG)
-let seed = 987654321;
-function deterministicRandom() {
-    const x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
-}
+export const CyberpunkOverlayTemplate: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { width, height, fps } = useVideoConfig();
 
-// Pre-calculate positions and colors once outside component lifecycle
-for (let i = 0; i < PARTICLE_COUNT; i++) {
-    PARTICLE_POSITIONS[i * 3] = (deterministicRandom() - 0.5) * 1000;      // X
-    PARTICLE_POSITIONS[i * 3 + 1] = (deterministicRandom() - 0.5) * 200;  // Y
-    PARTICLE_POSITIONS[i * 3 + 2] = (deterministicRandom() - 0.5) * 1000; // Z
+  // Scale factor to fill 16:9 1080p frame perfectly on any composition resolution
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    const isCyan = deterministicRandom() > 0.5;
-    if (isCyan) {
-        PARTICLE_COLORS[i * 3] = 0.0;     // R
-        PARTICLE_COLORS[i * 3 + 1] = 1.0; // G
-        PARTICLE_COLORS[i * 3 + 2] = 1.0; // B
-    } else {
-        PARTICLE_COLORS[i * 3] = 1.0;     // R
-        PARTICLE_COLORS[i * 3 + 1] = 0.0; // G
-        PARTICLE_COLORS[i * 3 + 2] = 1.0; // B
-    }
-}
+  // 10s Loop (600 frames at 60fps)
+  const loopDurationFrames = fps * 10;
+  const localFrame = frame % loopDurationFrames;
 
-export const HudLandscape: React.FC = () => {
-    const { width, height } = useVideoConfig();
-    const frame = useCurrentFrame();
-    
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const sceneRef = useRef<THREE.Scene | null>(null);
-    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-    const terrainBottomRef = useRef<THREE.Mesh | null>(null);
-    const terrainTopRef = useRef<THREE.Mesh | null>(null);
-    const particlesRef = useRef<THREE.Points | null>(null);
+  // Master Glitch Calculation
+  const glitchProgress = (localFrame / loopDurationFrames) * 100;
+  let glitchX = 0;
+  let glitchY = 0;
+  let glitchFilter = 'none';
 
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+  if (glitchProgress >= 48.5 && glitchProgress < 49.5) {
+    glitchX = -3;
+    glitchY = 2;
+    glitchFilter = 'drop-shadow(4px 0px 0px #00ffff) drop-shadow(-4px 0px 0px #ff00ff)';
+  } else if (glitchProgress >= 49.5 && glitchProgress < 50.5) {
+    glitchX = 3;
+    glitchY = -2;
+    glitchFilter = 'drop-shadow(-4px 0px 0px #00ffff) drop-shadow(4px 0px 0px #ff00ff)';
+  } else if (glitchProgress >= 96.5 && glitchProgress < 97.5) {
+    glitchX = 2;
+    glitchY = 3;
+    glitchFilter = 'drop-shadow(5px 0px 0px #00ffff) drop-shadow(-5px 0px 0px #ff00ff)';
+  } else if (glitchProgress >= 97.5 && glitchProgress < 98.5) {
+    glitchX = -4;
+    glitchY = -1;
+    glitchFilter = 'drop-shadow(-5px 0px 0px #00ffff) drop-shadow(5px 0px 0px #ff00ff)';
+  }
 
-    // 1. Initialize WebGL Scene
-    useEffect(() => {
-        if (!canvasRef.current) return;
+  // Ambient Lights pulsing (10s total loop, 5s alternate)
+  const pulseLeftProgress = 0.5 - 0.5 * Math.cos((localFrame / loopDurationFrames) * 2 * Math.PI);
+  const opacityLeft = interpolate(pulseLeftProgress, [0, 1], [0.15, 0.35]);
+  const scaleLeft = interpolate(pulseLeftProgress, [0, 1], [0.9, 1.1]);
 
-        const renderer = new THREE.WebGLRenderer({
-            canvas: canvasRef.current,
-            antialias: true,
-            alpha: true,
-        });
-        renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-        renderer.setPixelRatio(1);
-        rendererRef.current = renderer;
+  const localFrameRight = (localFrame + fps * 2.5) % loopDurationFrames;
+  const pulseRightProgress = 0.5 - 0.5 * Math.cos((localFrameRight / loopDurationFrames) * 2 * Math.PI);
+  const opacityRight = interpolate(pulseRightProgress, [0, 1], [0.15, 0.35]);
+  const scaleRight = interpolate(pulseRightProgress, [0, 1], [0.9, 1.1]);
 
-        const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x050010, 0.0025);
-        sceneRef.current = scene;
+  // Moving synthwave grid calculation (5s loop)
+  const gridProgress = (localFrame % (fps * 5)) / (fps * 5);
+  const gridBackgroundPosition = `0% ${gridProgress * 15}%`;
 
-        const camera = new THREE.PerspectiveCamera(75, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 1, 1000);
-        camera.position.set(0, 0, 0);
-        cameraRef.current = camera;
+  // Glowing borders rotation (5s loop)
+  const borderProgress = (localFrame % (fps * 5)) / (fps * 5);
+  const borderRotationLeft = borderProgress * 360;
+  const borderRotationRight = (1 - borderProgress) * 360;
 
-        // Grid spacing segment: 50 units. Grid overall length: 4000.
-        const gridGeometry = new THREE.PlaneGeometry(2000, 4000, 40, 80);
-        const positionAttribute = gridGeometry.attributes.position;
-        
-        // Use a displacement frequency that loops perfectly with a Z movement of 1000 units
-        const waveFreq = (2 * Math.PI * 2) / 1000; 
-        for (let i = 0; i < positionAttribute.count; i++) {
-            const x = positionAttribute.getX(i);
-            const y = positionAttribute.getY(i);
-            const z = positionAttribute.getZ(i);
-            const displacement = Math.sin(x * 0.01) * Math.cos(y * waveFreq) * 40;
-            positionAttribute.setZ(i, z + displacement);
-        }
-        gridGeometry.computeVertexNormals();
+  // Circular subscribe border rotation (2.5s loop)
+  const circleProgress = (localFrame % (fps * 2.5)) / (fps * 2.5);
+  const circleRotation = circleProgress * 360;
 
-        const materialCyan = new THREE.MeshBasicMaterial({
-            color: 0x00FFFF,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.3,
-        });
+  // Jump glitch line calculations (5s loop)
+  const gp = (localFrame % (fps * 5)) / (fps * 5) * 100;
+  let lineOpacity = 0;
+  let lineTop = '0%';
+  if (gp >= 90 && gp < 91) {
+    lineOpacity = 1;
+    lineTop = '20%';
+  } else if (gp >= 92 && gp < 93) {
+    lineOpacity = 1;
+    lineTop = '20%';
+  } else if (gp >= 93 && gp < 94) {
+    lineOpacity = 1;
+    lineTop = '75%';
+  } else if (gp >= 95 && gp < 96) {
+    lineOpacity = 1;
+    lineTop = '40%';
+  }
 
-        const materialMagenta = new THREE.MeshBasicMaterial({
-            color: 0xFF00FF,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.3,
-        });
-
-        const terrainBottom = new THREE.Mesh(gridGeometry, materialCyan);
-        terrainBottom.rotation.x = -Math.PI / 2;
-        terrainBottom.position.y = -100;
-        scene.add(terrainBottom);
-        terrainBottomRef.current = terrainBottom;
-
-        const terrainTop = new THREE.Mesh(gridGeometry, materialMagenta);
-        terrainTop.rotation.x = Math.PI / 2;
-        terrainTop.position.y = 100;
-        scene.add(terrainTop);
-        terrainTopRef.current = terrainTop;
-
-        const particleGeometry = new THREE.BufferGeometry();
-        particleGeometry.setAttribute('position', new THREE.BufferAttribute(PARTICLE_POSITIONS.slice(), 3));
-        particleGeometry.setAttribute('color', new THREE.BufferAttribute(PARTICLE_COLORS.slice(), 3));
-
-        const particleMaterial = new THREE.PointsMaterial({
-            size: 3,
-            vertexColors: true,
-            transparent: true,
-            opacity: 0.8,
-            blending: THREE.AdditiveBlending,
-        });
-
-        const particles = new THREE.Points(particleGeometry, particleMaterial);
-        scene.add(particles);
-        particlesRef.current = particles;
-
-        return () => {
-            renderer.dispose();
-            gridGeometry.dispose();
-            materialCyan.dispose();
-            materialMagenta.dispose();
-            particleGeometry.dispose();
-            particleMaterial.dispose();
-        };
-    }, []);
-
-    // 2. Deterministic Render Effect per Frame
-    useEffect(() => {
-        if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
-
-        const totalFrames = 600; // 10s at 60fps
-        const progress = (frame % totalFrames) / totalFrames;
-
-        // Perfect looping terrain position Z coordinate shift
-        const zOffset = progress * 1000;
-        if (terrainBottomRef.current) {
-            terrainBottomRef.current.position.z = zOffset;
-        }
-        if (terrainTopRef.current) {
-            terrainTopRef.current.position.z = zOffset;
-        }
-
-        // Seamless wrap of particles
-        if (particlesRef.current) {
-            const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
-            for (let i = 0; i < PARTICLE_COUNT; i++) {
-                const baseZ = PARTICLE_POSITIONS[i * 3 + 2];
-                let z = baseZ + zOffset;
-                z = ((z + 500) % 1000);
-                if (z < 0) z += 1000;
-                z -= 500;
-                positions[i * 3 + 2] = z;
-            }
-            particlesRef.current.geometry.attributes.position.needsUpdate = true;
-        }
-
-        // Camera deterministic path matching 10s loop duration
-        const angle = progress * Math.PI * 2;
-        cameraRef.current.rotation.z = Math.sin(angle) * 0.05;
-        cameraRef.current.position.y = Math.sin(angle * 2) * 10;
-
-        rendererRef.current.render(sceneRef.current, cameraRef.current);
-    }, [frame]);
-
-    // 3. Flowing path animations mapped perfectly to loop
-    const flowLeftOffset = interpolate(frame % 600, [0, 600], [2000, 0]);
-    const flowRightOffset = interpolate(frame % 600, [0, 600], [0, -2000]);
-    const flowCircleOffset = interpolate(frame % 600, [0, 600], [1000, 0]);
-    const flowCircleOffsetRev = interpolate(frame % 600, [0, 600], [0, 1000]);
-
-    // Inline Styling Objects
-    const wrapperStyle: React.CSSProperties = {
+  return (
+    <div
+      style={{
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
         position: 'absolute',
         top: '50%',
         left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transform: `translate(calc(-50% + ${glitchX}px), calc(-50% + ${glitchY}px)) scale(${scaleFactor})`,
         transformOrigin: 'center center',
         overflow: 'hidden',
-        backgroundColor: '#050010',
-    };
+        backgroundColor: '#050505',
+        boxShadow: 'inset 0 0 100px rgba(0, 0, 0, 0.9)',
+        filter: glitchFilter,
+      }}
+    >
+      {/* Ambient Pulsing Lights */}
+      <div
+        className="ambient-light light-left"
+        style={{
+          position: 'absolute',
+          top: '10%',
+          left: '5%',
+          width: '40%',
+          height: '60%',
+          background: '#00ffff',
+          borderRadius: '50%',
+          filter: 'blur(80px)',
+          zIndex: 0,
+          opacity: opacityLeft,
+          transform: `scale(${scaleLeft})`,
+        }}
+      />
+      <div
+        className="ambient-light light-right"
+        style={{
+          position: 'absolute',
+          top: '10%',
+          right: '5%',
+          width: '40%',
+          height: '60%',
+          background: '#ff00ff',
+          borderRadius: '50%',
+          filter: 'blur(80px)',
+          zIndex: 0,
+          opacity: opacityRight,
+          transform: `scale(${scaleRight})`,
+        }}
+      />
 
-    const canvasStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        zIndex: 1,
-        // High fidelity bloom simulated safely in CSS filter layer
-        filter: 'drop-shadow(0 0 10px rgba(0, 255, 255, 0.4)) drop-shadow(0 0 20px rgba(255, 0, 255, 0.2))',
-    };
+      {/* Synthwave Moving Grid */}
+      <div
+        className="grid-wrapper"
+        style={{
+          position: 'absolute',
+          bottom: '-20%',
+          left: '-50%',
+          width: '200%',
+          height: '70%',
+          perspective: 800,
+          zIndex: 1,
+        }}
+      >
+        <div
+          className="grid-surface"
+          style={{
+            position: 'absolute',
+            width: '100%',
+            height: '100%',
+            backgroundImage: `
+              linear-gradient(to right, rgba(0, 255, 255, 0.2) 2px, transparent 2px),
+              linear-gradient(to top, rgba(255, 0, 255, 0.4) 2px, transparent 2px)
+            `,
+            backgroundSize: '3% 15%',
+            backgroundPosition: gridBackgroundPosition,
+            transform: 'rotateX(75deg)',
+            transformOrigin: 'center top',
+            boxShadow: 'inset 0 100px 100px #050505',
+          }}
+        />
+      </div>
 
-    const glitchStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        background: 'linear-gradient(rgba(0,255,255,0.03) 50%, rgba(255,0,255,0.03) 50%)',
-        backgroundSize: '100% 4px',
-        zIndex: 1,
-        mixBlendMode: 'screen',
-    };
+      {/* Floating Cyber Particles */}
+      <div className="particles" style={{ position: 'absolute', inset: 0, zIndex: 5 }}>
+        {PARTICLES.map((p) => {
+          const durationFrames = p.duration * fps;
+          const delayFrames = p.delay * fps;
+          const pFrame = (localFrame + delayFrames) % durationFrames;
+          const progress = pFrame / durationFrames;
 
-    const uiLayerStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        zIndex: 2,
-    };
+          const translateY = interpolate(progress, [0, 1], [1180, -100]);
+          const scale = interpolate(progress, [0, 1], [1, 0.5]);
+          const opacity = interpolate(progress, [0, 0.1, 0.9, 1], [0, 0.8, 0.8, 0], {
+            extrapolateLeft: 'clamp',
+            extrapolateRight: 'clamp',
+          });
 
-    const hudBoxLeftStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: 640,
-        height: 360,
-        top: 300,
-        left: 200,
-    };
+          return (
+            <div
+              key={p.id}
+              className={`particle p${p.id}`}
+              style={{
+                position: 'absolute',
+                width: p.width,
+                height: p.height,
+                left: p.left,
+                backgroundColor: p.color,
+                opacity,
+                transform: `translateY(${translateY}px) scale(${scale})`,
+                transformOrigin: 'bottom center',
+              }}
+            />
+          );
+        })}
+      </div>
 
-    const hudBoxRightStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: 640,
-        height: 360,
-        top: 300,
-        right: 200,
-    };
+      {/* Horizontal Glitch Line */}
+      <div
+        className="glitch-line"
+        style={{
+          position: 'absolute',
+          width: '100%',
+          height: 2,
+          background: 'rgba(255, 255, 255, 0.8)',
+          boxShadow: '0 0 10px #00ffff, 0 0 10px #ff00ff',
+          zIndex: 90,
+          opacity: lineOpacity,
+          top: lineTop,
+        }}
+      />
 
-    const hudCircleStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: 250,
-        height: 250,
-        bottom: 120,
-        left: '50%',
-        transform: 'translateX(-50%)',
-    };
-
-    const greenScreenStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        backgroundColor: '#00FF00',
-    };
-
-    const greenScreenRoundStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        backgroundColor: '#00FF00',
-        borderRadius: '50%',
-    };
-
-    const hudBorderStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: -10,
-        left: -10,
-        width: 'calc(100% + 20px)',
-        height: 'calc(100% + 20px)',
-        overflow: 'visible',
-        zIndex: 3,
-        filter: 'drop-shadow(0 0 8px #FF00FF) drop-shadow(0 0 15px #00FFFF)',
-    };
-
-    return (
-        <div style={wrapperStyle}>
-            <canvas ref={canvasRef} style={canvasStyle} />
-            <div style={glitchStyle} />
-            <div style={uiLayerStyle}>
-                
-                {/* HUD Box Left */}
-                <div style={hudBoxLeftStyle}>
-                    <div style={greenScreenStyle} />
-                    <svg style={hudBorderStyle} viewBox="0 0 660 380">
-                        <rect 
-                            style={{
-                                fill: 'none',
-                                strokeWidth: 4,
-                                strokeLinecap: 'square',
-                                stroke: '#00FFFF',
-                                strokeDasharray: '200 1800',
-                                strokeDashoffset: flowLeftOffset,
-                            }}
-                            x="10" 
-                            y="10" 
-                            width="640" 
-                            height="360" 
-                        />
-                        <rect 
-                            style={{
-                                fill: 'none',
-                                strokeWidth: 4,
-                                strokeLinecap: 'square',
-                                stroke: '#FF00FF',
-                                strokeDasharray: '400 1600',
-                                strokeDashoffset: flowRightOffset,
-                            }}
-                            x="6" 
-                            y="6" 
-                            width="648" 
-                            height="368" 
-                        />
-                        <circle cx="10" cy="10" r="4" fill="#00FFFF" />
-                        <circle cx="650" cy="10" r="4" fill="#00FFFF" />
-                        <circle cx="10" cy="370" r="4" fill="#00FFFF" />
-                        <circle cx="650" cy="370" r="4" fill="#00FFFF" />
-                    </svg>
-                </div>
-
-                {/* HUD Box Right */}
-                <div style={hudBoxRightStyle}>
-                    <div style={greenScreenStyle} />
-                    <svg style={hudBorderStyle} viewBox="0 0 660 380">
-                        <rect 
-                            style={{
-                                fill: 'none',
-                                strokeWidth: 4,
-                                strokeLinecap: 'square',
-                                stroke: '#00FFFF',
-                                strokeDasharray: '200 1800',
-                                strokeDashoffset: flowLeftOffset,
-                            }}
-                            x="10" 
-                            y="10" 
-                            width="640" 
-                            height="360" 
-                        />
-                        <rect 
-                            style={{
-                                fill: 'none',
-                                strokeWidth: 4,
-                                strokeLinecap: 'square',
-                                stroke: '#FF00FF',
-                                strokeDasharray: '400 1600',
-                                strokeDashoffset: flowRightOffset,
-                            }}
-                            x="6" 
-                            y="6" 
-                            width="648" 
-                            height="368" 
-                        />
-                        <circle cx="10" cy="10" r="4" fill="#FF00FF" />
-                        <circle cx="650" cy="10" r="4" fill="#FF00FF" />
-                        <circle cx="10" cy="370" r="4" fill="#FF00FF" />
-                        <circle cx="650" cy="370" r="4" fill="#FF00FF" />
-                    </svg>
-                </div>
-
-                {/* HUD Circle */}
-                <div style={hudCircleStyle}>
-                    <div style={greenScreenRoundStyle} />
-                    <svg style={hudBorderStyle} viewBox="0 0 270 270">
-                        <circle 
-                            style={{
-                                fill: 'none',
-                                strokeWidth: 4,
-                                strokeLinecap: 'square',
-                                stroke: '#00FFFF',
-                                strokeDasharray: '200 1800',
-                                strokeDashoffset: flowCircleOffset,
-                            }}
-                            cx="135" 
-                            cy="135" 
-                            r="125" 
-                        />
-                        <circle 
-                            style={{
-                                fill: 'none',
-                                strokeWidth: 4,
-                                strokeLinecap: 'square',
-                                stroke: '#FF00FF',
-                                strokeDasharray: '400 1600',
-                                strokeDashoffset: flowCircleOffsetRev,
-                            }}
-                            cx="135" 
-                            cy="135" 
-                            r="130" 
-                        />
-                    </svg>
-                </div>
-
-            </div>
+      {/* Video Box Left */}
+      <div
+        className="video-box video-left"
+        style={{
+          position: 'absolute',
+          width: '36%',
+          aspectRatio: '16 / 9',
+          top: '16%',
+          left: '9%',
+          zIndex: 10,
+        }}
+      >
+        <div
+          className="border-wrapper border-left"
+          style={{
+            position: 'absolute',
+            top: -4,
+            left: -4,
+            right: -4,
+            bottom: -4,
+            background: '#222',
+            overflow: 'hidden',
+            zIndex: -1,
+            boxShadow: '0 0 25px rgba(0, 255, 255, 0.4)',
+          }}
+        >
+          <div
+            style={{
+              content: '""',
+              position: 'absolute',
+              top: '-50%',
+              left: '-50%',
+              width: '200%',
+              height: '200%',
+              background: 'conic-gradient(from 0deg, transparent 60%, #00ffff 100%)',
+              transform: `rotate(${borderRotationLeft}deg)`,
+              transformOrigin: 'center center',
+            }}
+          />
         </div>
-    );
+        <div
+          className="green-screen-rect"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: '#00FF00',
+            zIndex: 2,
+          }}
+        />
+        <div
+          className="tech-corners"
+          style={{
+            position: 'absolute',
+            top: -10,
+            left: -10,
+            right: -10,
+            bottom: -10,
+            zIndex: 3,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: 20,
+              height: 20,
+              borderLeft: '2px solid #fff',
+              borderTop: '2px solid #fff',
+              opacity: 0.7,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              width: 20,
+              height: 20,
+              borderRight: '2px solid #fff',
+              borderBottom: '2px solid #fff',
+              opacity: 0.7,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Video Box Right */}
+      <div
+        className="video-box video-right"
+        style={{
+          position: 'absolute',
+          width: '36%',
+          aspectRatio: '16 / 9',
+          top: '16%',
+          right: '9%',
+          zIndex: 10,
+        }}
+      >
+        <div
+          className="border-wrapper border-right"
+          style={{
+            position: 'absolute',
+            top: -4,
+            left: -4,
+            right: -4,
+            bottom: -4,
+            background: '#222',
+            overflow: 'hidden',
+            zIndex: -1,
+            boxShadow: '0 0 25px rgba(255, 0, 255, 0.4)',
+          }}
+        >
+          <div
+            style={{
+              content: '""',
+              position: 'absolute',
+              top: '-50%',
+              left: '-50%',
+              width: '200%',
+              height: '200%',
+              background: 'conic-gradient(from 0deg, transparent 60%, #ff00ff 100%)',
+              transform: `rotate(${borderRotationRight}deg)`,
+              transformOrigin: 'center center',
+            }}
+          />
+        </div>
+        <div
+          className="green-screen-rect"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: '#00FF00',
+            zIndex: 2,
+          }}
+        />
+        <div
+          className="tech-corners"
+          style={{
+            position: 'absolute',
+            top: -10,
+            left: -10,
+            right: -10,
+            bottom: -10,
+            zIndex: 3,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: 20,
+              height: 20,
+              borderLeft: '2px solid #fff',
+              borderTop: '2px solid #fff',
+              opacity: 0.7,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              width: 20,
+              height: 20,
+              borderRight: '2px solid #fff',
+              borderBottom: '2px solid #fff',
+              opacity: 0.7,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Subscribe Placeholder */}
+      <div
+        className="subscribe-box"
+        style={{
+          position: 'absolute',
+          width: '14%',
+          aspectRatio: '1 / 1',
+          bottom: '12%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 10,
+          borderRadius: '50%',
+        }}
+      >
+        <div
+          className="border-circle"
+          style={{
+            position: 'absolute',
+            top: -4,
+            left: -4,
+            right: -4,
+            bottom: -4,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            boxShadow: '0 0 30px rgba(255, 255, 0, 0.4)',
+            zIndex: -1,
+          }}
+        >
+          <div
+            style={{
+              content: '""',
+              position: 'absolute',
+              top: '-50%',
+              left: '-50%',
+              width: '200%',
+              height: '200%',
+              background: 'conic-gradient(from 0deg, transparent 40%, #00ffff 60%, #ff00ff 80%, #ffff00 100%)',
+              transform: `rotate(${circleRotation}deg)`,
+              transformOrigin: 'center center',
+            }}
+          />
+        </div>
+        <div
+          className="green-screen-circle"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: '#00FF00',
+            borderRadius: '50%',
+            zIndex: 2,
+          }}
+        />
+      </div>
+
+      {/* Scanlines Overlay */}
+      <div
+        className="scanlines"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 2px, rgba(0, 0, 0, 0.2) 3px, rgba(0, 0, 0, 0.2) 4px)',
+          zIndex: 100,
+          opacity: 0.6,
+        }}
+      />
+    </div>
+  );
 };
 
-export default HudLandscape;
+export default CyberpunkOverlayTemplate;
 // END_OF_FILE
