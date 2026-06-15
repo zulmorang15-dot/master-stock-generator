@@ -1,228 +1,421 @@
-import React, { useRef, useEffect } from 'react';
-import { useVideoConfig, useCurrentFrame } from 'remotion';
-import * as THREE from 'three';
+import React from 'react';
+import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const PremiumAbstractNeonShader: React.FC = () => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const sceneRef = useRef<THREE.Scene | null>(null);
-    const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
-    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-    const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+export const YoutubeEndScreen: React.FC = () => {
+	const { width, height, fps } = useVideoConfig();
+	const frame = useCurrentFrame();
 
-    const frame = useCurrentFrame();
-    const { width, height, fps } = useVideoConfig();
+	// Calculate scaling to perfectly fit container edge-to-edge
+	const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    // Responsive scaling factor to fill 16:9 viewport edge-to-edge
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+	// 1. Background Gradient Motion Loop (10s/300f cycle for seamless 30s loop)
+	const bgFrame = frame % 300;
+	const bgX = interpolate(
+		bgFrame,
+		[0, 150, 300],
+		[0, 100, 0],
+		{ easing: Easing.inOut(Easing.quad) }
+	);
 
-    // 1. Scene & Shader Initialization (Runs once on mount)
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
+	// 2. Skewed Decorative Elements Motion Loops
+	// Before Element: 15s (450 frames) alternate loop for seamless 30s
+	const beforeFrame = frame % 450;
+	const beforeX = interpolate(
+		beforeFrame,
+		[0, 225, 450],
+		[-5, 5, -5],
+		{ easing: Easing.inOut(Easing.quad) }
+	);
+	const beforeOpacity = interpolate(
+		beforeFrame,
+		[0, 225, 450],
+		[0.5, 1, 0.5],
+		{ easing: Easing.inOut(Easing.quad) }
+	);
 
-        // Scene
-        const scene = new THREE.Scene();
-        sceneRef.current = scene;
+	// After Element: 7.5s (225 frames) alternate loop for seamless 30s
+	const afterFrame = frame % 225;
+	const afterX = interpolate(
+		afterFrame,
+		[0, 112.5, 225],
+		[5, -5, 5],
+		{ easing: Easing.inOut(Easing.quad) }
+	);
+	const afterOpacity = interpolate(
+		afterFrame,
+		[0, 112.5, 225],
+		[1, 0.3, 1],
+		{ easing: Easing.inOut(Easing.quad) }
+	);
 
-        // Orthographic camera for fullscreen 2D shader plane
-        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        cameraRef.current = camera;
+	// 3. Border lines around SUBSCRIBE text (2s/60f cycle, delays perfectly offset)
+	const borderProgress = frame % 60;
 
-        // Renderer with strict 1080p target resolution
-        const renderer = new THREE.WebGLRenderer({
-            canvas: canvas,
-            antialias: true,
-            alpha: false,
-            powerPreference: "high-performance"
-        });
-        renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-        renderer.setPixelRatio(1);
-        rendererRef.current = renderer;
+	// Span 1: Top border (moves Left -> Right)
+	const span1Left = interpolate(
+		borderProgress,
+		[0, 30, 60],
+		[-100, 100, 100],
+		{ extrapolateRight: 'clamp' }
+	);
 
-        // Shader Uniforms
-        const uniforms = {
-            uTime: { value: 0.0 },
-            uResolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) }
-        };
+	// Span 2: Right border (moves Top -> Bottom with 15 frames/0.5s delay)
+	const span2Progress = (frame + 45) % 60;
+	const span2Top = interpolate(
+		span2Progress,
+		[0, 30, 60],
+		[-100, 100, 100],
+		{ extrapolateRight: 'clamp' }
+	);
 
-        // Custom Shader Material with built-in multi-layered bloom/glow simulation
-        const material = new THREE.ShaderMaterial({
-            uniforms: uniforms,
-            vertexShader: `
-                void main() {
-                    gl_Position = vec4(position, 1.0);
-                }
-            `,
-            fragmentShader: `
-                uniform float uTime;
-                uniform vec2 uResolution;
+	// Span 3: Bottom border (moves Right -> Left with 30 frames/1.0s delay)
+	const span3Progress = (frame + 30) % 60;
+	const span3Right = interpolate(
+		span3Progress,
+		[0, 30, 60],
+		[-100, 100, 100],
+		{ extrapolateRight: 'clamp' }
+	);
 
-                // Simplex 2D noise
-                vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-                vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-                vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+	// Span 4: Left border (moves Bottom -> Top with 45 frames/1.5s delay)
+	const span4Progress = (frame + 15) % 60;
+	const span4Bottom = interpolate(
+		span4Progress,
+		[0, 30, 60],
+		[-100, 100, 100],
+		{ extrapolateRight: 'clamp' }
+	);
 
-                float snoise(vec2 v) {
-                    const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
-                    vec2 i  = floor(v + dot(v, C.yy) );
-                    vec2 x0 = v -   i + dot(i, C.xx);
-                    vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-                    vec4 x12 = x0.xyxy + C.xxzz;
-                    x12.xy -= i1;
-                    i = mod289(i);
-                    vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));
-                    vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
-                    m = m*m;
-                    m = m*m;
-                    vec3 x = 2.0 * fract(p * C.www) - 1.0;
-                    vec3 h = abs(x) - 0.5;
-                    vec3 ox = floor(x + 0.5);
-                    vec3 a0 = x - ox;
-                    m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
-                    vec3 g;
-                    g.x  = a0.x  * x0.x  + h.x  * x0.y;
-                    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-                    return 130.0 * dot(m, g);
-                }
+	// 4. Meteor Lines (Deterministically pre-calculated/animated per frame)
+	// Meteor Line 1: 3s (90f) loop
+	const m1Frame = frame % 90;
+	const m1X = interpolate(m1Frame, [0, 90], [384, -2880]);
+	const m1Opacity = interpolate(m1Frame, [0, 10, 80, 90], [0, 1, 1, 0]);
 
-                // Fractal Brownian Motion for organic liquid feel
-                float fbm(vec2 p) {
-                    float value = 0.0;
-                    float amplitude = 0.5;
-                    vec2 shift = vec2(100.0);
-                    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-                    for (int i = 0; i < 5; i++) {
-                        value += amplitude * snoise(p);
-                        p = rot * p * 2.0 + shift;
-                        amplitude *= 0.5;
-                    }
-                    return value;
-                }
+	// Meteor Line 2: 5s (150f) loop
+	const m2Frame = (frame + 45) % 150;
+	const m2X = interpolate(m2Frame, [0, 150], [384, -2880]);
+	const m2Opacity = interpolate(m2Frame, [0, 15, 135, 150], [0, 1, 1, 0]);
 
-                // Ribbon generator with integrated bloom & glow emulation
-                vec3 getRibbon(vec2 uv, float t, float offset, vec3 color) {
-                    // Animated UV warping
-                    vec2 q = vec2(
-                        fbm(uv + vec2(0.0, offset) + t * 0.4),
-                        fbm(uv + vec2(offset, 0.0) - t * 0.3)
-                    );
-                    vec2 r = vec2(
-                        fbm(q + uv * 2.0 + t * 0.2),
-                        fbm(q - uv * 1.5 - t * 0.25)
-                    );
+	// Meteor Line 3: 6s (180f) loop
+	const m3Frame = (frame + 90) % 180;
+	const m3X = interpolate(m3Frame, [0, 180], [384, -2880]);
+	const m3Opacity = interpolate(m3Frame, [0, 18, 162, 180], [0, 1, 1, 0]);
 
-                    // Morphing curves
-                    float line = sin(r.x * 6.0 + r.y * 4.0 + t * 1.5 + offset * 2.0);
-                    
-                    // Double-layered glow simulation (emulating UnrealBloomPass)
-                    // High-contrast sharp core + soft outer glowing falloff
-                    float core = 0.03 / (abs(line) + 0.008);
-                    float glow = 0.09 / (abs(line) + 0.14);
-                    float intensity = core + glow * 2.0;
-                    
-                    // Subtle pulsing
-                    float pulse = 0.75 + 0.25 * sin(t * 2.5 + offset * 3.0);
-                    
-                    return color * intensity * pulse;
-                }
+	// 5. Interactive Floating / Hover Pulses for dynamic video & profile boxes
+	const boxScalePulse = interpolate(
+		frame % 150,
+		[0, 75, 150],
+		[1, 1.03, 1],
+		{ easing: Easing.inOut(Easing.quad) }
+	);
 
-                void main() {
-                    // Center UVs and fix aspect ratio
-                    vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
-                    
-                    // Slow flowing time
-                    float t = uTime * 0.15;
-                    
-                    // Cinematic camera drift
-                    uv += vec2(sin(t * 0.3), cos(t * 0.2)) * 0.3;
-                    uv *= 1.2; // slight zoom out
+	const profileScalePulse = interpolate(
+		frame % 120,
+		[0, 60, 120],
+		[1, 1.06, 1],
+		{ easing: Easing.inOut(Easing.quad) }
+	);
 
-                    vec3 finalColor = vec3(0.0);
+	return (
+		<div
+			style={{
+				width: ORIGINAL_WIDTH,
+				height: ORIGINAL_HEIGHT,
+				position: 'absolute',
+				top: '50%',
+				left: '50%',
+				transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+				transformOrigin: 'center center',
+				overflow: 'hidden',
+				backgroundColor: '#111',
+				display: 'flex',
+				justifyContent: 'center',
+				alignItems: 'center',
+			}}
+		>
+			<div
+				className="end-screen-container"
+				style={{
+					position: 'relative',
+					width: '100%',
+					height: '100%',
+					background: 'linear-gradient(135deg, #2b0000 0%, #aa0000 25%, #400000 50%, #e60000 75%, #2b0000 100%)',
+					backgroundSize: '400% 400%',
+					backgroundPosition: `${bgX}% 50%`,
+					overflow: 'hidden',
+					display: 'flex',
+					flexDirection: 'column',
+					alignItems: 'center',
+					boxShadow: '0 0 30px rgba(0,0,0,0.8)',
+				}}
+			>
+				{/* Pseudo-elements rendered as absolute divs */}
+				<div
+					style={{
+						content: "''",
+						position: 'absolute',
+						zIndex: 0,
+						transform: `skewX(-45deg) translateX(${beforeX}%)`,
+						width: '200%',
+						height: '50%',
+						top: '-10%',
+						left: '-50%',
+						background: 'linear-gradient(90deg, rgba(255,0,0,0) 0%, rgba(200,0,0,0.4) 50%, rgba(255,0,0,0) 100%)',
+						opacity: beforeOpacity,
+					}}
+				/>
+				<div
+					style={{
+						content: "''",
+						position: 'absolute',
+						zIndex: 0,
+						transform: `skewX(-45deg) translateX(${afterX}%)`,
+						width: '200%',
+						height: '70%',
+						bottom: '-20%',
+						right: '-50%',
+						background: 'linear-gradient(90deg, rgba(150,0,0,0) 0%, rgba(255,0,0,0.2) 50%, rgba(150,0,0,0) 100%)',
+						opacity: afterOpacity,
+					}}
+				/>
 
-                    // Additive blending of holographic light trails
-                    finalColor += getRibbon(uv, t, 0.0, vec3(0.7, 0.1, 0.9)); // Purple
-                    finalColor += getRibbon(uv, t, 1.2, vec3(0.1, 0.9, 0.9)); // Cyan
-                    finalColor += getRibbon(uv, t, 2.4, vec3(0.1, 0.3, 1.0)); // Blue
-                    finalColor += getRibbon(uv, t, 3.6, vec3(1.0, 0.1, 0.3)); // Red
+				{/* Meteor Lines */}
+				<div
+					className="bg-line line-1"
+					style={{
+						position: 'absolute',
+						width: '288px',
+						height: '3.84px',
+						background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+						transform: `rotate(-45deg) translateX(${m1X}px)`,
+						top: '-192px',
+						right: '192px',
+						zIndex: 1,
+						opacity: m1Opacity,
+					}}
+				/>
+				<div
+					className="bg-line line-2"
+					style={{
+						position: 'absolute',
+						width: '384px',
+						height: '3.84px',
+						background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+						transform: `rotate(-45deg) translateX(${m2X}px)`,
+						top: '192px',
+						right: '-192px',
+						zIndex: 1,
+						opacity: m2Opacity,
+					}}
+				/>
+				<div
+					className="bg-line line-3"
+					style={{
+						position: 'absolute',
+						width: '192px',
+						height: '3.84px',
+						background: 'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,1) 100%)',
+						transform: `rotate(-45deg) translateX(${m3X}px)`,
+						top: '-384px',
+						right: '960px',
+						zIndex: 1,
+						opacity: m3Opacity,
+					}}
+				/>
 
-                    // Dark black void background ensuring high contrast
-                    finalColor = pow(finalColor, vec3(1.4));
+				{/* Header Wrapper */}
+				<div
+					className="header-wrapper"
+					style={{
+						position: 'relative',
+						zIndex: 2,
+						marginTop: '96px',
+						display: 'flex',
+						justifyContent: 'center',
+						alignItems: 'center',
+					}}
+				>
+					<div
+						className="subscribe-text"
+						style={{
+							color: '#ffffff',
+							fontFamily: "'Impact', 'Arial Black', sans-serif",
+							fontSize: '115.2px',
+							fontStyle: 'italic',
+							fontWeight: 900,
+							letterSpacing: '3.84px',
+							textTransform: 'uppercase',
+							position: 'relative',
+							padding: '28.8px 57.6px',
+							overflow: 'hidden',
+						}}
+					>
+						{/* Top Border Span */}
+						<span
+							style={{
+								position: 'absolute',
+								background: '#ffffff',
+								top: 0,
+								left: `${span1Left}%`,
+								width: '100%',
+								height: '5.76px',
+							}}
+						/>
+						{/* Right Border Span */}
+						<span
+							style={{
+								position: 'absolute',
+								background: '#ffffff',
+								top: `${span2Top}%`,
+								right: 0,
+								width: '5.76px',
+								height: '100%',
+							}}
+						/>
+						{/* Bottom Border Span */}
+						<span
+							style={{
+								position: 'absolute',
+								background: '#ffffff',
+								bottom: 0,
+								right: `${span3Right}%`,
+								width: '100%',
+								height: '5.76px',
+							}}
+						/>
+						{/* Left Border Span */}
+						<span
+							style={{
+								position: 'absolute',
+								background: '#ffffff',
+								bottom: `${span4Bottom}%`,
+								left: 0,
+								width: '5.76px',
+								height: '100%',
+							}}
+						/>
+						SUBSCRIBE
+					</div>
+				</div>
 
-                    gl_FragColor = vec4(finalColor, 1.0);
-                }
-            `,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            depthTest: false
-        });
-        materialRef.current = material;
+				{/* Content Area */}
+				<div
+					className="content-area"
+					style={{
+						position: 'relative',
+						zIndex: 2,
+						display: 'flex',
+						width: '86%',
+						justifyContent: 'space-between',
+						alignItems: 'center',
+						marginTop: '115.2px',
+					}}
+				>
+					{/* Left Video Box */}
+					<div
+						className="box-wrapper"
+						style={{
+							display: 'flex',
+							flexDirection: 'column',
+							width: '31%',
+							transform: `scale(${boxScalePulse})`,
+						}}
+					>
+						<div
+							className="video-box"
+							style={{
+								width: '100%',
+								aspectRatio: '16 / 9',
+								backgroundColor: '#ffffff',
+								borderRadius: '7.68px',
+								boxShadow: '0 19.2px 38.4px rgba(0, 0, 0, 0.4)',
+							}}
+						/>
+						<div
+							className="label-text text-left"
+							style={{
+								color: '#ffffff',
+								fontSize: '38.4px',
+								marginTop: '28.8px',
+								fontWeight: 300,
+								letterSpacing: '1.92px',
+								textTransform: 'uppercase',
+								textAlign: 'left',
+								fontFamily: "'Arial', sans-serif",
+							}}
+						>
+							WATCH MORE
+						</div>
+					</div>
 
-        // Fullscreen Quad Geometry
-        const geometry = new THREE.PlaneGeometry(2, 2);
-        const mesh = new THREE.Mesh(geometry, material);
-        scene.add(mesh);
+					{/* Center Profile Circle */}
+					<div
+						className="profile-wrapper"
+						style={{
+							width: '22%',
+							display: 'flex',
+							justifyContent: 'center',
+							marginTop: '-57.6px',
+							transform: `scale(${profileScalePulse})`,
+						}}
+					>
+						<div
+							className="profile-circle"
+							style={{
+								width: '100%',
+								aspectRatio: '1 / 1',
+								backgroundColor: '#ffffff',
+								borderRadius: '50%',
+								boxShadow: '0 19.2px 38.4px rgba(0, 0, 0, 0.4)',
+							}}
+						/>
+					</div>
 
-        // Cleanup
-        return () => {
-            geometry.dispose();
-            material.dispose();
-            renderer.dispose();
-        };
-    }, []);
-
-    // 2. Deterministic Render Effect (Triggered on every frame change)
-    useEffect(() => {
-        const material = materialRef.current;
-        const renderer = rendererRef.current;
-        const scene = sceneRef.current;
-        const camera = cameraRef.current;
-
-        if (!material || !renderer || !scene || !camera) return;
-
-        // Loop Duration: exactly 15 seconds (900 frames @ 60fps)
-        const totalFrames = 15 * fps;
-        const progress = frame / totalFrames;
-
-        // Symmetrical Time Mapping for mathematically absolute seamless looping.
-        // Using a smooth sine wave cycle ensures that the beginning (0s) and end (15s) 
-        // match perfectly, creating an infinite, seamless ambient motion loop.
-        const maxTimeSeconds = 15.0;
-        const deterministicTime = Math.sin(progress * Math.PI) * maxTimeSeconds;
-
-        // Update Uniforms
-        material.uniforms.uTime.value = deterministicTime;
-
-        // Render Frame
-        renderer.render(scene, camera);
-    }, [frame, fps]);
-
-    const wrapperStyle: React.CSSProperties = {
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        backgroundColor: '#000000',
-    };
-
-    const canvasStyle: React.CSSProperties = {
-        display: 'block',
-        width: '100%',
-        height: '100%',
-    };
-
-    return (
-        <div style={wrapperStyle}>
-            <canvas ref={canvasRef} style={canvasStyle} />
-        </div>
-    );
+					{/* Right Video Box */}
+					<div
+						className="box-wrapper"
+						style={{
+							display: 'flex',
+							flexDirection: 'column',
+							width: '31%',
+							transform: `scale(${boxScalePulse})`,
+						}}
+					>
+						<div
+							className="video-box"
+							style={{
+								width: '100%',
+								aspectRatio: '16 / 9',
+								backgroundColor: '#ffffff',
+								borderRadius: '7.68px',
+								boxShadow: '0 19.2px 38.4px rgba(0, 0, 0, 0.4)',
+							}}
+						/>
+						<div
+							className="label-text text-right"
+							style={{
+								color: '#ffffff',
+								fontSize: '38.4px',
+								marginTop: '28.8px',
+								fontWeight: 300,
+								letterSpacing: '1.92px',
+								textTransform: 'uppercase',
+								textAlign: 'right',
+								fontFamily: "'Arial', sans-serif",
+							}}
+						>
+							MY SUGGESTION
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
 };
 
-export default PremiumAbstractNeonShader;
+export default YoutubeEndScreen;
 // END_OF_FILE
