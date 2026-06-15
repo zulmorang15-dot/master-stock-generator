@@ -1,258 +1,193 @@
-import React from 'react';
-import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import { useVideoConfig, useCurrentFrame } from 'remotion';
+import React, { useRef, useEffect } from 'react';
+import * as THREE from 'three';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const FuturisticPcbEndScreen: React.FC = () => {
+const FlowingOrganicInk: React.FC = () => {
+  const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
-  const { width, height } = useVideoConfig();
 
-  // Fullscreen 16:9 scaling factor
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
+  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // 1. Move Grid PCB (10 seconds cycle, perfectly seamless at 300 frames)
-  const bgPos80 = interpolate(frame, [0, 300], [0, 80]);
-  const bgPos20 = interpolate(frame, [0, 300], [0, 20]);
+  useEffect(() => {
+    if (!canvasRef.current) return;
 
-  // 2. Data sweep pulse (5 seconds cycle, loops 2 times in 10s)
-  const sweepFrame = frame % 150;
-  const sweepLeft = interpolate(sweepFrame, [0, 150], [-100, 200], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const sweepOpacity = interpolate(sweepFrame, [0, 30, 120, 150], [0, 1, 1, 0]);
+    // 1. Initialize Renderer with absolute resolution to keep rendering consistent
+    const renderer = new THREE.WebGLRenderer({
+      canvas: canvasRef.current,
+      antialias: true,
+      alpha: true,
+    });
+    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+    renderer.setPixelRatio(1);
+    rendererRef.current = renderer;
 
-  // 3. Flares breathing pulses (5 seconds cycle, loops 2 times in 10s)
-  const flare1Frame = frame % 150;
-  const flare1Scale = interpolate(flare1Frame, [0, 75, 150], [1, 1.2, 1], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const flare1Opacity = interpolate(flare1Frame, [0, 75, 150], [0.5, 1.0, 0.5], {
-    easing: Easing.inOut(Easing.quad),
-  });
+    // 2. Setup Orthographic Camera to draw a direct 2D screen quad
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    cameraRef.current = camera;
 
-  const flare2Frame = (frame + 60) % 150; // delayed/offset
-  const flare2Scale = interpolate(flare2Frame, [0, 75, 150], [1, 1.2, 1], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const flare2Opacity = interpolate(flare2Frame, [0, 75, 150], [0.5, 1.0, 0.5], {
-    easing: Easing.inOut(Easing.quad),
-  });
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
 
-  // 4. Scanners (2.5 seconds cycle, loops 4 times in 10s)
-  const scanFrame = frame % 75;
-  const scanTop = interpolate(scanFrame, [0, 75], [-100, 200], {
-    easing: Easing.inOut(Easing.quad),
-  });
-
-  // 5. Placeholders hatch fadeOut, scale increase and solid resolving
-  // To preserve absolute seamless looping, we map this transitions smoothly to transition back at the end
-  const hatchOpacity = interpolate(
-    frame,
-    [0, 45, 120, 255, 300],
-    [1, 1, 0, 0, 1],
-    { easing: Easing.inOut(Easing.quad) }
-  );
-  
-  const hatchScale = interpolate(
-    frame,
-    [0, 45, 120, 255, 300],
-    [1, 1, 1.1, 1.1, 1],
-    { easing: Easing.inOut(Easing.quad) }
-  );
-
-  const solidBgOpacity = interpolate(
-    frame,
-    [0, 45, 120, 255, 300],
-    [0, 0, 1, 1, 0],
-    { easing: Easing.inOut(Easing.quad) }
-  );
-
-  const glowIntensity = interpolate(
-    frame,
-    [0, 45, 120, 255, 300],
-    [0.5, 0.5, 1.0, 1.0, 0.5],
-    { easing: Easing.inOut(Easing.quad) }
-  );
-
-  const borderG = Math.round(
-    interpolate(frame, [0, 45, 120, 255, 300], [200, 200, 255, 255, 200])
-  );
-  const borderA = interpolate(
-    frame,
-    [0, 45, 120, 255, 300],
-    [0.8, 0.8, 1.0, 1.0, 0.8]
-  );
-  const borderColor = `rgba(0, ${borderG}, 255, ${borderA})`;
-
-  // Styling maps
-  const mainWrapperStyle: React.CSSProperties = {
-    width: ORIGINAL_WIDTH,
-    height: ORIGINAL_HEIGHT,
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-    transformOrigin: 'center center',
-    overflow: 'hidden',
-    backgroundColor: '#020510',
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-  };
-
-  const circuitBgStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    backgroundImage: `
-      radial-gradient(circle at 40px 40px, rgba(0, 255, 255, 0.6) 2px, transparent 2px),
-      linear-gradient(rgba(0, 200, 255, 0.15) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 200, 255, 0.15) 1px, transparent 1px),
-      linear-gradient(rgba(0, 255, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 255, 255, 0.05) 1px, transparent 1px)
-    `,
-    backgroundSize: '80px 80px, 80px 80px, 80px 80px, 20px 20px, 20px 20px',
-    backgroundPosition: `${bgPos80}px ${bgPos80}px, ${bgPos80}px ${bgPos80}px, ${bgPos80}px ${bgPos80}px, ${bgPos20}px ${bgPos20}px, ${bgPos20}px ${bgPos20}px`,
-    zIndex: 1,
-  };
-
-  const dataPulseStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0,
-    left: `${sweepLeft}%`,
-    width: '50%',
-    height: '100%',
-    background: 'linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.15), transparent)',
-    transform: 'skewX(-30deg)',
-    zIndex: 2,
-    opacity: sweepOpacity,
-  };
-
-  const vignetteStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    background: 'radial-gradient(circle at 50% 50%, transparent 30%, #020510 90%)',
-    zIndex: 3,
-  };
-
-  const flare1Style: React.CSSProperties = {
-    position: 'absolute',
-    borderRadius: '50%',
-    filter: 'blur(90px)',
-    zIndex: 4,
-    top: '-15%',
-    left: '-5%',
-    width: '500px',
-    height: '500px',
-    background: 'rgba(0, 150, 255, 0.25)',
-    transform: `scale(${flare1Scale})`,
-    opacity: flare1Opacity,
-    transformOrigin: 'center center',
-  };
-
-  const flare2Style: React.CSSProperties = {
-    position: 'absolute',
-    borderRadius: '50%',
-    filter: 'blur(90px)',
-    zIndex: 4,
-    bottom: '-15%',
-    right: '-5%',
-    width: '600px',
-    height: '600px',
-    background: 'rgba(0, 255, 255, 0.15)',
-    transform: `scale(${flare2Scale})`,
-    opacity: flare2Opacity,
-    transformOrigin: 'center center',
-  };
-
-  const endScreenContainerStyle: React.CSSProperties = {
-    position: 'relative',
-    zIndex: 10,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: '50px',
-    width: '80%',
-    maxWidth: '1200px',
-  };
-
-  const placeholderStyle = (isCircle: boolean): React.CSSProperties => {
-    const baseShadow = `0 0 ${15 + (glowIntensity - 0.5) * 20}px rgba(0, 200, 255, ${0.5 + (glowIntensity - 0.5) * 0.6})`;
-    const insetShadow = `, inset 0 0 ${20 * solidBgOpacity}px rgba(0, 255, 255, ${0.5 * solidBgOpacity})`;
-    return {
-      position: 'relative',
-      border: `2px solid ${borderColor}`,
-      boxShadow: `${baseShadow}${insetShadow}`,
-      overflow: 'hidden',
-      backgroundColor: `rgba(0, 170, 255, ${solidBgOpacity * 0.35})`,
-      width: isCircle ? '160px' : '350px',
-      height: isCircle ? '160px' : '200px',
-      borderRadius: isCircle ? '50%' : '12px',
-      flexShrink: isCircle ? 0 : undefined,
+    // 3. Define uniforms matching original HTML Shader
+    const uniforms = {
+      time: { value: 0.0 },
+      resolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) },
     };
-  };
 
-  const hatchedPatternStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    background: `repeating-linear-gradient(
-      -45deg,
-      rgba(0, 200, 255, 0.8) 0,
-      rgba(0, 200, 255, 0.8) 4px,
-      transparent 4px,
-      transparent 10px
-    )`,
-    transform: `scale(${hatchScale})`,
-    opacity: hatchOpacity,
-  };
+    // 4. Create Geometry & Shader Material
+    const geometry = new THREE.PlaneGeometry(2, 2);
+    const material = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        precision highp float;
+        varying vec2 vUv;
+        uniform float time;
+        uniform vec2 resolution;
+        
+        const float PI = 3.141592654;
 
-  const scannerStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: `${scanTop}%`,
-    left: 0,
-    width: '100%',
-    height: '50%',
-    background: 'linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.8), transparent)',
-    opacity: 0.5,
-  };
+        void main() {
+          // 1. Menyesuaikan rasio aspek layar 16:9
+          vec2 aR = vec2(resolution.x / resolution.y, 1.0);
+          vec2 uv = (vUv - 0.5) * aR;
+          
+          // 2. Trik Loop Waktu (Perfect Loop)
+          float duration = 20.0; // Waktu satu putaran aliran
+          float t = fract(time / duration); // Bergerak dari 0.0 ke 1.0
+          
+          // 3. EFEK MENGALIR (Flowing)
+          // Mendorong fluida bergerak secara linear (diagonal ke atas-kanan).
+          // Pergeseran sejauh persis 2.0 * PI menjamin bentuk akhirnya kembali sama persis seperti awal (loop).
+          vec2 flowDir = vec2(1.0, 1.0); 
+          vec2 flowOffset = flowDir * (t * 2.0 * PI); 
+          
+          // Gerakan mengaduk internal agar tidak sekadar bergeser seperti gambar datar
+          float theta = t * 2.0 * PI;
+          vec2 swirl = vec2(cos(theta), sin(theta)) * 0.6;
+          
+          // Skala dan titik awal aliran
+          vec2 p = (uv * 3.5) + flowOffset;
+
+          // 4. Simulasi Fluid (Domain Warping)
+          for(float i = 1.0; i < 7.0; i++) {
+            vec2 newp = p;
+            // 'i' selalu bilangan bulat. Memastikan kelipatan gelombang tidak merusak loop.
+            newp.x += 0.7 / i * sin(i * p.y + swirl.x + PI * 0.25);
+            newp.y += 0.7 / i * cos(i * p.x + swirl.y - PI * 0.25);
+            p = newp;
+          }
+
+          // 5. LAPISAN WARNA ORGANIK (Tanpa Garis Lurus/Dipole)
+          // Menggunakan perkalian bilangan bulat agar pergeseran 2*PI dari 'flowOffset' tetap loop.
+          float layer1 = sin(p.x) * cos(p.y);
+          float layer2 = sin(p.x - p.y) * cos(p.x + p.y);
+          float layer3 = sin(p.x * 2.0 + p.y);
+          float layer4 = cos(p.y * 2.0 - p.x);
+
+          // 6. Pencampuran Warna Padat dan Penuh Layar
+          vec3 col = vec3(0.06, 0.03, 0.15); // Warna dasar gelap ungu kebiruan (mengisi ruang antar tinta)
+
+          // Smoothstep memuluskan gradasi warna (-1 ke 1) menjadi (0 ke 1) dengan mulus
+          col += vec3(0.00, 0.75, 0.95) * smoothstep(-1.0, 1.0, layer1); // Cyan
+          col += vec3(0.95, 0.15, 0.55) * smoothstep(-1.0, 1.0, layer2); // Magenta
+          col += vec3(1.00, 0.65, 0.00) * smoothstep(-1.0, 1.0, layer3); // Orange/Emas
+          col += vec3(0.20, 0.10, 0.85) * smoothstep(-1.0, 1.0, layer4); // Biru
+
+          // 7. Penyesuaian Kecerahan & Saturasi
+          col /= 2.2; // Menekan cahaya berlebih saat warna bertumpuk
+          col = pow(col, vec3(0.92)); // Menarik warna mid-tone agar lebih cerah
+          col *= 1.35; // Intensitas akhir layar
+
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+      uniforms: uniforms,
+      depthWrite: false,
+      depthTest: false,
+    });
+    materialRef.current = material;
+
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+
+    // Initial render
+    renderer.render(scene, camera);
+
+    // Cleanup resources to prevent WebGL memory leaks
+    return () => {
+      geometry.dispose();
+      material.dispose();
+      renderer.dispose();
+    };
+  }, []);
+
+  // 5. Frame-locked deterministic rendering loop
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const material = materialRef.current;
+
+    if (renderer && scene && camera && material) {
+      // Symmetrical Loop Duration logic: exactly 20 seconds loop duration
+      const totalFrames = fps * 20; 
+      const progress = (frame % totalFrames) / totalFrames;
+      const deterministicTime = progress * 20.0;
+
+      material.uniforms.time.value = deterministicTime;
+      renderer.render(scene, camera);
+    }
+  }, [frame, fps]);
 
   return (
-    <div style={mainWrapperStyle}>
-      <div style={circuitBgStyle} />
-      <div style={dataPulseStyle} />
-      <div style={vignetteStyle} />
-      <div style={flare1Style} />
-      <div style={flare2Style} />
-
-      <div style={endScreenContainerStyle}>
-        <div style={placeholderStyle(false)}>
-          <div style={hatchedPatternStyle} />
-          <div style={scannerStyle} />
-        </div>
-
-        <div style={placeholderStyle(true)}>
-          <div style={hatchedPatternStyle} />
-          <div style={scannerStyle} />
-        </div>
-
-        <div style={placeholderStyle(false)}>
-          <div style={hatchedPatternStyle} />
-          <div style={scannerStyle} />
-        </div>
+    <div
+      style={{
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+        backgroundColor: '#000',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          backgroundColor: '#111',
+          position: 'relative',
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          style={{
+            display: 'block',
+            width: '100%',
+            height: '100%',
+          }}
+        />
       </div>
     </div>
   );
 };
 
-export default FuturisticPcbEndScreen;
+export default FlowingOrganicInk;
 // END_OF_FILE
