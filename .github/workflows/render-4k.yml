@@ -125,7 +125,7 @@ jobs:
             --props=temp-props.json \
             --codec=prores \
             --pixel-format=$PIXEL_FORMAT \
-            --gl=swangle \
+            --gl=egl \
             --concurrency=$CONCURRENCY \
             --timeout=$TIMEOUT_MS \
             --muted \

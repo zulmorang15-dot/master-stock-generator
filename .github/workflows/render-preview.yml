@@ -114,7 +114,7 @@ jobs:
             --props=temp-props.json \
             --codec=h264 \
             --scale=0.3 \
-            --gl=swangle \
+            --gl=egl \
             --concurrency=$CONCURRENCY \
             --timeout=$TIMEOUT_MS \
             --muted \
