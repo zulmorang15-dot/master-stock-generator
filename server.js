@@ -219,6 +219,45 @@ function repairGeneratedTsx(code) {
   // Fix: Type 'RenderingContext' is not assignable
   repaired = repaired.replace(/:\s*RenderingContext\b/g, ': WebGLRenderingContext');
 
+  // Fix: shadowBlur is extremely slow in headless Chrome — neutralize it
+  // Replace `ctx.shadowBlur = <value>` with `ctx.shadowBlur = 0`
+  repaired = repaired.replace(/\.shadowBlur\s*=\s*[^;]+/g, '.shadowBlur = 0');
+  // Also neutralize shadowOffsetX/Y
+  repaired = repaired.replace(/\.shadowOffsetX\s*=\s*[^;]+/g, '.shadowOffsetX = 0');
+  repaired = repaired.replace(/\.shadowOffsetY\s*=\s*[^;]+/g, '.shadowOffsetY = 0');
+
+  // Fix: Cap canvas dimensions to 1920x1080 max
+  // Replace canvas width/height assignments > 1920 or > 1080
+  repaired = repaired.replace(
+    /(canvas\w*\.width\s*=\s*)(\d{4,})/g,
+    (match, prefix, value) => {
+      const num = parseInt(value);
+      return num > 1920 ? `${prefix}1920` : match;
+    }
+  );
+  repaired = repaired.replace(
+    /(canvas\w*\.height\s*=\s*)(\d{4,})/g,
+    (match, prefix, value) => {
+      const num = parseInt(value);
+      return num > 1080 ? `${prefix}1080` : match;
+    }
+  );
+  // Also fix canvas element attributes: <canvas width={3840} height={2160}
+  repaired = repaired.replace(
+    /(<canvas[^>]*\bwidth\s*=\s*\{?\s*)(\d{4,})(\s*\}?)/g,
+    (match, prefix, value, suffix) => {
+      const num = parseInt(value);
+      return num > 1920 ? `${prefix}1920${suffix}` : match;
+    }
+  );
+  repaired = repaired.replace(
+    /(<canvas[^>]*\bheight\s*=\s*\{?\s*)(\d{4,})(\s*\}?)/g,
+    (match, prefix, value, suffix) => {
+      const num = parseInt(value);
+      return num > 1080 ? `${prefix}1080${suffix}` : match;
+    }
+  );
+
   return repaired;
 }
 
@@ -2109,6 +2148,14 @@ If the original HTML utilizes Three.js or WebGL:
   2. Inside a \`useEffect\` keyed on \`frame\`, seek the timeline to the current time: \`tl.seek(frame / fps);\` or set progress: \`tl.progress(frame / totalFrames);\`.
   3. Never let GSAP animations run automatically with real-world timers.
 
+**2.3 HTML5 CANVAS 2D CONVERSION GUIDELINES (CRITICAL FOR CANVAS-BASED ANIMATIONS):**
+If the original HTML uses \`<canvas>\` with \`getContext('2d')\`:
+- **MAX CANVAS RESOLUTION 1920x1080 (CRITICAL):** The internal canvas buffer MUST NOT exceed 1920x1080 pixels. If the source uses 4K (3840x2160) or higher, you MUST downscale to 1920x1080 and use CSS \`width: '100%', height: '100%'\` to scale visually.
+- **shadowBlur IS BANNED (WILL CAUSE TIMEOUT):** \`ctx.shadowBlur\` is extremely slow in headless Chrome. Replace ALL glow effects with pre-rendered radial gradients or multiple semi-transparent fills.
+- **Limit per-frame draw operations to max 500:** Reduce object counts proportionally if source has hundreds of animated objects.
+- **Canvas 2D Frame-Locked Pattern:** Use \`useRef\` for canvas. Init static data in \`useEffect([])\`. Render each frame in \`useEffect([frame])\`.
+- **Never use \`requestAnimationFrame\`** — render synchronously inside the frame useEffect.
+
 **3. Deterministic Rendering:**
 - Never use Math.random() inside the component render. Pre-calculate random elements (particles, positions, delays) in a static const array OUTSIDE the component function.
 
@@ -2665,7 +2712,7 @@ app.post("/api/trigger-github-render", async (req, res) => {
           fps: String(item.fps || 30),
           judul: item.judul || "Stock Video",
           keywords: item.keywords || "motion, abstract, loop",
-          has_threejs: (item.promptCode || '').includes('THREE') ? 'true' : 'false'
+          has_threejs: ((item.promptCode || '').includes('THREE') || (item.promptCode || '').includes("getContext('2d')") || (item.promptCode || '').includes('shadowBlur')) ? 'true' : 'false'
         }
       },
       {
@@ -3026,7 +3073,7 @@ async function runPreviewRenderBackground(itemId) {
             fps: String(item.fps || 30),
             judul: item.judul || "Stock Video",
             keywords: item.keywords || "motion, abstract, loop",
-            has_threejs: (item.promptCode || '').includes('THREE') ? 'true' : 'false'
+            has_threejs: ((item.promptCode || '').includes('THREE') || (item.promptCode || '').includes("getContext('2d')") || (item.promptCode || '').includes('shadowBlur')) ? 'true' : 'false'
           }
         },
         {
