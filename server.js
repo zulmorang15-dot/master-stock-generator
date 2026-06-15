@@ -1498,6 +1498,88 @@ app.get("/api/health", (req, res) => {
   }
 });
 
+// Queue status endpoint for dashboard panel
+app.get("/api/queue-status", (req, res) => {
+  try {
+    let items = [];
+    try {
+      const data = fs.readFileSync(dbPath, "utf-8");
+      items = JSON.parse(data);
+    } catch (e) {
+      return res.json({ processing: [], queued: [], rendering4k: [], completed: 0, failed: 0 });
+    }
+
+    const itemMap = {};
+    items.forEach(it => { itemMap[it.id] = it; });
+
+    // Processing items (active tasks)
+    const processing = [];
+    activeTasks.forEach(id => {
+      const it = itemMap[id];
+      if (it) {
+        processing.push({
+          id: it.id,
+          name: it.name || it.id,
+          status: it.statusConvertTsx || 'processing',
+          log: it.lastLogMessage || '',
+          startedAt: it.logs && it.logs.length > 0 ? it.logs[it.logs.length - 1].time : ''
+        });
+      }
+    });
+
+    // Queued items (waiting in taskQueue)
+    const queued = taskQueue.map(id => {
+      const it = itemMap[id];
+      return it ? { id: it.id, name: it.name || it.id, status: 'queued', log: it.lastLogMessage || '' } : null;
+    }).filter(Boolean);
+
+    // 4K render queue
+    const rendering4k = render4kQueue.map(id => {
+      const it = itemMap[id];
+      return it ? { id: it.id, name: it.name || it.id, status: it.statusRender4k || 'queued', log: it.lastLogMessage || '' } : null;
+    }).filter(Boolean);
+
+    // Also include items with active preview/4k renders
+    const previewRendering = Object.keys(activePreviewRenders).map(id => {
+      const it = itemMap[id];
+      return it ? { id: it.id, name: it.name || it.id, status: 'rendering-preview', log: it.lastLogMessage || 'Rendering preview...' } : null;
+    }).filter(Boolean);
+
+    const active4k = Object.keys(active4kRenders).map(id => {
+      const it = itemMap[id];
+      return it ? { id: it.id, name: it.name || it.id, status: 'rendering-4k', log: it.lastLogMessage || 'Rendering 4K...' } : null;
+    }).filter(Boolean);
+
+    // Stats
+    const completed = items.filter(it => {
+      const s = it.statusConvertTsx;
+      return s === 'success' || !!it.previewUrl;
+    }).length;
+    const failed = items.filter(it => {
+      const s = it.statusConvertTsx;
+      return s === 'failed' || s === 'cancelled';
+    }).length;
+
+    res.json({
+      processing,
+      queued,
+      rendering4k,
+      previewRendering,
+      active4k,
+      stats: {
+        total: items.length,
+        completed,
+        failed,
+        pendingQueue: taskQueue.length,
+        processingCount: activeTasks.size,
+        render4kQueueLength: render4kQueue.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Sequential Git operator lock (Mutex) to prevent local commit/push conflicts
 let gitMutex = Promise.resolve();
 async function runGitTask(fn) {

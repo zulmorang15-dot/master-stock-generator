@@ -1084,6 +1084,95 @@
       font-family: 'JetBrains Mono', monospace;
     }
     .tag-badge.selected .tag-weight { opacity: 0.8; }
+    /* ── QUEUE STATUS PANEL ──────────────────── */
+    .queue-panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+      overflow: hidden;
+      transition: all 0.3s;
+    }
+    .queue-panel:hover { border-color: var(--border-hover); }
+    .queue-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      cursor: pointer;
+      user-select: none;
+      background: linear-gradient(90deg, rgba(56,189,248,0.04) 0%, transparent 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    .queue-header:hover { background: rgba(56,189,248,0.08); }
+    .queue-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .queue-badges { display: flex; gap: 8px; align-items: center; }
+    .queue-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .queue-badge.processing { background: rgba(168,85,247,0.15); color: #a855f7; border: 1px solid rgba(168,85,247,0.3); }
+    .queue-badge.queued { background: rgba(245,158,11,0.12); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
+    .queue-badge.render4k { background: rgba(59,130,246,0.12); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3); }
+    .queue-badge.success { background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+    .queue-badge.failed { background: rgba(239,68,68,0.12); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+    .queue-body { padding: 0; max-height: 350px; overflow-y: auto; }
+    .queue-body.collapsed { display: none; }
+    .queue-section { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+    .queue-section:last-child { border-bottom: none; }
+    .queue-section-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 8px;
+    }
+    .queue-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; background: var(--bg3);
+      border-radius: var(--radius-sm); margin-bottom: 6px;
+      font-size: 12px; border: 1px solid var(--border);
+    }
+    .queue-item:last-child { margin-bottom: 0; }
+    .queue-item-icon { font-size: 14px; flex-shrink: 0; }
+    .queue-item-name {
+      font-weight: 600; color: var(--text); flex: 1;
+      min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .queue-item-status {
+      font-size: 10px; font-weight: 600; padding: 2px 8px;
+      border-radius: 12px; flex-shrink: 0;
+    }
+    .queue-item-status.processing { background: rgba(168,85,247,0.15); color: #a855f7; }
+    .queue-item-status.queued { background: rgba(245,158,11,0.12); color: #f59e0b; }
+    .queue-item-status.render4k { background: rgba(59,130,246,0.12); color: #3b82f6; }
+    .queue-item-log {
+      font-size: 10px; color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      flex-shrink: 0; max-width: 250px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .queue-empty { padding: 16px 20px; text-align: center; color: var(--text-dim); font-size: 12px; }
+    .queue-stats-bar {
+      display: flex; gap: 16px; padding: 10px 20px;
+      background: var(--bg3); border-bottom: 1px solid var(--border);
+      font-size: 11px; color: var(--text-mid); font-weight: 600;
+    }
+    .queue-stats-bar span { display: flex; align-items: center; gap: 4px; }
+    .queue-toggle-icon { font-size: 12px; color: var(--text-dim); transition: transform 0.3s; }
+    .queue-toggle-icon.collapsed { transform: rotate(-90deg); }
+    @keyframes queuePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .queue-pulse { animation: queuePulse 1.5s ease-in-out infinite; }
   </style>
 </head>
 <body>
@@ -1169,6 +1258,25 @@
       <span class="log-status" id="logStatus">Memproses...</span>
     </div>
     <div class="log-body" id="logBody"></div>
+  </div>
+
+  <!-- ═══════════ QUEUE STATUS PANEL ═══════════ -->
+  <div class="queue-panel" id="queuePanel">
+    <div class="queue-header" onclick="toggleQueuePanel()">
+      <div class="queue-title">
+        <span>⏳</span>
+        <span>Queue & Processing Status</span>
+        <span class="queue-badges" id="queueBadges"></span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:10px; color:var(--text-dim);" id="queueLastUpdate">Auto-refresh 5s</span>
+        <span class="queue-toggle-icon" id="queueToggleIcon">▼</span>
+      </div>
+    </div>
+    <div class="queue-stats-bar" id="queueStatsBar"></div>
+    <div class="queue-body" id="queueBody">
+      <div class="queue-empty" id="queueEmpty">Loading queue status...</div>
+    </div>
   </div>
 
   <!-- ═══════════ RESULTS ═══════════ -->
@@ -4366,11 +4474,125 @@ Saran Tags/Keywords: ${tags}`;
     window.open('/chat', '_blank');
   }
 
+  // ═══════════════════════════════════════════
+  // QUEUE STATUS PANEL
+  // ═══════════════════════════════════════════
+  let queuePanelCollapsed = false;
+  let queueData = null;
+
+  window.toggleQueuePanel = function() {
+    queuePanelCollapsed = !queuePanelCollapsed;
+    const body = document.getElementById('queueBody');
+    const icon = document.getElementById('queueToggleIcon');
+    if (body) body.classList.toggle('collapsed', queuePanelCollapsed);
+    if (icon) icon.classList.toggle('collapsed', queuePanelCollapsed);
+  }
+
+  async function loadQueueStatus() {
+    try {
+      const resp = await fetch('/api/queue-status');
+      if (!resp.ok) return;
+      queueData = await resp.json();
+      renderQueuePanel();
+    } catch(err) {
+      // silent fail - don't disrupt dashboard
+    }
+  }
+
+  function renderQueuePanel() {
+    if (!queueData) return;
+    const { processing, queued, rendering4k, previewRendering, active4k, stats } = queueData;
+
+    // Badges
+    const badgesEl = document.getElementById('queueBadges');
+    if (badgesEl) {
+      let badges = '';
+      if (stats.processingCount > 0) badges += `<span class="queue-badge processing queue-pulse">⚙️ ${stats.processingCount} Processing</span>`;
+      if (stats.pendingQueue > 0) badges += `<span class="queue-badge queued">⏳ ${stats.pendingQueue} Queued</span>`;
+      if (stats.render4kQueueLength > 0) badges += `<span class="queue-badge render4k">🎬 ${stats.render4kQueueLength} 4K Queue</span>`;
+      badges += `<span class="queue-badge success">✅ ${stats.completed}</span>`;
+      if (stats.failed > 0) badges += `<span class="queue-badge failed">❌ ${stats.failed}</span>`;
+      badgesEl.innerHTML = badges;
+    }
+
+    // Stats bar
+    const statsEl = document.getElementById('queueStatsBar');
+    if (statsEl) {
+      statsEl.innerHTML = `
+        <span>📦 Total: <b>${stats.total}</b></span>
+        <span>✅ Selesai: <b style="color:#10b981">${stats.completed}</b></span>
+        <span>❌ Gagal: <b style="color:#ef4444">${stats.failed}</b></span>
+        <span>⏳ Antrian: <b style="color:#f59e0b">${stats.pendingQueue + stats.render4kQueueLength}</b></span>
+        <span>⚙️ Proses: <b style="color:#a855f7">${stats.processingCount}</b></span>
+      `;
+    }
+
+    // Body content
+    const bodyEl = document.getElementById('queueBody');
+    if (!bodyEl) return;
+
+    const allProcessing = [
+      ...processing.map(i => ({...i, type: 'Processing TSX', icon: '⚙️'})),
+      ...previewRendering.map(i => ({...i, type: 'Preview Render', icon: '🎥'})),
+      ...active4k.map(i => ({...i, type: '4K Render', icon: '🎬'}))
+    ];
+    const allQueued = [
+      ...queued.map(i => ({...i, type: 'Conversion Queue', icon: '⏳'})),
+      ...rendering4k.map(i => ({...i, type: '4K Queue', icon: '🎞️'}))
+    ];
+
+    if (allProcessing.length === 0 && allQueued.length === 0) {
+      bodyEl.innerHTML = `<div class="queue-empty">✅ Tidak ada antrian atau proses yang berjalan</div>`;
+      return;
+    }
+
+    let html = '';
+
+    if (allProcessing.length > 0) {
+      html += `<div class="queue-section">`;
+      html += `<div class="queue-section-title" style="color:#a855f7;">⚙️ Sedang Diproses (${allProcessing.length})</div>`;
+      allProcessing.forEach(item => {
+        html += `<div class="queue-item">
+          <span class="queue-item-icon">${item.icon}</span>
+          <span class="queue-item-name" title="${item.name}">${item.name}</span>
+          <span class="queue-item-status processing">${item.type}</span>
+          <span class="queue-item-log" title="${item.log || ''}">${item.log || ''}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    if (allQueued.length > 0) {
+      html += `<div class="queue-section">`;
+      html += `<div class="queue-section-title" style="color:#f59e0b;">⏳ Menunggu Antrian (${allQueued.length})</div>`;
+      allQueued.forEach((item, idx) => {
+        html += `<div class="queue-item">
+          <span class="queue-item-icon">${item.icon}</span>
+          <span class="queue-item-name" title="${item.name}">${idx + 1}. ${item.name}</span>
+          <span class="queue-item-status queued">${item.type}</span>
+          <span class="queue-item-log" title="${item.log || ''}">${item.log || ''}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    bodyEl.innerHTML = html;
+
+    // Update timestamp
+    const timeEl = document.getElementById('queueLastUpdate');
+    if (timeEl) {
+      timeEl.textContent = `Updated ${new Date().toLocaleTimeString('id-ID')}`;
+    }
+  }
+
   // INIT
   // ═══════════════════════════════════════════
   loadResults();
   loadPrompts();
   restoreState();
+  loadQueueStatus();
+  // Auto-refresh queue every 5s
+  setInterval(loadQueueStatus, 5000);
   // Auto-refresh every 30s
   setInterval(loadResults, 30000);
 </script>
