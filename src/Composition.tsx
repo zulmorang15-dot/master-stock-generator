@@ -1,237 +1,187 @@
 import React, { useRef, useEffect } from 'react';
-import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import { useVideoConfig, useCurrentFrame, interpolate } from 'remotion';
 import * as THREE from 'three';
-
-// Deterministic seed-based pseudorandom generator for particles to prevent Math.random() drift
-const createDeterministicRandom = (seed: number) => {
-    let s = seed;
-    return () => {
-        s = Math.sin(s) * 10000;
-        return s - Math.floor(s);
-    };
-};
-
-const rand = createDeterministicRandom(12345);
-const PARTICLE_COUNT = 1500;
-const PARTICLE_DATA = Array.from({ length: PARTICLE_COUNT }, () => {
-    return {
-        x: (rand() - 0.5) * 80,
-        y: (rand() - 0.5) * 80,
-        z: (rand() - 0.5) * 1000,
-        random: rand(),
-    };
-});
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const CyberpunkEndScreen: React.FC = () => {
-    const { width, height, fps } = useVideoConfig();
-    const frame = useCurrentFrame();
+const PARTICLE_COUNT = 1000;
+const PARTICLE_POSITIONS = new Float32Array(PARTICLE_COUNT * 3);
+const PARTICLE_COLORS = new Float32Array(PARTICLE_COUNT * 3);
 
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+// Deterministic Pseudo-Random Generator (LCG)
+let seed = 987654321;
+function deterministicRandom() {
+    const x = Math.sin(seed++) * 10000;
+    return x - Math.floor(x);
+}
+
+// Pre-calculate positions and colors once outside component lifecycle
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+    PARTICLE_POSITIONS[i * 3] = (deterministicRandom() - 0.5) * 1000;      // X
+    PARTICLE_POSITIONS[i * 3 + 1] = (deterministicRandom() - 0.5) * 200;  // Y
+    PARTICLE_POSITIONS[i * 3 + 2] = (deterministicRandom() - 0.5) * 1000; // Z
+
+    const isCyan = deterministicRandom() > 0.5;
+    if (isCyan) {
+        PARTICLE_COLORS[i * 3] = 0.0;     // R
+        PARTICLE_COLORS[i * 3 + 1] = 1.0; // G
+        PARTICLE_COLORS[i * 3 + 2] = 1.0; // B
+    } else {
+        PARTICLE_COLORS[i * 3] = 1.0;     // R
+        PARTICLE_COLORS[i * 3 + 1] = 0.0; // G
+        PARTICLE_COLORS[i * 3 + 2] = 1.0; // B
+    }
+}
+
+export const HudLandscape: React.FC = () => {
+    const { width, height } = useVideoConfig();
+    const frame = useCurrentFrame();
+    
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-    const tunnelMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
-    const particleMatRef = useRef<THREE.ShaderMaterial | null>(null);
+    const terrainBottomRef = useRef<THREE.Mesh | null>(null);
+    const terrainTopRef = useRef<THREE.Mesh | null>(null);
+    const particlesRef = useRef<THREE.Points | null>(null);
 
     const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    // Three.js Scene Setup (Runs once on mount)
+    // 1. Initialize WebGL Scene
     useEffect(() => {
         if (!canvasRef.current) return;
 
-        const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.002);
-
-        const camera = new THREE.PerspectiveCamera(85, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 1000);
-        camera.position.z = 0;
-
         const renderer = new THREE.WebGLRenderer({
             canvas: canvasRef.current,
-            alpha: false,
             antialias: true,
+            alpha: true,
         });
         renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
         renderer.setPixelRatio(1);
-
-        // Infinite Volumetric Tunnel Geometry
-        const tunnelGeo = new THREE.CylinderGeometry(50, 50, 1000, 32, 64, true);
-        tunnelGeo.rotateX(Math.PI / 2);
-
-        const tunnelMaterial = new THREE.ShaderMaterial({
-            uniforms: {
-                time: { value: 0.0 },
-            },
-            vertexShader: `
-                uniform float time;
-                varying vec2 vUv;
-                void main() {
-                    vUv = uv;
-                    vec3 pos = position;
-                    float angle = uv.x * 3.14159 * 2.0;
-                    float wave = sin(uv.y * 60.0 - time * 3.14159 * 2.0 * 10.0) * 3.0;
-                    pos.x += cos(angle) * wave;
-                    pos.y += sin(angle) * wave;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-                }
-            `,
-            fragmentShader: `
-                uniform float time;
-                varying vec2 vUv;
-                void main() {
-                    vec2 st = vUv;
-                    st.y = st.y * 20.0 - time * 20.0; 
-                    st.x = st.x * 16.0;
-
-                    vec2 grid = abs(fract(st) - 0.5);
-                    float line = smoothstep(0.40, 0.45, max(grid.x, grid.y));
-
-                    vec3 color1 = vec3(0.0, 1.0, 1.0); // Hot Cyan
-                    vec3 color2 = vec3(1.0, 0.0, 1.0); // Deep Magenta
-                    vec3 color = mix(color1, color2, sin(vUv.y * 10.0 + time * 6.2831) * 0.5 + 0.5);
-
-                    float glitch = step(0.96, fract(sin(dot(floor(st), vec2(12.9898,78.233))) * 43758.5453 + time * 5.0));
-                    float brightness = line * (0.3 + glitch * 2.0);
-
-                    float fog = smoothstep(0.0, 0.1, vUv.y) * smoothstep(1.0, 0.8, vUv.y);
-
-                    gl_FragColor = vec4(color * brightness, fog);
-                }
-            `,
-            side: THREE.BackSide,
-            transparent: true,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-        });
-
-        const tunnel = new THREE.Mesh(tunnelGeo, tunnelMaterial);
-        scene.add(tunnel);
-
-        // Particle System
-        const particleGeo = new THREE.BufferGeometry();
-        const posArray = new Float32Array(PARTICLE_COUNT * 3);
-        const randomArray = new Float32Array(PARTICLE_COUNT);
-
-        for (let i = 0; i < PARTICLE_COUNT; i++) {
-            const pt = PARTICLE_DATA[i];
-            posArray[i * 3] = pt.x;
-            posArray[i * 3 + 1] = pt.y;
-            posArray[i * 3 + 2] = pt.z;
-            randomArray[i] = pt.random;
-        }
-
-        particleGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-        particleGeo.setAttribute('aRandom', new THREE.BufferAttribute(randomArray, 1));
-
-        const particleMat = new THREE.ShaderMaterial({
-            uniforms: {
-                time: { value: 0.0 },
-            },
-            vertexShader: `
-                uniform float time;
-                attribute float aRandom;
-                varying float vAlpha;
-                void main() {
-                    vec3 pos = position;
-                    float speed = 800.0;
-                    pos.z += time * speed * (0.5 + aRandom * 0.5);
-                    pos.z = mod(pos.z + 500.0, 1000.0) - 500.0;
-                    vAlpha = smoothstep(0.0, 0.2, abs(pos.z) / 500.0);
-                    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
-                    gl_PointSize = (12.0 * aRandom) / -mvPosition.z;
-                    gl_Position = projectionMatrix * mvPosition;
-                }
-            `,
-            fragmentShader: `
-                varying float vAlpha;
-                void main() {
-                    vec2 coord = gl_PointCoord - vec2(0.5);
-                    if(length(coord) > 0.5) discard;
-                    gl_FragColor = vec4(1.0, 0.0, 1.0, (1.0 - vAlpha) * 0.9);
-                }
-            `,
-            transparent: true,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-        });
-
-        const particles = new THREE.Points(particleGeo, particleMat);
-        scene.add(particles);
-
-        sceneRef.current = scene;
-        cameraRef.current = camera;
         rendererRef.current = renderer;
-        tunnelMaterialRef.current = tunnelMaterial;
-        particleMatRef.current = particleMat;
+
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050010, 0.0025);
+        sceneRef.current = scene;
+
+        const camera = new THREE.PerspectiveCamera(75, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 1, 1000);
+        camera.position.set(0, 0, 0);
+        cameraRef.current = camera;
+
+        // Grid spacing segment: 50 units. Grid overall length: 4000.
+        const gridGeometry = new THREE.PlaneGeometry(2000, 4000, 40, 80);
+        const positionAttribute = gridGeometry.attributes.position;
+        
+        // Use a displacement frequency that loops perfectly with a Z movement of 1000 units
+        const waveFreq = (2 * Math.PI * 2) / 1000; 
+        for (let i = 0; i < positionAttribute.count; i++) {
+            const x = positionAttribute.getX(i);
+            const y = positionAttribute.getY(i);
+            const z = positionAttribute.getZ(i);
+            const displacement = Math.sin(x * 0.01) * Math.cos(y * waveFreq) * 40;
+            positionAttribute.setZ(i, z + displacement);
+        }
+        gridGeometry.computeVertexNormals();
+
+        const materialCyan = new THREE.MeshBasicMaterial({
+            color: 0x00FFFF,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.3,
+        });
+
+        const materialMagenta = new THREE.MeshBasicMaterial({
+            color: 0xFF00FF,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.3,
+        });
+
+        const terrainBottom = new THREE.Mesh(gridGeometry, materialCyan);
+        terrainBottom.rotation.x = -Math.PI / 2;
+        terrainBottom.position.y = -100;
+        scene.add(terrainBottom);
+        terrainBottomRef.current = terrainBottom;
+
+        const terrainTop = new THREE.Mesh(gridGeometry, materialMagenta);
+        terrainTop.rotation.x = Math.PI / 2;
+        terrainTop.position.y = 100;
+        scene.add(terrainTop);
+        terrainTopRef.current = terrainTop;
+
+        const particleGeometry = new THREE.BufferGeometry();
+        particleGeometry.setAttribute('position', new THREE.BufferAttribute(PARTICLE_POSITIONS.slice(), 3));
+        particleGeometry.setAttribute('color', new THREE.BufferAttribute(PARTICLE_COLORS.slice(), 3));
+
+        const particleMaterial = new THREE.PointsMaterial({
+            size: 3,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+        });
+
+        const particles = new THREE.Points(particleGeometry, particleMaterial);
+        scene.add(particles);
+        particlesRef.current = particles;
 
         return () => {
             renderer.dispose();
-            tunnelGeo.dispose();
-            tunnelMaterial.dispose();
-            particleGeo.dispose();
-            particleMat.dispose();
+            gridGeometry.dispose();
+            materialCyan.dispose();
+            materialMagenta.dispose();
+            particleGeometry.dispose();
+            particleMaterial.dispose();
         };
     }, []);
 
-    // Deterministic Frame-by-Frame Render Loop
+    // 2. Deterministic Render Effect per Frame
     useEffect(() => {
-        const scene = sceneRef.current;
-        const camera = cameraRef.current;
-        const renderer = rendererRef.current;
-        const tunnelMat = tunnelMaterialRef.current;
-        const particleMat = particleMatRef.current;
+        if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
 
-        if (!scene || !camera || !renderer || !tunnelMat || !particleMat) return;
+        const totalFrames = 600; // 10s at 60fps
+        const progress = (frame % totalFrames) / totalFrames;
 
-        // Sync to a flawless 20.0s seamless loop
-        const LOOP_DURATION = 20.0;
-        const elapsedTime = frame / fps;
-        const normalizedTime = (elapsedTime % LOOP_DURATION) / LOOP_DURATION;
+        // Perfect looping terrain position Z coordinate shift
+        const zOffset = progress * 1000;
+        if (terrainBottomRef.current) {
+            terrainBottomRef.current.position.z = zOffset;
+        }
+        if (terrainTopRef.current) {
+            terrainTopRef.current.position.z = zOffset;
+        }
 
-        tunnelMat.uniforms.time.value = normalizedTime;
-        particleMat.uniforms.time.value = normalizedTime;
+        // Seamless wrap of particles
+        if (particlesRef.current) {
+            const positions = particlesRef.current.geometry.attributes.position.array as Float32Array;
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const baseZ = PARTICLE_POSITIONS[i * 3 + 2];
+                let z = baseZ + zOffset;
+                z = ((z + 500) % 1000);
+                if (z < 0) z += 1000;
+                z -= 500;
+                positions[i * 3 + 2] = z;
+            }
+            particlesRef.current.geometry.attributes.position.needsUpdate = true;
+        }
 
-        camera.rotation.z = Math.sin(normalizedTime * Math.PI * 2.0) * 0.1;
-        camera.position.x = Math.cos(normalizedTime * Math.PI * 2.0) * 2.0;
-        camera.position.y = Math.sin(normalizedTime * Math.PI * 2.0) * 2.0;
+        // Camera deterministic path matching 10s loop duration
+        const angle = progress * Math.PI * 2;
+        cameraRef.current.rotation.z = Math.sin(angle) * 0.05;
+        cameraRef.current.position.y = Math.sin(angle * 2) * 10;
 
-        renderer.render(scene, camera);
-    }, [frame, fps]);
+        rendererRef.current.render(sceneRef.current, cameraRef.current);
+    }, [frame]);
 
-    // UI Dash & Scale Animation calculations (Frame-Locked and Symmetrical for Looping)
-    const localFrame = frame % (fps * 20);
+    // 3. Flowing path animations mapped perfectly to loop
+    const flowLeftOffset = interpolate(frame % 600, [0, 600], [2000, 0]);
+    const flowRightOffset = interpolate(frame % 600, [0, 600], [0, -2000]);
+    const flowCircleOffset = interpolate(frame % 600, [0, 600], [1000, 0]);
+    const flowCircleOffsetRev = interpolate(frame % 600, [0, 600], [0, 1000]);
 
-    const lengthRect = 2040;
-    const lengthCircle = 659.73;
-
-    // Symmetrical HUD scale animations
-    const boxScale = interpolate(
-        localFrame,
-        [0, 2.5 * fps, 2.6 * fps, 2.9 * fps, 20.0 * fps],
-        [1.0, 1.0, 1.02, 1.0, 1.0],
-        { easing: Easing.out(Easing.quad) }
-    );
-
-    const subScale = interpolate(
-        localFrame,
-        [0, 8.5 * fps, 8.6 * fps, 8.9 * fps, 20.0 * fps],
-        [1.0, 1.0, 1.05, 1.0, 1.0],
-        { easing: Easing.out(Easing.quad) }
-    );
-
-    // Neon continuous dash offsets
-    const offsetCw = interpolate(localFrame, [0, fps * 20], [0, -lengthRect], { easing: Easing.linear });
-    const offsetCcw = interpolate(localFrame, [0, fps * 20], [0, lengthRect], { easing: Easing.linear });
-    const offsetCircle = interpolate(localFrame, [0, fps * 20], [0, -lengthCircle], { easing: Easing.linear });
-
-    // HUD spin elements
-    const rotInner = interpolate(localFrame, [0, fps * 20], [0, 360], { easing: Easing.linear });
-    const rotOuter = interpolate(localFrame, [0, fps * 20], [0, -360], { easing: Easing.linear });
-
-    // Styles mapped perfectly matching CSS specifications
-    const containerStyle: React.CSSProperties = {
+    // Inline Styling Objects
+    const wrapperStyle: React.CSSProperties = {
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
         position: 'absolute',
@@ -240,7 +190,7 @@ const CyberpunkEndScreen: React.FC = () => {
         transform: `translate(-50%, -50%) scale(${scaleFactor})`,
         transformOrigin: 'center center',
         overflow: 'hidden',
-        backgroundColor: '#000000',
+        backgroundColor: '#050010',
     };
 
     const canvasStyle: React.CSSProperties = {
@@ -250,7 +200,20 @@ const CyberpunkEndScreen: React.FC = () => {
         width: ORIGINAL_WIDTH,
         height: ORIGINAL_HEIGHT,
         zIndex: 1,
-        filter: 'contrast(1.1) saturate(1.2)',
+        // High fidelity bloom simulated safely in CSS filter layer
+        filter: 'drop-shadow(0 0 10px rgba(0, 255, 255, 0.4)) drop-shadow(0 0 20px rgba(255, 0, 255, 0.2))',
+    };
+
+    const glitchStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        background: 'linear-gradient(rgba(0,255,255,0.03) 50%, rgba(255,0,255,0.03) 50%)',
+        backgroundSize: '100% 4px',
+        zIndex: 1,
+        mixBlendMode: 'screen',
     };
 
     const uiLayerStyle: React.CSSProperties = {
@@ -262,42 +225,41 @@ const CyberpunkEndScreen: React.FC = () => {
         zIndex: 2,
     };
 
-    const videoPlaceholderStyle: React.CSSProperties = {
+    const hudBoxLeftStyle: React.CSSProperties = {
         position: 'absolute',
         width: 640,
         height: 360,
-        top: 360,
+        top: 300,
+        left: 200,
     };
 
-    const leftBoxStyle: React.CSSProperties = {
-        ...videoPlaceholderStyle,
-        left: 160,
-    };
-
-    const rightBoxStyle: React.CSSProperties = {
-        ...videoPlaceholderStyle,
-        right: 160,
-    };
-
-    const subPlaceholderStyle: React.CSSProperties = {
+    const hudBoxRightStyle: React.CSSProperties = {
         position: 'absolute',
-        width: 200,
-        height: 200,
-        left: 860,
-        bottom: 100,
+        width: 640,
+        height: 360,
+        top: 300,
+        right: 200,
     };
 
-    const chromaBoxStyle: React.CSSProperties = {
+    const hudCircleStyle: React.CSSProperties = {
+        position: 'absolute',
+        width: 250,
+        height: 250,
+        bottom: 120,
+        left: '50%',
+        transform: 'translateX(-50%)',
+    };
+
+    const greenScreenStyle: React.CSSProperties = {
         position: 'absolute',
         top: 0,
         left: 0,
         width: '100%',
         height: '100%',
         backgroundColor: '#00FF00',
-        boxShadow: 'inset 0 0 0 2px rgba(0, 0, 0, 1)',
     };
 
-    const chromaCircleStyle: React.CSSProperties = {
+    const greenScreenRoundStyle: React.CSSProperties = {
         position: 'absolute',
         top: 0,
         left: 0,
@@ -305,119 +267,134 @@ const CyberpunkEndScreen: React.FC = () => {
         height: '100%',
         backgroundColor: '#00FF00',
         borderRadius: '50%',
-        boxShadow: 'inset 0 0 0 2px rgba(0, 0, 0, 1)',
     };
 
     const hudBorderStyle: React.CSSProperties = {
         position: 'absolute',
-        top: -30,
-        left: -30,
-        width: 700,
-        height: 420,
-        filter: 'drop-shadow(0 0 10px rgba(0, 255, 255, 0.7)) drop-shadow(0 0 4px rgba(255, 0, 255, 0.7))',
-    };
-
-    const hudBorderCircleStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: -30,
-        left: -30,
-        width: 260,
-        height: 260,
-        filter: 'drop-shadow(0 0 10px rgba(0, 255, 255, 0.7)) drop-shadow(0 0 4px rgba(255, 0, 255, 0.7))',
-    };
-
-    const glitchWrapperStyle: React.CSSProperties = {
-        position: 'absolute',
-        width: '100%',
-        height: '100%',
+        top: -10,
+        left: -10,
+        width: 'calc(100% + 20px)',
+        height: 'calc(100% + 20px)',
+        overflow: 'visible',
+        zIndex: 3,
+        filter: 'drop-shadow(0 0 8px #FF00FF) drop-shadow(0 0 15px #00FFFF)',
     };
 
     return (
-        <div style={containerStyle}>
+        <div style={wrapperStyle}>
             <canvas ref={canvasRef} style={canvasStyle} />
-
+            <div style={glitchStyle} />
             <div style={uiLayerStyle}>
                 
-                {/* Left Video Placeholder */}
-                <div style={{ ...leftBoxStyle, transform: `scale(${boxScale})`, transformOrigin: 'center center' }}>
-                    <div style={glitchWrapperStyle}>
-                        <svg style={hudBorderStyle} viewBox="0 0 700 420">
-                            <path d="M 30 60 L 30 30 L 60 30" fill="none" stroke="#FF00FF" strokeWidth={4} strokeLinecap="square"/>
-                            <path d="M 670 60 L 670 30 L 640 30" fill="none" stroke="#FF00FF" strokeWidth={4} strokeLinecap="square"/>
-                            <path d="M 30 360 L 30 390 L 60 390" fill="none" stroke="#FF00FF" strokeWidth={4} strokeLinecap="square"/>
-                            <path d="M 670 360 L 670 390 L 640 390" fill="none" stroke="#FF00FF" strokeWidth={4} strokeLinecap="square"/>
-                            <rect x="25" y="25" width="650" height="370" fill="none" stroke="#00FFFF" strokeWidth={1} opacity="0.3"/>
-                            <path 
-                                d="M 25 25 h 650 v 370 h -650 z" 
-                                fill="none" 
-                                stroke="#00FFFF" 
-                                strokeWidth={3} 
-                                style={{
-                                    strokeDasharray: `${lengthRect / 4} ${lengthRect / 4}`,
-                                    strokeDashoffset: offsetCw,
-                                }}
-                            />
-                        </svg>
-                    </div>
-                    <div style={chromaBoxStyle}></div>
+                {/* HUD Box Left */}
+                <div style={hudBoxLeftStyle}>
+                    <div style={greenScreenStyle} />
+                    <svg style={hudBorderStyle} viewBox="0 0 660 380">
+                        <rect 
+                            style={{
+                                fill: 'none',
+                                strokeWidth: 4,
+                                strokeLinecap: 'square',
+                                stroke: '#00FFFF',
+                                strokeDasharray: '200 1800',
+                                strokeDashoffset: flowLeftOffset,
+                            }}
+                            x="10" 
+                            y="10" 
+                            width="640" 
+                            height="360" 
+                        />
+                        <rect 
+                            style={{
+                                fill: 'none',
+                                strokeWidth: 4,
+                                strokeLinecap: 'square',
+                                stroke: '#FF00FF',
+                                strokeDasharray: '400 1600',
+                                strokeDashoffset: flowRightOffset,
+                            }}
+                            x="6" 
+                            y="6" 
+                            width="648" 
+                            height="368" 
+                        />
+                        <circle cx="10" cy="10" r="4" fill="#00FFFF" />
+                        <circle cx="650" cy="10" r="4" fill="#00FFFF" />
+                        <circle cx="10" cy="370" r="4" fill="#00FFFF" />
+                        <circle cx="650" cy="370" r="4" fill="#00FFFF" />
+                    </svg>
                 </div>
 
-                {/* Right Video Placeholder */}
-                <div style={{ ...rightBoxStyle, transform: `scale(${boxScale})`, transformOrigin: 'center center' }}>
-                    <div style={glitchWrapperStyle}>
-                        <svg style={hudBorderStyle} viewBox="0 0 700 420">
-                            <path d="M 30 60 L 30 30 L 60 30" fill="none" stroke="#FF00FF" strokeWidth={4} strokeLinecap="square"/>
-                            <path d="M 670 60 L 670 30 L 640 30" fill="none" stroke="#FF00FF" strokeWidth={4} strokeLinecap="square"/>
-                            <path d="M 30 360 L 30 390 L 60 390" fill="none" stroke="#FF00FF" strokeWidth={4} strokeLinecap="square"/>
-                            <path d="M 670 360 L 670 390 L 640 390" fill="none" stroke="#FF00FF" strokeWidth={4} strokeLinecap="square"/>
-                            <rect x="25" y="25" width="650" height="370" fill="none" stroke="#00FFFF" strokeWidth={1} opacity="0.3"/>
-                            <path 
-                                d="M 25 25 h 650 v 370 h -650 z" 
-                                fill="none" 
-                                stroke="#00FFFF" 
-                                strokeWidth={3} 
-                                style={{
-                                    strokeDasharray: `${lengthRect / 4} ${lengthRect / 4}`,
-                                    strokeDashoffset: offsetCcw,
-                                }}
-                            />
-                        </svg>
-                    </div>
-                    <div style={chromaBoxStyle}></div>
+                {/* HUD Box Right */}
+                <div style={hudBoxRightStyle}>
+                    <div style={greenScreenStyle} />
+                    <svg style={hudBorderStyle} viewBox="0 0 660 380">
+                        <rect 
+                            style={{
+                                fill: 'none',
+                                strokeWidth: 4,
+                                strokeLinecap: 'square',
+                                stroke: '#00FFFF',
+                                strokeDasharray: '200 1800',
+                                strokeDashoffset: flowLeftOffset,
+                            }}
+                            x="10" 
+                            y="10" 
+                            width="640" 
+                            height="360" 
+                        />
+                        <rect 
+                            style={{
+                                fill: 'none',
+                                strokeWidth: 4,
+                                strokeLinecap: 'square',
+                                stroke: '#FF00FF',
+                                strokeDasharray: '400 1600',
+                                strokeDashoffset: flowRightOffset,
+                            }}
+                            x="6" 
+                            y="6" 
+                            width="648" 
+                            height="368" 
+                        />
+                        <circle cx="10" cy="10" r="4" fill="#FF00FF" />
+                        <circle cx="650" cy="10" r="4" fill="#FF00FF" />
+                        <circle cx="10" cy="370" r="4" fill="#FF00FF" />
+                        <circle cx="650" cy="370" r="4" fill="#FF00FF" />
+                    </svg>
                 </div>
 
-                {/* Subscriber Placeholder */}
-                <div style={{ ...subPlaceholderStyle, transform: `scale(${subScale})`, transformOrigin: 'center center' }}>
-                    <div style={glitchWrapperStyle}>
-                        <svg style={hudBorderCircleStyle} viewBox="0 0 260 260">
-                            <path d="M 130 5 L 130 20 M 130 255 L 130 240 M 5 130 L 20 130 M 255 130 L 240 130" fill="none" stroke="#FF00FF" strokeWidth={4}/>
-                            
-                            {/* Inner spinning segment ring */}
-                            <g style={{ transform: `rotate(${rotInner}deg)`, transformOrigin: "130px 130px" }}>
-                                <circle cx="130" cy="130" r="115" fill="none" stroke="#00FFFF" strokeWidth={2} strokeDasharray="20 10 50 20 5 10"/>
-                            </g>
-
-                            {/* Outer spinning segment ring */}
-                            <g style={{ transform: `rotate(${rotOuter}deg)`, transformOrigin: "130px 130px" }}>
-                                <circle cx="130" cy="130" r="125" fill="none" stroke="#FF00FF" strokeWidth={2} strokeDasharray="100 50 30 40"/>
-                            </g>
-
-                            {/* Flowing energy ring path */}
-                            <circle 
-                                cx="130" 
-                                cy="130" 
-                                r="105" 
-                                fill="none" 
-                                stroke="#00FFFF" 
-                                strokeWidth={3} 
-                                style={{
-                                    strokeDasharray: `${lengthCircle / 4} ${lengthCircle / 4}`,
-                                    strokeDashoffset: offsetCircle,
-                                }}
-                            />
-                        </svg>
-                    </div>
-                    <div style={chromaCircleStyle}></div>
+                {/* HUD Circle */}
+                <div style={hudCircleStyle}>
+                    <div style={greenScreenRoundStyle} />
+                    <svg style={hudBorderStyle} viewBox="0 0 270 270">
+                        <circle 
+                            style={{
+                                fill: 'none',
+                                strokeWidth: 4,
+                                strokeLinecap: 'square',
+                                stroke: '#00FFFF',
+                                strokeDasharray: '200 1800',
+                                strokeDashoffset: flowCircleOffset,
+                            }}
+                            cx="135" 
+                            cy="135" 
+                            r="125" 
+                        />
+                        <circle 
+                            style={{
+                                fill: 'none',
+                                strokeWidth: 4,
+                                strokeLinecap: 'square',
+                                stroke: '#FF00FF',
+                                strokeDasharray: '400 1600',
+                                strokeDashoffset: flowCircleOffsetRev,
+                            }}
+                            cx="135" 
+                            cy="135" 
+                            r="130" 
+                        />
+                    </svg>
                 </div>
 
             </div>
@@ -425,5 +402,5 @@ const CyberpunkEndScreen: React.FC = () => {
     );
 };
 
-export default CyberpunkEndScreen;
+export default HudLandscape;
 // END_OF_FILE
