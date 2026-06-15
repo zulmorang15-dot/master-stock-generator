@@ -149,6 +149,36 @@ function setCachedResponse(prompt, model, response) {
   }
 }
 
+// Safely extract and parse JSON from AI response (handles markdown, single quotes, etc.)
+function safeJsonExtract(text) {
+  if (!text) throw new Error('Empty response');
+  let cleaned = text.trim();
+  // Strip markdown code fences
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.split('```json')[1].split('```')[0].trim();
+  } else if (cleaned.includes('```')) {
+    cleaned = cleaned.split('```')[1].split('```')[0].trim();
+  }
+  // Remove control chars
+  cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+  // Try direct parse first
+  try { return JSON.parse(cleaned); } catch (_) {}
+  // Try fixing single quotes -> double quotes (common AI mistake)
+  try {
+    const fixed = cleaned.replace(/'/g, '"');
+    return JSON.parse(fixed);
+  } catch (_) {}
+  // Try extracting first { ... } block
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const extracted = cleaned.substring(firstBrace, lastBrace + 1);
+    try { return JSON.parse(extracted); } catch (_) {}
+    try { return JSON.parse(extracted.replace(/'/g, '"')); } catch (_) {}
+  }
+  throw new Error(`Could not parse JSON from AI response: ${cleaned.substring(0, 100)}`);
+}
+
 // Repair common AI-generated Remotion/TypeScript mistakes before compile.
 function repairGeneratedTsx(code) {
   if (!code) return code;
@@ -161,6 +191,33 @@ function repairGeneratedTsx(code) {
   repaired = repaired.replace(/EasingEaseOut/g, 'Easing.out(Easing.quad)');
   repaired = repaired.replace(/EasingEaseIn/g, 'Easing.in(Easing.quad)');
   repaired = repaired.replace(/EasingEaseInOut/g, 'Easing.inOut(Easing.quad)');
+
+  // Fix common Easing name mistakes: Easing.sine -> Easing.sin
+  repaired = repaired.replace(/Easing\.sine\b/g, 'Easing.sin');
+  // Fix Easing.expo -> Easing.exp
+  repaired = repaired.replace(/Easing\.expo\b/g, 'Easing.exp');
+
+  // Fix WebGL canvas context typing: getContext('webgl') returns RenderingContext, needs cast
+  repaired = repaired.replace(
+    /(canvas\w*\.getContext\s*\(\s*['"]webgl['"]\s*(?:,\s*\{[^}]*\})?\s*\))\s*(?!\s*as\s)/g,
+    '$1 as WebGLRenderingContext | null'
+  );
+  repaired = repaired.replace(
+    /(canvas\w*\.getContext\s*\(\s*['"]2d['"]\s*\))\s*(?!\s*as\s)/g,
+    '$1 as CanvasRenderingContext2D | null'
+  );
+
+  // Fix implicit 'any' on common callback parameters (.map, .filter, etc.)
+  repaired = repaired.replace(
+    /(\.(?:map|filter|forEach|reduce|find|findIndex|some|every|sort|flatMap)\s*\(\s*\(?\s*)(\w+)(\s*\)?\s*=>)/g,
+    (match, prefix, paramName, suffix) => {
+      if (suffix.includes(':')) return match;
+      return `${prefix}${paramName}: any${suffix}`;
+    }
+  );
+
+  // Fix: Type 'RenderingContext' is not assignable
+  repaired = repaired.replace(/:\s*RenderingContext\b/g, ': WebGLRenderingContext');
 
   return repaired;
 }
@@ -2008,11 +2065,19 @@ All style keys in JSX style objects (e.g., style={{ ... }}) MUST be camelCased. 
 **BANNED FUNCTIONS (WILL CAUSE RUNTIME CRASH — NEVER USE):**
 - EasingEaseOut, EasingEaseIn, EasingEaseInOut — these do not exist in Remotion. Use Easing.out(Easing.quad), Easing.in(Easing.quad), Easing.inOut(Easing.quad).
 - Valid Easing values: Easing.linear, Easing.ease, Easing.quad, Easing.cubic, Easing.sin, Easing.circle, Easing.exp, Easing.elastic(), Easing.back(), Easing.bounce, Easing.bezier(), Easing.in(), Easing.out(), Easing.inOut()
+- CRITICAL: \`Easing.sine\` DOES NOT EXIST. The correct name is \`Easing.sin\`. Using \`Easing.sine\` WILL cause a TypeScript error.
+- CRITICAL: \`Easing.expo\` DOES NOT EXIST. The correct name is \`Easing.exp\`.
 - CRITICAL: Remotion interpolate() options MUST use the property name \`easing\`, NEVER \`ease\`. Correct: \`interpolate(frame, [0, 30], [0, 1], { easing: Easing.out(Easing.quad) })\`. Incorrect and forbidden: \`{ ease: ... }\`.
 - Date.now(), performance.now(), new Date() — BANNED, breaks deterministic frame rendering.
 - Math.random() inside component render — BANNED. Pre-calculate outside the component into a static const array.
 - setInterval(), setTimeout(), requestAnimationFrame() — BANNED.
 - Any CSS @keyframes, CSS transition, CSS animation property — BANNED.
+
+**0.2 TYPESCRIPT STRICT TYPING RULES (CRITICAL — WILL CAUSE COMPILATION FAILURE IF IGNORED):**
+- ALL function/callback parameters MUST have explicit type annotations. NEVER write \`(x) => ...\` — always write \`(x: any) => ...\` or use a proper type.
+- \`canvas.getContext('webgl')\` MUST be cast: \`const gl = canvas.getContext('webgl') as WebGLRenderingContext | null;\`
+- \`canvas.getContext('2d')\` MUST also be cast: \`const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | null;\`
+- NEVER use implicit \`any\` types anywhere. Always annotate: \`(item: any)\`, \`(mat: any)\`, \`(v: number)\` etc.
 
 **1. Dynamic Identification:**
 - Identify the main subject from the HTML and use it as the PascalCase component name (e.g., GlowingButton).
@@ -2150,14 +2215,12 @@ async function executeSingleTask(itemId) {
         throw new Error(`Gagal menghasilkan metadata SEO: ${err.message}`);
       }
 
-      let jsonText = aiResponse.trim();
-      if (jsonText.startsWith("```json")) {
-        jsonText = jsonText.split("```json")[1].split("```")[0].trim();
-      } else if (jsonText.includes("```")) {
-        jsonText = jsonText.split("```")[1].split("```")[0].trim();
+      let seoData;
+      try {
+        seoData = safeJsonExtract(aiResponse);
+      } catch (jsonErr) {
+        throw new Error(`Gagal parsing JSON metadata SEO: ${jsonErr.message}`);
       }
-      jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-      let seoData = JSON.parse(jsonText);
       seoData = sanitizeKeywordsAndTitle(seoData);
 
       item.judul = seoData.judul;
@@ -2198,14 +2261,12 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
         signal
       );
 
-      let analysisText = analysisResponse.trim();
-      if (analysisText.startsWith("```json")) {
-        analysisText = analysisText.split("```json")[1].split("```")[0].trim();
-      } else if (analysisText.includes("```")) {
-        analysisText = analysisText.split("```")[1].split("```")[0].trim();
+      let config;
+      try {
+        config = safeJsonExtract(analysisResponse);
+      } catch (jsonErr) {
+        throw new Error(`Gagal parsing JSON konfigurasi video: ${jsonErr.message}`);
       }
-      analysisText = analysisText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-      const config = JSON.parse(analysisText);
 
       // Only apply AI values if user hasn't manually configured video settings
       if (!item._userSetVideoConfig) {
@@ -2346,17 +2407,66 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
       throw new Error('TSX yang dihasilkan tidak valid (bracket tidak balance atau tidak ada export default). Batalkan.');
     }
 
-    // --- AUTOMATED TSX COMPILATION CHECK ---
-    addTaskLog(itemId, "Melakukan pemeriksaan kompilasi TSX lokal menggunakan TypeScript compiler...", "info");
-    fs.writeFileSync("src/Composition.tsx", tsxCode);
-    try {
-      execSync("npx tsc --noEmit --noUnusedLocals false --noUnusedParameters false", { stdio: "pipe" });
-      addTaskLog(itemId, "✅ Pemeriksaan kompilasi sukses! Kode valid.", "success");
-    } catch (tscErr) {
-      const errMsg = tscErr.stdout ? tscErr.stdout.toString() : tscErr.message;
-      console.error("TypeScript compilation failed:\n", errMsg);
-      const formattedErrors = errMsg.split('\n').filter(line => line.includes('error TS')).slice(0, 5).join('\n');
-      throw new Error(`TypeScript compilation failed:\n${formattedErrors || errMsg.substring(0, 200)}`);
+    // --- AUTOMATED TSX COMPILATION CHECK WITH AUTO-FIX RETRY ---
+    const MAX_TSC_RETRIES = 2;
+    let tscPass = false;
+    let tscAttempt = 0;
+
+    while (!tscPass && tscAttempt <= MAX_TSC_RETRIES) {
+      tscAttempt++;
+      addTaskLog(itemId, `Pemeriksaan kompilasi TSX (percobaan ${tscAttempt}/${MAX_TSC_RETRIES + 1})...`, "info");
+      fs.writeFileSync("src/Composition.tsx", tsxCode);
+      try {
+        execSync("npx tsc --noEmit --noUnusedLocals false --noUnusedParameters false", { stdio: "pipe" });
+        addTaskLog(itemId, "\u2705 Pemeriksaan kompilasi sukses! Kode valid.", "success");
+        tscPass = true;
+      } catch (tscErr) {
+        const errMsg = tscErr.stdout ? tscErr.stdout.toString() : tscErr.message;
+        const formattedErrors = errMsg.split('\n').filter(line => line.includes('error TS')).slice(0, 8).join('\n');
+        console.error(`TypeScript compilation attempt ${tscAttempt} failed:\n`, formattedErrors);
+
+        if (tscAttempt > MAX_TSC_RETRIES) {
+          throw new Error(`TypeScript compilation failed after ${MAX_TSC_RETRIES + 1} attempts:\n${formattedErrors || errMsg.substring(0, 300)}`);
+        }
+
+        // Send errors back to AI for auto-fix
+        addTaskLog(itemId, `\u26a0\ufe0f Kompilasi gagal, mengirim error ke AI untuk perbaikan otomatis...`, "warning");
+        const fixPrompt = `The following TypeScript code has compilation errors. Fix ALL errors and return the COMPLETE corrected TSX file (no explanation, no markdown, just the full corrected code):
+
+ERRORS:
+${formattedErrors}
+
+ORIGINAL CODE:
+${tsxCode}`;
+
+        try {
+          const fixedResponse = await runAbortable(
+            callAIWithFallback(fixPrompt, {
+              preferModel: (!item.aiModel || item.aiModel === 'auto') ? 'syntx-gemini' : item.aiModel,
+              taskId: itemId
+            }),
+            signal
+          );
+          let fixedCode = fixedResponse.trim();
+          // Extract from markdown fences if present
+          if (fixedCode.startsWith("```typescript") || fixedCode.startsWith("```tsx")) {
+            const parts = fixedCode.split("```");
+            fixedCode = parts[1].split("\n").slice(1).join("\n").split("```")[0].trim();
+          } else if (fixedCode.startsWith("```")) {
+            fixedCode = fixedCode.split("```")[1].split("```")[0].trim();
+          }
+          // Run repair again on fixed code
+          fixedCode = repairGeneratedTsx(fixedCode);
+          if (fixedCode.includes('export default') && fixedCode.length > 200) {
+            tsxCode = fixedCode;
+            addTaskLog(itemId, `\ud83d\udd27 AI memperbaiki TSX, mencoba kompilasi ulang...`, "info");
+          } else {
+            addTaskLog(itemId, `\u26a0\ufe0f Respons perbaikan AI tidak valid, mencoba lagi...`, "warning");
+          }
+        } catch (fixErr) {
+          addTaskLog(itemId, `\u26a0\ufe0f Perbaikan AI gagal: ${fixErr.message?.substring(0, 100)}`, "warning");
+        }
+      }
     }
     // --- END OF AUTOMATED TSX COMPILATION CHECK ---
 
