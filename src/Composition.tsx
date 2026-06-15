@@ -1,606 +1,504 @@
-import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 import React from 'react';
+import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 
-const GOLD_1 = '#d4af37';
-const GOLD_2 = '#f9e08c';
-const GOLD_3 = '#b8860b';
-const GOLD_4 = '#fff3c4';
-const BG_1 = '#8a7a2e';
-const BG_2 = '#6f6322';
+// 🎨 CYBER COLOR PALETTE
+const COLORS = ['#00f0ff', '#0066ff', '#bd00ff', '#ff00c8', '#00ff9d', '#3d7bff', '#00d4ff'];
 
-// Static configs to avoid Math.random() in render and ensure seamless loops
-const BLOB_CONFIGS = [
-  { size: 280, top: 150, left: 100, driftDx: 1.2, driftDy: 0.8, morphSeed: 0 },
-  { size: 180, top: 600, left: 1400, driftDx: -0.9, driftDy: 1.1, morphSeed: 1 },
-  { size: 320, top: 800, left: 300, driftDx: 0.7, driftDy: -1.2, morphSeed: 2 },
-  { size: 220, top: 100, left: 1200, driftDx: -1.1, driftDy: -0.7, morphSeed: 3 },
-  { size: 150, top: 400, left: 800, driftDx: 0.5, driftDy: 0.5, morphSeed: 4 },
-  { size: 260, top: 750, left: 950, driftDx: -0.6, driftDy: 0.9, morphSeed: 5 },
-  { size: 200, top: 300, left: 200, driftDx: 1.0, driftDy: -0.5, morphSeed: 6 },
-];
+// Deterministic seed-based PRNG to avoid Math.random() inside component render
+let seed = 98765;
+const random = () => {
+  const x = Math.sin(seed++) * 10000;
+  return x - Math.floor(x);
+};
+const rnd = (min: number, max: number) => min + random() * (max - min);
+const pick = <T,>(arr: T[]): T => arr[Math.floor(random() * arr.length)];
 
-const CONFETTI_CONFIGS = [
-  { size: 22, x: 200, y: 150, spinDirection: 1, wanderScale: 1.2 },
-  { size: 16, x: 1600, y: 250, spinDirection: -1, wanderScale: 0.8 },
-  { size: 24, x: 400, y: 850, spinDirection: 1, wanderScale: 1.5 },
-  { size: 14, x: 1300, y: 750, spinDirection: -1, wanderScale: 1.0 },
-  { size: 18, x: 850, y: 180, spinDirection: 1, wanderScale: 0.9 },
-  { size: 26, x: 1100, y: 900, spinDirection: -1, wanderScale: 1.3 },
-  { size: 15, x: 100, y: 600, spinDirection: 1, wanderScale: 0.7 },
-  { size: 20, x: 1750, y: 550, spinDirection: -1, wanderScale: 1.1 },
-  { size: 25, x: 700, y: 800, spinDirection: 1, wanderScale: 1.4 },
-  { size: 12, x: 950, y: 450, spinDirection: -1, wanderScale: 0.6 },
-  { size: 19, x: 1500, y: 850, spinDirection: 1, wanderScale: 1.0 },
-  { size: 21, x: 300, y: 400, spinDirection: -1, wanderScale: 1.1 },
-];
-
-const DOT_DELAYS = [
-  0.1, 0.4, 0.8, 1.2, 1.5, 0.3, 0.7, 1.1, 1.6, 1.9,
-  0.2, 0.5, 0.9, 1.3, 1.7, 0.6, 1.0, 1.4, 1.8, 0.1,
-  0.3, 0.7, 1.1, 1.5, 1.8, 0.2, 0.6, 1.0, 1.4, 1.7,
-  0.4, 0.8, 1.2, 1.6, 1.9, 0.5, 0.9, 1.3, 1.7, 0.1,
-  0.2, 0.6, 1.0, 1.4, 1.8, 0.3, 0.7, 1.1, 1.5, 1.9,
-];
-
-// Helper functions for deterministic animations
-const getBlobDrift = (frame: number, config: { driftDx: number; driftDy: number }) => {
-  const cycle = 1200; // Loops every 20 seconds
-  const progress = (frame % cycle) / cycle;
-
-  const tx = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 120 * config.driftDx, -90 * config.driftDx, 70 * config.driftDx, 0], { easing: Easing.inOut(Easing.quad) });
-  const ty = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -80 * config.driftDy, 60 * config.driftDy, 110 * config.driftDy, 0], { easing: Easing.inOut(Easing.quad) });
-  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 15 * config.driftDx, -10 * config.driftDx, 8 * config.driftDx, 0], { easing: Easing.inOut(Easing.quad) });
-
-  return { tx, ty, rot };
+// Smooth color interpolation helper for frame-locked breathing effects
+const interpColor = (p: number, r1: number, g1: number, b1: number, a1: number, r2: number, g2: number, b2: number, a2: number) => {
+  const r = Math.round(r1 + (r2 - r1) * p);
+  const g = Math.round(g1 + (g2 - g1) * p);
+  const b = Math.round(b1 + (b2 - b1) * p);
+  const a = a1 + (a2 - a1) * p;
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
 };
 
-const getBlobMorph = (frame: number, seed: number) => {
-  const cycle = 300; // Loops every 5 seconds
-  const progress = ((frame + seed * 45) % cycle) / cycle;
+interface StreakData {
+  width: number;
+  height: number;
+  left: number;
+  color: string;
+  opacity: number;
+  rev: boolean;
+  duration: number;
+  offset: number;
+}
 
-  const r1 = interpolate(progress, [0, 0.5, 1], [46, 60, 46], { easing: Easing.inOut(Easing.quad) });
-  const r2 = interpolate(progress, [0, 0.5, 1], [54, 40, 54], { easing: Easing.inOut(Easing.quad) });
-  const r3 = interpolate(progress, [0, 0.5, 1], [60, 45, 60], { easing: Easing.inOut(Easing.quad) });
-  const r4 = interpolate(progress, [0, 0.5, 1], [40, 55, 40], { easing: Easing.inOut(Easing.quad) });
-
-  const r5 = interpolate(progress, [0, 0.5, 1], [50, 45, 50], { easing: Easing.inOut(Easing.quad) });
-  const r6 = interpolate(progress, [0, 0.5, 1], [45, 60, 45], { easing: Easing.inOut(Easing.quad) });
-  const r7 = interpolate(progress, [0, 0.5, 1], [55, 40, 55], { easing: Easing.inOut(Easing.quad) });
-  const r8 = interpolate(progress, [0, 0.5, 1], [50, 55, 50], { easing: Easing.inOut(Easing.quad) });
-
-  return `${r1}% ${r2}% ${r3}% ${r4}% / ${r5}% ${r6}% ${r7}% ${r8}%`;
-};
-
-const getConfettiSpin = (frame: number, direction: number) => {
-  const cycle = 240; // 4 seconds
-  const progress = (frame % cycle) / cycle;
-  return progress * 360 * direction;
-};
-
-const getConfettiWander = (frame: number, config: { x: number; y: number; wanderScale: number }) => {
-  const cycle = 1200; // 20 seconds
-  const progress = (frame % cycle) / cycle;
-  const scale = config.wanderScale;
-
-  const dx = interpolate(
-    progress,
-    [0, 0.25, 0.5, 0.75, 1],
-    [0, 345.6 * scale, -268.8 * scale, 192 * scale, 0],
-    { easing: Easing.inOut(Easing.quad) }
-  );
-  const dy = interpolate(
-    progress,
-    [0, 0.25, 0.5, 0.75, 1],
-    [0, -129.6 * scale, 172.8 * scale, 86.4 * scale, 0],
-    { easing: Easing.inOut(Easing.quad) }
-  );
-
-  return { x: config.x + dx, y: config.y + dy };
-};
-
-const getMatrixDrift = (frame: number) => {
-  const cycle = 600; // 10 seconds
-  const progress = (frame % cycle) / cycle;
-  const tx = interpolate(progress, [0, 0.33, 0.66, 1], [0, 40, -30, 0], { easing: Easing.inOut(Easing.quad) });
-  const ty = interpolate(progress, [0, 0.33, 0.66, 1], [0, 30, 20, 0], { easing: Easing.inOut(Easing.quad) });
-  return { tx, ty };
-};
-
-const getDotBlink = (frame: number, delaySeconds: number) => {
-  const cycle = 150; // 2.5 seconds
-  const delayFrames = Math.round(delaySeconds * 60);
-  const progress = ((frame + delayFrames) % cycle) / cycle;
-
-  const opacity = interpolate(progress, [0, 0.5, 1], [0.25, 1, 0.25], { easing: Easing.inOut(Easing.quad) });
-  const scale = interpolate(progress, [0, 0.5, 1], [0.7, 1.2, 0.7], { easing: Easing.inOut(Easing.quad) });
-  return { opacity, scale };
-};
-
-const getDriftLeft = (frame: number) => {
-  const cycle = 600; // 10 seconds
-  const progress = (frame % cycle) / cycle;
-  const tx = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -30, 20, -15, 0], { easing: Easing.inOut(Easing.quad) });
-  const ty = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -25, 15, 30, 0], { easing: Easing.inOut(Easing.quad) });
-  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -3, 2, -2, 0], { easing: Easing.inOut(Easing.quad) });
-  return { tx, ty, rot };
-};
-
-const getDriftRight = (frame: number) => {
-  const cycle = 600; // 10 seconds
-  const progress = (frame % cycle) / cycle;
-  const tx = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 30, -20, 15, 0], { easing: Easing.inOut(Easing.quad) });
-  const ty = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 20, -25, -15, 0], { easing: Easing.inOut(Easing.quad) });
-  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 3, -2, 2, 0], { easing: Easing.inOut(Easing.quad) });
-  return { tx, ty, rot };
-};
-
-const getGoldShimmer = (frame: number, offsetFrames: number = 0) => {
-  const cycle = 240; // 4 seconds
-  const progress = ((frame + offsetFrames + cycle * 10) % cycle) / cycle;
-  const brightness = interpolate(progress, [0, 0.5, 1], [1, 1.35, 1], { easing: Easing.inOut(Easing.quad) });
-  const saturate = interpolate(progress, [0, 0.5, 1], [1.1, 1.4, 1.1], { easing: Easing.inOut(Easing.quad) });
-  return `brightness(${brightness}) saturate(${saturate})`;
-};
-
-const getShineTransform = (frame: number, offsetFrames: number = 0) => {
-  const cycle = 210; // 3.5 seconds
-  const progress = ((frame + offsetFrames + cycle * 10) % cycle) / cycle;
-  const tx = interpolate(progress, [0, 0.6, 1], [-120, -120, 120], { easing: Easing.inOut(Easing.quad) });
-  return `translateX(${tx}%)`;
-};
-
-const getDriftCenter = (frame: number) => {
-  const cycleFrames = 600;
-  const progress = (frame % cycleFrames) / cycleFrames;
-  const tx = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 40, 0, -40, 0], { easing: Easing.inOut(Easing.quad) });
-  const ty = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -30, 40, -20, 0], { easing: Easing.inOut(Easing.quad) });
-  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 90, 180, 270, 360], { easing: Easing.inOut(Easing.quad) });
-  return { tx, ty, rot };
-};
-
-const getCounterSpin = (frame: number) => {
-  const cycle = 600;
-  const progress = (frame % cycle) / cycle;
-  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -90, -180, -270, -360], { easing: Easing.inOut(Easing.quad) });
-  return rot;
-};
-
-const getSpinSlow = (frame: number) => {
-  const cycleFrames = 600;
-  const progress = (frame % cycleFrames) / cycleFrames;
-  return progress * -360;
-};
-
-const getTitleSway = (frame: number) => {
-  const cycle = 600; // 10 seconds
-  const progress = (frame % cycle) / cycle;
-  const tx = interpolate(progress, [0, 0.5, 1], [0, 25, 0], { easing: Easing.inOut(Easing.quad) });
-  const ty = interpolate(progress, [0, 0.5, 1], [0, 10, 0], { easing: Easing.inOut(Easing.quad) });
-  return { tx, ty };
-};
-
-const getGlitchTop = (frame: number) => {
-  const cycle = 120; // 2 seconds
-  const progress = (frame % cycle) / cycle;
-
-  const clipTop = interpolate(progress, [0, 0.4, 0.8, 1], [0, 40, 0, 30], { easing: Easing.linear });
-  const clipBottom = interpolate(progress, [0, 0.4, 0.8, 1], [60, 20, 70, 30], { easing: Easing.linear });
-  const tx = interpolate(progress, [0, 0.4, 0.8, 1], [0, 3, 2, 0], { easing: Easing.linear });
-  const ty = interpolate(progress, [0, 0.4, 0.8, 1], [0, 1, -1, 1], { easing: Easing.linear });
-
+// Generate static, deterministic stream of vertical lines
+const STREAKS: StreakData[] = Array.from({ length: 50 }).map(() => {
+  const thick = rnd(2, 9);
   return {
-    clipPath: `inset(${clipTop}% 0% ${clipBottom}% 0%)`,
-    transform: `translate(${tx}px, ${ty}px)`,
+    width: thick,
+    height: rnd(80, 420),
+    left: rnd(0, 100),
+    color: pick(COLORS),
+    opacity: Number(rnd(0.35, 0.9).toFixed(2)),
+    rev: random() > 0.5,
+    duration: rnd(1.5, 3.5),
+    offset: random(),
   };
-};
+});
 
-const getGlitchBot = (frame: number) => {
-  const cycle = 60; // 1 second
-  const progress = (frame % cycle) / cycle;
+interface DotlineData {
+  width: number;
+  height: number;
+  left: number;
+  color: string;
+  gap: number;
+  opacity: number;
+  rev: boolean;
+  duration: number;
+  offset: number;
+}
 
-  const clipTop = interpolate(progress, [0, 0.4, 0.8, 1], [60, 70, 45, 65], { easing: Easing.linear });
-  const clipBottom = interpolate(progress, [0, 0.4, 0.8, 1], [0, 0, 25, 5], { easing: Easing.linear });
-  const tx = interpolate(progress, [0, 0.4, 0.8, 1], [0, -3, -2, 0], { easing: Easing.linear });
-  const ty = interpolate(progress, [0, 0.4, 0.8, 1], [0, -1, 1, -1], { easing: Easing.linear });
-
+// Generate static vertical dotted lines
+const DOTLINES: DotlineData[] = Array.from({ length: 24 }).map(() => {
+  const size = rnd(2, 5);
   return {
-    clipPath: `inset(${clipTop}% 0% ${clipBottom}% 0%)`,
-    transform: `translate(${tx}px, ${ty}px)`,
+    width: size,
+    height: rnd(120, 380),
+    left: rnd(0, 100),
+    color: pick(COLORS),
+    gap: rnd(8, 18),
+    opacity: Number(rnd(0.5, 1).toFixed(2)),
+    rev: random() > 0.5,
+    duration: rnd(1.8, 3.8),
+    offset: random(),
   };
-};
+});
 
-export const GoldEndScreen: React.FC = () => {
+interface DotData {
+  size: number;
+  top: number;
+  left: number;
+  color: string;
+  opacity: number;
+  moveDuration: number;
+  twinkleDuration: number;
+  moveOffset: number;
+  twinkleOffset: number;
+}
+
+// Generate static twinkling ambient background particles
+const DOTS: DotData[] = Array.from({ length: 45 }).map(() => {
+  return {
+    size: rnd(2, 6),
+    top: rnd(0, 100),
+    left: rnd(0, 100),
+    color: pick(COLORS),
+    opacity: Number(rnd(0.4, 1).toFixed(2)),
+    moveDuration: rnd(2.5, 6),
+    twinkleDuration: rnd(1.5, 3),
+    moveOffset: random(),
+    twinkleOffset: random(),
+  };
+});
+
+const ORIGINAL_WIDTH = 1920;
+const ORIGINAL_HEIGHT = 1080;
+
+const CyberNeonFlow: React.FC = () => {
   const frame = useCurrentFrame();
-  const { width, height } = useVideoConfig();
+  const { width, height, fps } = useVideoConfig();
 
-  const ORIGINAL_WIDTH = 1920;
-  const ORIGINAL_HEIGHT = 1080;
+  // Fullscreen 16:9 aspect ratio preservation scaling
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // Compute animations for this frame
-  const matrixDrift = getMatrixDrift(frame);
-  const leftDrift = getDriftLeft(frame);
-  const rightDrift = getDriftRight(frame);
-  const circleDrift = getDriftCenter(frame);
-  const circleCounterSpin = getCounterSpin(frame);
-  const circleSpinSlow = getSpinSlow(frame);
-  const titleSway = getTitleSway(frame);
-  const glitchTop = getGlitchTop(frame);
-  const glitchBot = getGlitchBot(frame);
-
-  // Shimmer and shine calculations
-  const leftShimmer = getGoldShimmer(frame, 0);
-  const leftShine = getShineTransform(frame, 0);
-  const rightShimmer = getGoldShimmer(frame, -90); // Translate -1.5 seconds delay to frames
-  const rightShine = getShineTransform(frame, -30); // staggered shine
-  const circleShine = getShineTransform(frame, -60); // staggered circle shine
-
-  const watermarkDrift = getBlobDrift(frame, { driftDx: 0.8, driftDy: 0.6 });
-
-  // Styles defined inside for dynamic binding
-  const wrapperStyle: React.CSSProperties = {
-    width: ORIGINAL_WIDTH,
-    height: ORIGINAL_HEIGHT,
+  // 1. Ambient Background Hue shift (20s cycle matches total duration seamlessly)
+  const hue = (frame / (fps * 20)) * 360;
+  const ambientStyle: React.CSSProperties = {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-    transformOrigin: 'center center',
+    inset: 0,
+    background: `
+      radial-gradient(circle at 50% 50%, rgba(0, 102, 255, 0.28), transparent 60%),
+      radial-gradient(circle at 20% 80%, rgba(189, 0, 255, 0.18), transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(0, 240, 255, 0.18), transparent 50%)
+    `,
+    zIndex: 0,
+    filter: `hue-rotate(${hue}deg)`,
+  };
+
+  // 2. Pixel Grid moving & breathing (4s pulse cycle, 20s grid translation loops at exactly 38px size)
+  const gridPulseProgress = (frame % (fps * 4)) / (fps * 4);
+  const gridPulseOpacity = interpolate(gridPulseProgress, [0, 0.5, 1], [0.22, 0.55, 0.22]);
+  const gridScrollProgress = (frame / (fps * 20)) * 38;
+  const pixelGridStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: -50,
+    backgroundImage: `
+      linear-gradient(rgba(0, 240, 255, 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 240, 255, 0.07) 1px, transparent 1px)
+    `,
+    backgroundSize: '38px 38px',
+    opacity: gridPulseOpacity,
+    transform: `translateY(${gridScrollProgress}px)`,
+    zIndex: 1,
+  };
+
+  // 3. Scanline sweep effect (10s cycle)
+  const scanProgress = (frame % (fps * 10)) / (fps * 10);
+  const scanLeft = interpolate(scanProgress, [0, 1], [-160, 1920]);
+  const scanlineStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    height: '100%',
+    width: 160,
+    background: 'linear-gradient(to right, transparent, rgba(0, 240, 255, 0.08), rgba(189, 0, 255, 0.08), transparent)',
+    zIndex: 3,
+    pointerEvents: 'none',
+    left: scanLeft,
+  };
+
+  // 4. Glitching & pulsing neon Title (5s cycle loop)
+  const titleGlowPulseProgress = (frame % (fps * 2.5)) / (fps * 2.5);
+  const titleBrightness = interpolate(titleGlowPulseProgress, [0, 0.5, 1], [1, 1.8, 1]);
+  const titleSaturate = interpolate(titleGlowPulseProgress, [0, 0.5, 1], [1.2, 1.7, 1.2]);
+
+  const titleGlitchProgress = (frame % (fps * 5)) / (fps * 5);
+  const titleTx = interpolate(titleGlitchProgress, [0, 0.90, 0.91, 0.93, 0.95, 1.0], [0, 0, -3, 3, 0, 0]);
+  const titleSkewX = interpolate(titleGlitchProgress, [0, 0.90, 0.91, 0.93, 0.95, 1.0], [0, 0, 5, -5, 0, 0]);
+
+  let titleShadow = '0 0 12px #00f0ff, 0 0 24px #ff00c8';
+  if (titleGlitchProgress >= 0.90 && titleGlitchProgress < 0.92) {
+    titleShadow = '2px 0 #ff00c8, -2px 0 #00f0ff';
+  } else if (titleGlitchProgress >= 0.92 && titleGlitchProgress < 0.94) {
+    titleShadow = '-2px 0 #ff00c8, 2px 0 #00f0ff';
+  }
+
+  const titleStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 140,
+    width: '100%',
+    textAlign: 'center',
+    zIndex: 5,
+    color: '#fff',
+    fontSize: 44,
+    letterSpacing: 10,
+    textTransform: 'uppercase',
+    textShadow: titleShadow,
+    filter: `brightness(${titleBrightness}) saturate(${titleSaturate})`,
+    transform: `translateX(${titleTx}px) skewX(${titleSkewX}deg)`,
+    fontFamily: `'Segoe UI', Arial, sans-serif`,
+    fontWeight: 700,
+  };
+
+  // 5. Container floating motion (5s cycle loop)
+  const containerFloatProgress = (frame % (fps * 5)) / (fps * 5);
+  const containerY = interpolate(containerFloatProgress, [0, 0.5, 1], [0, -20, 0], {
+    easing: Easing.inOut(Easing.quad),
+  });
+  const containerStyle: React.CSSProperties = {
+    position: 'relative',
+    zIndex: 5,
+    width: 1200,
+    height: 450,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    transform: `translateY(${containerY}px)`,
+  };
+
+  // 6. Generic Flicker animation for Content/CTA labels
+  const labelFlickerProgress = (frame % (fps * 5)) / (fps * 5);
+  const labelOpacity = interpolate(
+    labelFlickerProgress,
+    [0, 0.92, 0.93, 0.94, 0.96, 0.97, 1.0],
+    [1, 1, 0.4, 1, 0.6, 1, 1]
+  );
+
+  const labelStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    fontSize: 24,
+    fontWeight: 700,
+    letterSpacing: 2,
+    color: '#d6faff',
+    textShadow: '0 0 10px #00f0ff, 0 0 18px #ff00c8',
+    pointerEvents: 'none',
+    opacity: labelOpacity,
+    fontFamily: `'Segoe UI', Arial, sans-serif`,
+  };
+
+  // --- Dynamic Framework animations (Left Card, Right Card, Center Circle) ---
+  const globalPulseProgress = (frame % (fps * 2.5)) / (fps * 2.5);
+  const elementBrightness = interpolate(globalPulseProgress, [0, 0.5, 1], [1, 1.8, 1]);
+  const elementSaturate = interpolate(globalPulseProgress, [0, 0.5, 1], [1.2, 1.7, 1.2]);
+
+  // A. Left Rect Frame
+  const rectLeftBorderFlowY = ((frame % (fps * 5)) / (fps * 5)) * 100;
+  const tiltLProgress = (frame % (fps * 5)) / (fps * 5);
+  const tiltLAngle = interpolate(tiltLProgress, [0, 0.5, 1], [6, -2, 6]);
+
+  const rectLeftStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 380,
+    height: 240,
+    left: 100,
+    borderRadius: 8,
+    border: '3px solid transparent',
+    background: `
+      linear-gradient(rgba(4, 8, 20, 0.85), rgba(4, 8, 20, 0.85)) padding-box,
+      linear-gradient(160deg, #00f0ff, #0066ff, #bd00ff, #00ff9d, #00f0ff) border-box
+    `,
+    backgroundSize: '100% 100%, 300% 300%',
+    backgroundPosition: `0% 0%, 50% ${rectLeftBorderFlowY}%`,
+    boxShadow: '0 0 16px #00f0ff, 0 0 35px rgba(189, 0, 255, 0.55), inset 0 0 25px rgba(0, 240, 255, 0.25)',
+    filter: `brightness(${elementBrightness}) saturate(${elementSaturate})`,
+    transform: `perspective(800px) rotateY(${tiltLAngle}deg)`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     overflow: 'hidden',
-    background: `radial-gradient(circle at 50% 40%, ${BG_1}, ${BG_2} 80%)`,
-    fontFamily: "'Arial Black', 'Segoe UI', sans-serif",
+    backdropFilter: 'blur(2px)',
   };
 
-  const leftFrameStyle: React.CSSProperties = {
-    position: 'relative',
-    zIndex: 6,
-    transform: `translate(${leftDrift.tx}px, ${leftDrift.ty}px) rotate(${leftDrift.rot}deg)`,
-    marginRight: 60,
+  // B. Right Rect Frame
+  const rectRightBorderFlowY = 100 - ((frame % (fps * 5)) / (fps * 5)) * 100;
+  const tiltRProgress = ((frame % (fps * 5)) / (fps * 5) + 0.24) % 1;
+  const tiltRAngle = interpolate(tiltRProgress, [0, 0.5, 1], [-6, 2, -6]);
+
+  const rectRightStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 380,
+    height: 240,
+    right: 100,
+    borderRadius: 8,
+    border: '3px solid transparent',
+    background: `
+      linear-gradient(rgba(4, 8, 20, 0.85), rgba(4, 8, 20, 0.85)) padding-box,
+      linear-gradient(20deg, #ff00c8, #bd00ff, #0066ff, #00ff9d, #ff00c8) border-box
+    `,
+    backgroundSize: '100% 100%, 300% 300%',
+    backgroundPosition: `0% 0%, 50% ${rectRightBorderFlowY}%`,
+    boxShadow: '0 0 16px #ff00c8, 0 0 35px rgba(0, 102, 255, 0.55), inset 0 0 25px rgba(189, 0, 255, 0.25)',
+    filter: `brightness(${elementBrightness}) saturate(${elementSaturate})`,
+    transform: `perspective(800px) rotateY(${tiltRAngle}deg)`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backdropFilter: 'blur(2px)',
   };
 
-  const rightFrameStyle: React.CSSProperties = {
-    position: 'relative',
-    zIndex: 6,
-    transform: `translate(${rightDrift.tx}px, ${rightDrift.ty}px) rotate(${rightDrift.rot}deg)`,
-    marginLeft: 60,
+  // C. Centered Circular Frame components
+  const breatheProgress = (frame % (fps * 4)) / (fps * 4);
+  const bValue = interpolate(breatheProgress, [0, 0.5, 1], [0, 1, 0]);
+
+  // Color & intensity breathing transitions inside Center CTA Frame
+  const shadowColor1 = interpColor(bValue, 189, 0, 255, 1.0, 255, 0, 200, 1.0);
+  const shadowColor2 = interpColor(bValue, 0, 240, 255, 0.5, 0, 255, 157, 0.7);
+  const shadowColor3 = interpColor(bValue, 189, 0, 255, 0.3, 255, 0, 200, 0.4);
+
+  const cShadowWidth1 = interpolate(bValue, [0, 1], [18, 30]);
+  const cShadowWidth2 = interpolate(bValue, [0, 1], [40, 70]);
+  const cShadowWidth3 = interpolate(bValue, [0, 1], [25, 35]);
+
+  const spinAngle = ((frame % (fps * 5)) / (fps * 5)) * 360;
+  const dashAngle = -((frame % (fps * 10)) / (fps * 10)) * 360;
+  const orbitAngle = ((frame % (fps * 4)) / (fps * 4)) * 360;
+
+  const circleContainerStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    zIndex: 10,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  const circleStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: '50%',
+    border: '3px solid transparent',
+    background: `
+      radial-gradient(circle, rgba(4, 10, 25, 0.9), rgba(4, 8, 20, 0.85)) padding-box,
+      conic-gradient(#ff00c8, #bd00ff, #0066ff, #00f0ff, #00ff9d, #ff00c8) border-box
+    `,
+    boxShadow: `0 0 ${cShadowWidth1}px ${shadowColor1}, 0 0 ${cShadowWidth2}px ${shadowColor2}, inset 0 0 ${cShadowWidth3}px ${shadowColor3}`,
+    filter: `brightness(${elementBrightness}) saturate(${elementSaturate})`,
+    transform: `rotate(${spinAngle}deg)`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  const orbitStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: -22,
+    left: '50%',
+    width: 10,
+    height: 10,
+    marginLeft: -5,
+    borderRadius: '50%',
+    backgroundColor: '#00ff9d',
+    boxShadow: '0 0 14px #00ff9d',
+    transformOrigin: '5px 142px',
+    transform: `rotate(${orbitAngle}deg)`,
   };
 
   return (
-    <div style={wrapperStyle}>
-      {/* ===== Background Blobs ===== */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 1 }}>
-        {BLOB_CONFIGS.map((config: any, index: number) => {
-          const drift = getBlobDrift(frame, config);
-          const morph = getBlobMorph(frame, config.morphSeed);
+    <div
+      style={{
+        backgroundColor: '#01030a',
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+      }}
+    >
+      {/* Background Layers */}
+      <div style={ambientStyle} />
+      <div style={pixelGridStyle} />
+      <div style={scanlineStyle} />
+
+      {/* Dynamic particles, streaks & dashed dotlines */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 2 }}>
+        {STREAKS.map((s, i) => {
+          const localProgress = ((frame / (fps * s.duration)) + s.offset) % 1;
+          const y = s.rev
+            ? interpolate(localProgress, [0, 1], [-450, 1350])
+            : interpolate(localProgress, [0, 1], [1350, -450]);
+
           return (
             <div
-              key={`blob-${index}`}
+              key={`streak-${i}`}
               style={{
                 position: 'absolute',
-                background: 'linear-gradient(135deg, rgba(255,243,196,0.55), rgba(184,134,11,0.25))',
-                borderRadius: morph,
-                filter: 'blur(2px)',
-                opacity: 0.6,
-                width: config.size,
-                height: config.size,
-                top: config.top,
-                left: config.left,
-                transform: `translate(${drift.tx}px, ${drift.ty}px) rotate(${drift.rot}deg)`,
+                borderRadius: 6,
+                filter: 'blur(0.6px)',
+                width: s.width,
+                height: s.height,
+                left: `${s.left}%`,
+                background: `linear-gradient(180deg, transparent, ${s.color}, transparent)`,
+                boxShadow: `0 0 ${s.width * 2}px ${s.color}`,
+                opacity: s.opacity,
+                transform: `translateY(${y}px)`,
               }}
             />
           );
         })}
-      </div>
 
-      {/* ===== Watermark Background Label ===== */}
-      <div
-        style={{
-          position: 'absolute',
-          zIndex: 3,
-          fontSize: 120,
-          fontWeight: 900,
-          color: 'rgba(255,255,255,0.07)',
-          letterSpacing: 6,
-          pointerEvents: 'none',
-          top: '35%',
-          left: '25%',
-          transform: `translate(${watermarkDrift.tx}px, ${watermarkDrift.ty}px) rotate(${watermarkDrift.rot}deg)`,
-          textTransform: 'uppercase',
-        }}
-      >
-        preview
-      </div>
+        {DOTLINES.map((d, i) => {
+          const localProgress = ((frame / (fps * d.duration)) + d.offset) % 1;
+          const y = d.rev
+            ? interpolate(localProgress, [0, 1], [-450, 1350])
+            : interpolate(localProgress, [0, 1], [1350, -450]);
 
-      {/* ===== Confetti elements ===== */}
-      {CONFETTI_CONFIGS.map((config: any, index: number) => {
-        const wander = getConfettiWander(frame, config);
-        const spin = getConfettiSpin(frame, config.spinDirection);
-        return (
-          <div
-            key={`confetti-${index}`}
-            style={{
-              position: 'absolute',
-              width: config.size,
-              height: config.size,
-              background: `linear-gradient(135deg, ${GOLD_4}, ${GOLD_1})`,
-              boxShadow: '0 0 10px rgba(255,243,196,0.6)',
-              zIndex: 4,
-              left: wander.x,
-              top: wander.y,
-              transform: `rotate(${spin}deg)`,
-            }}
-          />
-        );
-      })}
-
-      {/* ===== Dot Matrix Panel ===== */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 150,
-          left: 180,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(10, 18px)',
-          gridTemplateRows: 'repeat(5, 18px)',
-          gap: 8,
-          zIndex: 6,
-          transform: `translate(${matrixDrift.tx}px, ${matrixDrift.ty}px)`,
-        }}
-      >
-        {DOT_DELAYS.map((delay: number, index: number) => {
-          const blink = getDotBlink(frame, delay);
           return (
-            <span
-              key={`dot-${index}`}
+            <div
+              key={`dotline-${i}`}
               style={{
-                width: 8,
-                height: 8,
+                position: 'absolute',
+                width: d.width,
+                height: d.height,
+                left: `${d.left}%`,
+                backgroundImage: `radial-gradient(circle, ${d.color} 0 ${d.width / 2}px, transparent ${d.width / 2 + 0.5}px)`,
+                backgroundSize: `${d.width}px ${d.gap}px`,
+                backgroundRepeat: 'repeat-y',
+                filter: `drop-shadow(0 0 ${d.width * 2}px ${d.color})`,
+                opacity: d.opacity,
+                transform: `translateY(${y}px)`,
+              }}
+            />
+          );
+        })}
+
+        {DOTS.map((p, i) => {
+          const localMoveProgress = ((frame / (fps * p.moveDuration)) + p.moveOffset) % 1;
+          const y = interpolate(localMoveProgress, [0, 1], [1350, -450]);
+
+          const localTwinkleProgress = ((frame / (fps * p.twinkleDuration)) + p.twinkleOffset) % 1;
+          const twinkleOpacity = interpolate(localTwinkleProgress, [0, 0.5, 1], [0.3, 1, 0.3]);
+
+          return (
+            <div
+              key={`dot-${i}`}
+              style={{
+                position: 'absolute',
                 borderRadius: '50%',
-                background: GOLD_4,
-                boxShadow: `0 0 6px ${GOLD_2}`,
-                opacity: blink.opacity,
-                transform: `scale(${blink.scale})`,
+                width: p.size,
+                height: p.size,
+                left: `${p.left}%`,
+                background: p.color,
+                boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
+                opacity: p.opacity * twinkleOpacity,
+                transform: `translateY(${y}px)`,
               }}
             />
           );
         })}
       </div>
 
-      {/* ===== Head Title with RGB Glitch ===== */}
-      <h1
-        style={{
-          position: 'absolute',
-          top: 110,
-          width: '100%',
-          textAlign: 'center',
-          zIndex: 7,
-          fontSize: 64,
-          fontWeight: 900,
-          color: GOLD_4,
-          textShadow: `0 0 15px ${GOLD_1}, 0 5px 10px rgba(0,0,0,0.5)`,
-          transform: `translate(${titleSway.tx}px, ${titleSway.ty}px)`,
-        }}
-      >
-        SUBSCRIBE{' '}
-        <span
-          style={{
-            position: 'relative',
-            display: 'inline-block',
-            marginLeft: 15,
-          }}
-        >
-          FOR MORE INFO
-          {/* Glitch Overlay Top */}
-          <span
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              color: '#00eaff',
-              overflow: 'hidden',
-              clipPath: glitchTop.clipPath,
-              transform: glitchTop.transform,
-            }}
-            aria-hidden="true"
-          >
-            FOR MORE INFO
-          </span>
-          {/* Glitch Overlay Bottom */}
-          <span
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              color: '#ff00d4',
-              overflow: 'hidden',
-              clipPath: glitchBot.clipPath,
-              transform: glitchBot.transform,
-            }}
-            aria-hidden="true"
-          >
-            FOR MORE INFO
-          </span>
-        </span>
-      </h1>
+      {/* Cyber Title */}
+      <h1 style={titleStyle}>Cyber Neon Flow</h1>
 
-      {/* ===== Main Video Grid Container ===== */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '55%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: 1500,
-          height: 500,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 5,
-        }}
-      >
-        {/* Left Video Rect */}
-        <div style={leftFrameStyle}>
-          <div
-            style={{
-              width: 360,
-              height: 215,
-              borderRadius: 8,
-              padding: 10,
-              background: `linear-gradient(135deg, ${GOLD_2}, ${GOLD_3} 40%, ${GOLD_4} 60%, ${GOLD_1})`,
-              boxShadow: `0 0 25px rgba(212,175,55,0.7), 0 15px 40px rgba(0,0,0,0.35)`,
-              filter: leftShimmer,
-            }}
-          >
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                background: '#fff',
-                borderRadius: 4,
-                boxShadow: 'inset 0 0 25px rgba(0,0,0,0.15)',
-                overflow: 'hidden',
-                position: 'relative',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: 'linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.95) 50%, transparent 70%)',
-                  transform: leftShine,
-                }}
-              />
-            </div>
+      {/* Frames Interface Wrapper */}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={containerStyle}>
+          {/* Left Panel */}
+          <div style={rectLeftStyle}>
+            <span style={labelStyle}>CONTENT 01</span>
           </div>
-        </div>
 
-        {/* Center Circular Video */}
-        <div
-          style={{
-            position: 'relative',
-            width: 310,
-            height: 310,
-            borderRadius: '50%',
-            padding: 20,
-            background: `conic-gradient(${GOLD_2}, ${GOLD_3}, ${GOLD_4}, ${GOLD_1}, ${GOLD_2})`,
-            boxShadow: `0 0 35px rgba(212,175,55,0.8), 0 15px 45px rgba(0,0,0,0.4)`,
-            zIndex: 10,
-            transform: `translate(${circleDrift.tx}px, ${circleDrift.ty}px) rotate(${circleDrift.rot}deg)`,
-          }}
-        >
-          {/* Inner static counter-rotating screen */}
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              borderRadius: '50%',
-              background: '#fff',
-              boxShadow: 'inset 0 0 30px rgba(0,0,0,0.15)',
-              position: 'relative',
-              overflow: 'hidden',
-              transform: `rotate(${circleCounterSpin}deg)`,
-            }}
-          >
+          {/* Central Circular CTA Component */}
+          <div style={circleContainerStyle}>
+            {/* outer dashed spinning border */}
             <div
               style={{
                 position: 'absolute',
-                inset: 0,
-                background: 'linear-gradient(120deg, transparent 35%, rgba(255,255,255,0.95) 50%, transparent 65%)',
-                transform: circleShine,
+                inset: -18,
+                borderRadius: '50%',
+                border: '1px dashed rgba(0, 240, 255, 0.5)',
+                transform: `rotate(${dashAngle}deg)`,
               }}
             />
-          </div>
 
-          {/* Outer Rotating Dashed Ring */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: -22,
-              borderRadius: '50%',
-              border: `3px dashed rgba(255,243,196,0.6)`,
-              transform: `rotate(${circleSpinSlow}deg)`,
-              pointerEvents: 'none',
-            }}
-          />
-        </div>
-
-        {/* Right Video Rect */}
-        <div style={rightFrameStyle}>
-          <div
-            style={{
-              width: 360,
-              height: 215,
-              borderRadius: 8,
-              padding: 10,
-              background: `linear-gradient(135deg, ${GOLD_2}, ${GOLD_3} 40%, ${GOLD_4} 60%, ${GOLD_1})`,
-              boxShadow: `0 0 25px rgba(212,175,55,0.7), 0 15px 40px rgba(0,0,0,0.35)`,
-              filter: rightShimmer,
-            }}
-          >
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                background: '#fff',
-                borderRadius: 4,
-                boxShadow: 'inset 0 0 25px rgba(0,0,0,0.15)',
-                overflow: 'hidden',
-                position: 'relative',
-              }}
-            >
-              <div
+            {/* main frame */}
+            <div style={circleStyle}>
+              {/* rotating the label in reverse cancels the parent spin, keeping text legible */}
+              <span
                 style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: 'linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.95) 50%, transparent 70%)',
-                  transform: rightShine,
+                  ...labelStyle,
+                  transform: `rotate(${-spinAngle}deg)`,
+                  fontSize: 28,
                 }}
-              />
+              >
+                CTA
+              </span>
             </div>
+
+            {/* satellite orbit point */}
+            <div style={orbitStyle} />
+          </div>
+
+          {/* Right Panel */}
+          <div style={rectRightStyle}>
+            <span style={labelStyle}>CONTENT 02</span>
           </div>
         </div>
-
-        {/* Floating Labels beneath elements */}
-        <span
-          style={{
-            position: 'absolute',
-            bottom: 30,
-            left: 110,
-            fontSize: 26,
-            fontWeight: 900,
-            letterSpacing: 2,
-            color: GOLD_4,
-            textShadow: `0 0 8px ${GOLD_1}, 0 2px 4px rgba(0,0,0,0.5)`,
-            zIndex: 8,
-            whiteSpace: 'nowrap',
-            transform: `translate(${leftDrift.tx}px, ${leftDrift.ty}px) rotate(${leftDrift.rot}deg)`,
-          }}
-        >
-          WATCH NEXT
-        </span>
-
-        <span
-          style={{
-            position: 'absolute',
-            bottom: 30,
-            right: 110,
-            fontSize: 26,
-            fontWeight: 900,
-            letterSpacing: 2,
-            color: GOLD_4,
-            textShadow: `0 0 8px ${GOLD_1}, 0 2px 4px rgba(0,0,0,0.5)`,
-            zIndex: 8,
-            whiteSpace: 'nowrap',
-            transform: `translate(${rightDrift.tx}px, ${rightDrift.ty}px) rotate(${rightDrift.rot}deg)`,
-          }}
-        >
-          RECOMMENDED
-        </span>
       </div>
     </div>
   );
 };
 
-export default GoldEndScreen;
+export default CyberNeonFlow;
+// END_OF_FILE
