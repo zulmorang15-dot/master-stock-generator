@@ -1,301 +1,255 @@
-import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 import React, { useRef, useEffect } from 'react';
+import { useVideoConfig, useCurrentFrame } from 'remotion';
+import * as THREE from 'three';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const VS = `
-  attribute vec2 a_pos;
-  void main(){ gl_Position = vec4(a_pos, 0.0, 1.0); }
+const vertexShader = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
 `;
 
-const FS = `
-  precision highp float;
+const fragmentShader = `
+  uniform float uTime1;
+  uniform float uTime2;
+  uniform float uBlend;
+  uniform vec2 uResolution;
+  varying vec2 vUv;
 
-  uniform vec2  u_res;
-  uniform float u_time;
-  uniform vec2  u_mouse;
+  // ── Permutation helpers ──────────────────────────────────────────────
+  vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
+  vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+  vec3 fade(vec3 t){ return t*t*t*(t*(t*6.0-15.0)+10.0); }
 
-  // ── Hash & noise ──
-  vec2 hash2(vec2 p){
-    p = vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)));
-    return -1.0 + 2.0*fract(sin(p)*43758.5453123);
+  // ── Classic Perlin 3D ────────────────────────────────────────────────
+  float cnoise(vec3 P){
+    vec3 Pi0 = floor(P);
+    vec3 Pi1 = Pi0 + vec3(1.0);
+    Pi0 = mod(Pi0, 289.0); Pi1 = mod(Pi1, 289.0);
+    vec3 Pf0 = fract(P);
+    vec3 Pf1 = Pf0 - vec3(1.0);
+    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
+    vec4 iy = vec4(Pi0.yy, Pi1.yy);
+    vec4 iz0 = Pi0.zzzz;
+    vec4 iz1 = Pi1.zzzz;
+    vec4 ixy  = permute(permute(ix) + iy);
+    vec4 ixy0 = permute(ixy + iz0);
+    vec4 ixy1 = permute(ixy + iz1);
+    vec4 gx0 = ixy0 / 7.0;
+    vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
+    gx0 = fract(gx0);
+    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
+    vec4 sz0 = step(gz0, vec4(0.0));
+    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
+    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+    vec4 gx1 = ixy1 / 7.0;
+    vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
+    gx1 = fract(gx1);
+    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
+    vec4 sz1 = step(gz1, vec4(0.0));
+    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
+    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+    vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
+    vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
+    vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
+    vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
+    vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
+    vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
+    vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
+    vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+    vec4 norm0 = taylorInvSqrt(vec4(dot(g000,g000),dot(g010,g010),dot(g100,g100),dot(g110,g110)));
+    g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
+    vec4 norm1 = taylorInvSqrt(vec4(dot(g001,g001),dot(g011,g011),dot(g101,g101),dot(g111,g111)));
+    g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
+    float n000 = dot(g000, Pf0);
+    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
+    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
+    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
+    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
+    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
+    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
+    float n111 = dot(g111, Pf1);
+    vec3 fade_xyz = fade(Pf0);
+    vec4 n_z = mix(vec4(n000,n100,n010,n110), vec4(n001,n101,n011,n111), fade_xyz.z);
+    vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
+    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
+    return 2.2 * n_xyz;
   }
 
-  float noise(vec2 p){
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f*f*(3.0-2.0*f);
-    return mix(mix(dot(hash2(i+vec2(0,0)),f-vec2(0,0)),
-                   dot(hash2(i+vec2(1,0)),f-vec2(1,0)),u.x),
-               mix(dot(hash2(i+vec2(0,1)),f-vec2(0,1)),
-                   dot(hash2(i+vec2(1,1)),f-vec2(1,1)),u.x),u.y);
-  }
-
-  float fbm(vec2 p, int oct){
-    float v=0.0, a=0.5;
-    mat2 m = mat2(1.6,1.2,-1.2,1.6);
-    for(int i=0;i<8;i++){
-      if(i>=oct) break;
-      v += a*noise(p);
-      p = m*p;
-      a *= 0.5;
+  // ── FBM (fractal Brownian motion) ────────────────────────────────────
+  float fbm(vec3 p) {
+    float value = 0.0;
+    float amp   = 0.5;
+    float freq  = 1.0;
+    for (int i = 0; i < 6; i++) {
+      value += amp * cnoise(p * freq);
+      freq  *= 2.0;
+      amp   *= 0.5;
     }
-    return v;
+    return value;
   }
 
-  // ── Metallic color ──
-  vec3 metalColor(float t, float spec){
-    // deep ocean-blue steel palette
-    vec3 dark   = vec3(0.01, 0.04, 0.12);
-    vec3 mid    = vec3(0.02, 0.15, 0.38);
-    vec3 bright = vec3(0.18, 0.55, 0.90);
-    vec3 white  = vec3(0.75, 0.92, 1.00);
+  // ── Colour palette (cosine) ──────────────────────────────────────────
+  vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
+    return a + b * cos(6.28318 * (c * t + d));
+  }
 
-    t = clamp(t*0.5+0.5, 0.0, 1.0);
+  vec3 getSceneColor(vec2 uv, float t) {
+    float ar = uResolution.x / uResolution.y;
+    vec2 st = uv;
+    st.x *= ar;
 
-    vec3 col;
-    if(t < 0.33)      col = mix(dark,  mid,    t/0.33);
-    else if(t < 0.66) col = mix(mid,   bright, (t-0.33)/0.33);
-    else              col = mix(bright, white,  (t-0.66)/0.34);
+    // ── Domain‐warped FBM layers ─────────────────────────────────────
+    vec3 q = vec3(st, t);
+    float qx = fbm(q);
+    float qy = fbm(q + vec3(5.2, 1.3, 2.8));
+    float qz = fbm(q + vec3(2.4, 6.1, 4.0));
 
-    // specular hotspot
-    col += white * pow(spec, 6.0) * 0.9;
+    vec3 r = vec3(st, t);
+    float rx = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(1.7, 9.2, 0.5));
+    float ry = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(8.3, 2.8, 7.1));
+    float rz = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(3.1, 4.4, 5.9));
+
+    // Third warp pass for extra complexity
+    vec3 s = vec3(st, t);
+    float f = fbm(s + 3.5 * vec3(rx, ry, rz));
+
+    // ── Deep-sea colour palette: dark teal → electric blue → magenta ──
+    float idx = f * 0.5 + 0.5;
+    idx = pow(idx, 1.1);
+
+    // Primary palette: midnight ocean
+    vec3 colA = palette(
+      idx,
+      vec3(0.02, 0.03, 0.08),   // dark base
+      vec3(0.15, 0.25, 0.45),   // amplitude
+      vec3(1.0,  1.0,  1.0 ),   // frequency
+      vec3(0.00, 0.20, 0.50)    // phase
+    );
+
+    // Accent layer: electric / neon edges
+    float edge = smoothstep(0.3, 0.8, abs(f));
+    vec3 neon  = palette(
+      idx + t * 0.05,
+      vec3(0.05, 0.00, 0.12),
+      vec3(0.30, 0.20, 0.40),
+      vec3(0.80, 1.20, 0.90),
+      vec3(0.55, 0.80, 0.30)
+    );
+
+    vec3 col = mix(colA, neon, edge * 0.65);
+
+    // ── Thin glowing ridges ──────────────────────────────────────────
+    float ridge = 1.0 - abs(f);
+    ridge = pow(clamp(ridge, 0.0, 1.0), 18.0);
+    col  += ridge * vec3(0.05, 0.25, 0.55) * 1.8;
+
+    // ── Vignette ────────────────────────────────────────────────────
+    vec2 vUv2 = uv - 0.5;
+    float vign = 1.0 - dot(vUv2, vUv2) * 1.6;
+    col *= clamp(vign, 0.0, 1.0);
+
+    // ── Gamma & exposure ────────────────────────────────────────────
+    col = pow(max(col, 0.0), vec3(0.85));
+
     return col;
   }
 
-  void main(){
-    vec2 uv = (gl_FragCoord.xy - 0.5*u_res) / min(u_res.x, u_res.y);
-
-    // mouse warp
-    vec2 mouse = (u_mouse - 0.5*u_res) / min(u_res.x,u_res.y);
-    float md = length(uv - mouse);
-    float mwarp = exp(-md*md*3.0) * 0.18;
-    vec2 mdir = normalize(uv - mouse + 0.0001);
-    uv += mdir * mwarp;
-
-    float t = u_time;
-
-    // layered flow distortion
-    vec2 q;
-    q.x = fbm(uv + vec2(0.0, 0.0), 6);
-    q.y = fbm(uv + vec2(5.2, 1.3), 6);
-
-    vec2 r;
-    r.x = fbm(uv + 4.0*q + vec2(1.7+t*0.05, 9.2), 6);
-    r.y = fbm(uv + 4.0*q + vec2(8.3+t*0.03, 2.8), 6);
-
-    // slow time drift
-    vec2 s;
-    s.x = fbm(uv + 3.5*r + vec2(t*0.04, t*-0.02), 5);
-    s.y = fbm(uv + 3.5*r + vec2(t*-0.03, t*0.04+1.5), 5);
-
-    float f = fbm(uv + 3.0*s, 6);
-
-    // normal approximation for lighting
-    float eps = 0.004;
-    float fx = fbm(uv + 3.0*s + vec2(eps,0.0), 6);
-    float fy = fbm(uv + 3.0*s + vec2(0.0,eps), 6);
-    vec3 normal = normalize(vec3(f-fx, f-fy, 0.002));
-
-    // multiple light sources
-    vec3 L1 = normalize(vec3( 0.8, 0.6, 1.0));
-    vec3 L2 = normalize(vec3(-0.6, -0.3, 0.8));
-    vec3 L3 = normalize(vec3( 0.0, -0.9, 0.6));
-    float diff1 = max(dot(normal, L1), 0.0);
-    float diff2 = max(dot(normal, L2), 0.0) * 0.4;
-    float diff3 = max(dot(normal, L3), 0.0) * 0.25;
-
-    // view-dependent specular
-    vec3 V = vec3(0.0, 0.0, 1.0);
-    vec3 H1 = normalize(L1+V);
-    vec3 H2 = normalize(L2+V);
-    float spec1 = pow(max(dot(normal,H1),0.0), 32.0);
-    float spec2 = pow(max(dot(normal,H2),0.0), 18.0) * 0.5;
-
-    float lighting = diff1 + diff2 + diff3;
-    float spec     = spec1 + spec2;
-
-    // base metallic value
-    float val = f * 0.6 + lighting * 0.55 - 0.1;
-
-    vec3 col = metalColor(val, spec);
-
-    // subtle chromatic edge
-    float edge = length(vec2(f-fx, f-fy)/eps);
-    col += vec3(0.05, 0.18, 0.35) * smoothstep(0.3, 1.2, edge) * 0.25;
-
-    // vignette
-    float vign = 1.0 - 0.55*dot(uv*0.9,uv*0.9);
-    col *= vign;
-
-    gl_FragColor = vec4(clamp(col,0.0,1.0), 1.0);
+  void main() {
+    vec3 col1 = getSceneColor(vUv, uTime1 * 0.18);
+    vec3 col2 = getSceneColor(vUv, uTime2 * 0.18);
+    vec3 col = mix(col1, col2, uBlend);
+    gl_FragColor = vec4(col, 1.0);
   }
 `;
 
-const LiquidMetal: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const glRef = useRef<WebGLRenderingContext | null>(null);
-  const programRef = useRef<WebGLProgram | null>(null);
-  const uniformsRef = useRef<{
-    uRes: WebGLUniformLocation | null;
-    uTime: WebGLUniformLocation | null;
-    uMouse: WebGLUniformLocation | null;
-  }>({ uRes: null, uTime: null, uMouse: null });
-  const bufferRef = useRef<WebGLBuffer | null>(null);
-
+export const Displex: React.FC = () => {
+  const { width, height, fps, durationInFrames } = useVideoConfig();
   const frame = useCurrentFrame();
-  const { width, height } = useVideoConfig();
 
-  // Full-screen 16:9 scaling math
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
+  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const gl = (canvas.getContext('webgl') as WebGLRenderingContext | null|| canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
-    if (!gl) return;
-    glRef.current = gl;
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+      alpha: true,
+      powerPreference: "high-performance",
+    });
+    renderer.setPixelRatio(1);
+    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+    rendererRef.current = renderer;
 
-    const compile = (glCtx: WebGLRenderingContext, type: number, src: string): WebGLShader | null => {
-      const s = glCtx.createShader(type);
-      if (!s) return null;
-      glCtx.shaderSource(s, src);
-      glCtx.compileShader(s);
-      if (!glCtx.getShaderParameter(s, glCtx.COMPILE_STATUS)) {
-        console.error(glCtx.getShaderInfoLog(s));
-        return null;
-      }
-      return s;
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
+
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.z = 1;
+    cameraRef.current = camera;
+
+    const geometry = new THREE.PlaneGeometry(2, 2);
+
+    const uniforms = {
+      uTime1: { value: 0.0 },
+      uTime2: { value: 0.0 },
+      uBlend: { value: 0.0 },
+      uResolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) },
     };
 
-    const vs = compile(gl, gl.VERTEX_SHADER, VS);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, FS);
-    if (!vs || !fs) return;
+    const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms,
+    });
+    materialRef.current = material;
 
-    const prog = gl.createProgram();
-    if (!prog) return;
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error(gl.getProgramInfoLog(prog));
-      return;
-    }
-    gl.useProgram(prog);
-    programRef.current = prog;
-
-    const buf = gl.createBuffer();
-    if (!buf) return;
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(prog, 'a_pos');
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    bufferRef.current = buf;
-
-    uniformsRef.current = {
-      uRes: gl.getUniformLocation(prog, 'u_res'),
-      uTime: gl.getUniformLocation(prog, 'u_time'),
-      uMouse: gl.getUniformLocation(prog, 'u_mouse'),
-    };
-
-    gl.viewport(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
 
     return () => {
-      const currentGl = glRef.current;
-      if (currentGl) {
-        if (programRef.current) {
-          currentGl.deleteProgram(programRef.current);
-        }
-        if (bufferRef.current) {
-          currentGl.deleteBuffer(bufferRef.current);
-        }
-        currentGl.deleteShader(vs);
-        currentGl.deleteShader(fs);
-      }
+      renderer.dispose();
+      geometry.dispose();
+      material.dispose();
     };
   }, []);
 
   useEffect(() => {
-    const gl = glRef.current;
-    if (!gl) return;
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const material = materialRef.current;
 
-    const uniforms = uniformsRef.current;
+    if (renderer && scene && camera && material) {
+      const totalDurationSec = durationInFrames / fps;
+      const progress = frame / durationInFrames;
 
-    // Perfectly seamless loop helper over a 15-second duration (900 frames at 60 fps).
-    // Using a sinewave mapping allows us to reverse the timeline fluid motion symmetrically back to its start.
-    const progress = Math.sin((frame / 900) * Math.PI);
-    const elapsedTime = progress * 15.0;
+      const time1 = progress * totalDurationSec;
+      const time2 = time1 - totalDurationSec;
+      
+      // Use smooth S-curve blend for the loop crossfade to avoid any linear transition artifacts
+      const blend = Math.sin(progress * Math.PI * 0.5);
 
-    // Symmetrical, deterministic looping mouse pattern
-    const angle = (frame / 900) * 2 * Math.PI;
-    const mx = ORIGINAL_WIDTH / 2 + Math.sin(angle) * 350;
-    const my = ORIGINAL_HEIGHT / 2 + Math.sin(angle * 2) * 200;
+      material.uniforms.uTime1.value = time1;
+      material.uniforms.uTime2.value = time2;
+      material.uniforms.uBlend.value = blend;
 
-    gl.uniform2f(uniforms.uRes, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-    gl.uniform1f(uniforms.uTime, elapsedTime);
-    gl.uniform2f(uniforms.uMouse, mx, my);
-
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }, [frame]);
-
-  // Handle CSS fadeIn and fadeOut mapped directly to frame-locked interpolate
-  // Duration: 900 frames (15s at 60fps)
-  // Title animations:
-  let titleOpacity = 0;
-  let titleTranslateY = 8;
-  if (frame < 120) {
-    titleOpacity = interpolate(frame, [0, 120], [0, 1], {
-      easing: Easing.out(Easing.quad),
-      extrapolateRight: 'clamp',
-    });
-    titleTranslateY = interpolate(frame, [0, 120], [8, 0], {
-      easing: Easing.out(Easing.quad),
-      extrapolateRight: 'clamp',
-    });
-  } else if (frame < 780) {
-    titleOpacity = 1;
-    titleTranslateY = 0;
-  } else {
-    titleOpacity = interpolate(frame, [780, 900], [1, 0], {
-      easing: Easing.out(Easing.quad),
-      extrapolateLeft: 'clamp',
-    });
-    titleTranslateY = interpolate(frame, [780, 900], [0, -8], {
-      easing: Easing.out(Easing.quad),
-      extrapolateLeft: 'clamp',
-    });
-  }
-
-  // Subtitle animations:
-  let subtitleOpacity = 0;
-  let subtitleTranslateY = 8;
-  if (frame < 15) {
-    subtitleOpacity = 0;
-    subtitleTranslateY = 8;
-  } else if (frame < 165) {
-    subtitleOpacity = interpolate(frame, [15, 165], [0, 1], {
-      easing: Easing.out(Easing.quad),
-      extrapolateRight: 'clamp',
-    });
-    subtitleTranslateY = interpolate(frame, [15, 165], [8, 0], {
-      easing: Easing.out(Easing.quad),
-      extrapolateRight: 'clamp',
-    });
-  } else if (frame < 765) {
-    subtitleOpacity = 1;
-    subtitleTranslateY = 0;
-  } else {
-    subtitleOpacity = interpolate(frame, [765, 885], [1, 0], {
-      easing: Easing.out(Easing.quad),
-      extrapolateLeft: 'clamp',
-    });
-    subtitleTranslateY = interpolate(frame, [765, 885], [0, -8], {
-      easing: Easing.out(Easing.quad),
-      extrapolateLeft: 'clamp',
-    });
-  }
+      renderer.render(scene, camera);
+    }
+  }, [frame, fps, durationInFrames]);
 
   const containerStyle: React.CSSProperties = {
     width: ORIGINAL_WIDTH,
@@ -306,64 +260,21 @@ const LiquidMetal: React.FC = () => {
     transform: `translate(-50%, -50%) scale(${scaleFactor})`,
     transformOrigin: 'center center',
     overflow: 'hidden',
-    backgroundColor: '#000',
+    backgroundColor: '#000000',
   };
 
-  const overlayStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    pointerEvents: 'none',
-    userSelect: 'none',
-  };
-
-  const titleStyle: React.CSSProperties = {
-    fontSize: '110px',
-    fontWeight: 900,
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase',
-    color: '#fff',
-    textShadow: `
-      0 0 40px rgba(100,200,255,0.6),
-      0 0 80px rgba(60,140,220,0.3),
-      0 2px 4px rgba(0,0,0,0.8)
-    `,
-    transform: `translateY(${titleTranslateY}px)`,
-    opacity: titleOpacity,
-    fontFamily: "'Arial Black', Arial, sans-serif",
-  };
-
-  const subtitleStyle: React.CSSProperties = {
-    marginTop: '20px',
-    fontSize: '24px',
-    fontWeight: 400,
-    letterSpacing: '0.45em',
-    textTransform: 'uppercase',
-    color: 'rgba(180,230,255,0.75)',
-    textShadow: '0 0 20px rgba(100,200,255,0.5)',
-    transform: `translateY(${subtitleTranslateY}px)`,
-    opacity: subtitleOpacity,
-    fontFamily: "'Arial Black', Arial, sans-serif",
+  const canvasStyle: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    display: 'block',
   };
 
   return (
     <div style={containerStyle}>
-      <canvas
-        ref={canvasRef}
-        width={ORIGINAL_WIDTH}
-        height={ORIGINAL_HEIGHT}
-        style={{ display: 'block', width: '100%', height: '100%' }}
-      />
-      <div style={overlayStyle}>
-        <div style={titleStyle}>Liquid Metal</div>
-        <div style={subtitleStyle}>WebGL Background</div>
-      </div>
+      <canvas ref={canvasRef} style={canvasStyle} />
     </div>
   );
 };
 
-export default LiquidMetal;
+export default Displex;
 // END_OF_FILE
