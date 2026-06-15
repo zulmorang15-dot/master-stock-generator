@@ -1,323 +1,606 @@
-import React, { useRef, useEffect, useMemo } from 'react';
-import { useVideoConfig, useCurrentFrame } from 'remotion';
+import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import React from 'react';
 
-const ORIGINAL_WIDTH = 1920;
-const ORIGINAL_HEIGHT = 1080;
+const GOLD_1 = '#d4af37';
+const GOLD_2 = '#f9e08c';
+const GOLD_3 = '#b8860b';
+const GOLD_4 = '#fff3c4';
+const BG_1 = '#8a7a2e';
+const BG_2 = '#6f6322';
 
-const COLORS = [
-    { r: 255, g: 215, b: 0 },   // Luminous Gold
-    { r: 75, g: 0, b: 130 },    // Deep Amethyst Purple
-    { r: 255, g: 165, b: 0 },   // Amber Core Highlight
-    { r: 180, g: 100, b: 240 }  // Violet Highlight
+// Static configs to avoid Math.random() in render and ensure seamless loops
+const BLOB_CONFIGS = [
+  { size: 280, top: 150, left: 100, driftDx: 1.2, driftDy: 0.8, morphSeed: 0 },
+  { size: 180, top: 600, left: 1400, driftDx: -0.9, driftDy: 1.1, morphSeed: 1 },
+  { size: 320, top: 800, left: 300, driftDx: 0.7, driftDy: -1.2, morphSeed: 2 },
+  { size: 220, top: 100, left: 1200, driftDx: -1.1, driftDy: -0.7, morphSeed: 3 },
+  { size: 150, top: 400, left: 800, driftDx: 0.5, driftDy: 0.5, morphSeed: 4 },
+  { size: 260, top: 750, left: 950, driftDx: -0.6, driftDy: 0.9, morphSeed: 5 },
+  { size: 200, top: 300, left: 200, driftDx: 1.0, driftDy: -0.5, morphSeed: 6 },
 ];
 
-interface Fragment {
-    offset: number;
-    h: number;
-    alpha: number;
-    isHead: boolean;
-    bits: boolean[];
-    hexCount: number;
-}
+const CONFETTI_CONFIGS = [
+  { size: 22, x: 200, y: 150, spinDirection: 1, wanderScale: 1.2 },
+  { size: 16, x: 1600, y: 250, spinDirection: -1, wanderScale: 0.8 },
+  { size: 24, x: 400, y: 850, spinDirection: 1, wanderScale: 1.5 },
+  { size: 14, x: 1300, y: 750, spinDirection: -1, wanderScale: 1.0 },
+  { size: 18, x: 850, y: 180, spinDirection: 1, wanderScale: 0.9 },
+  { size: 26, x: 1100, y: 900, spinDirection: -1, wanderScale: 1.3 },
+  { size: 15, x: 100, y: 600, spinDirection: 1, wanderScale: 0.7 },
+  { size: 20, x: 1750, y: 550, spinDirection: -1, wanderScale: 1.1 },
+  { size: 25, x: 700, y: 800, spinDirection: 1, wanderScale: 1.4 },
+  { size: 12, x: 950, y: 450, spinDirection: -1, wanderScale: 0.6 },
+  { size: 19, x: 1500, y: 850, spinDirection: 1, wanderScale: 1.0 },
+  { size: 21, x: 300, y: 400, spinDirection: -1, wanderScale: 1.1 },
+];
 
-interface StreamData {
-    x: number;
-    width: number;
-    cycles: number;
-    maxAlpha: number;
-    glow: number;
-    baseY: number;
-    color: { r: number, g: number, b: number };
-    type: number;
-    fragments: Fragment[];
-}
+const DOT_DELAYS = [
+  0.1, 0.4, 0.8, 1.2, 1.5, 0.3, 0.7, 1.1, 1.6, 1.9,
+  0.2, 0.5, 0.9, 1.3, 1.7, 0.6, 1.0, 1.4, 1.8, 0.1,
+  0.3, 0.7, 1.1, 1.5, 1.8, 0.2, 0.6, 1.0, 1.4, 1.7,
+  0.4, 0.8, 1.2, 1.6, 1.9, 0.5, 0.9, 1.3, 1.7, 0.1,
+  0.2, 0.6, 1.0, 1.4, 1.8, 0.3, 0.7, 1.1, 1.5, 1.9,
+];
 
-const drawHex = (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number) => {
-    ctx.beginPath();
-    ctx.moveTo(x + width * 0.5, y);
-    ctx.lineTo(x + width, y + height * 0.25);
-    ctx.lineTo(x + width, y + height * 0.75);
-    ctx.lineTo(x + width * 0.5, y + height);
-    ctx.lineTo(x, y + height * 0.75);
-    ctx.lineTo(x, y + height * 0.25);
-    ctx.closePath();
-    ctx.fill();
+// Helper functions for deterministic animations
+const getBlobDrift = (frame: number, config: { driftDx: number; driftDy: number }) => {
+  const cycle = 1200; // Loops every 20 seconds
+  const progress = (frame % cycle) / cycle;
+
+  const tx = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 120 * config.driftDx, -90 * config.driftDx, 70 * config.driftDx, 0], { easing: Easing.inOut(Easing.quad) });
+  const ty = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -80 * config.driftDy, 60 * config.driftDy, 110 * config.driftDy, 0], { easing: Easing.inOut(Easing.quad) });
+  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 15 * config.driftDx, -10 * config.driftDx, 8 * config.driftDx, 0], { easing: Easing.inOut(Easing.quad) });
+
+  return { tx, ty, rot };
 };
 
-const drawGlowRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, g: number, b: number, alpha: number) => {
-    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.15})`;
-    ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
-    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.35})`;
-    ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+const getBlobMorph = (frame: number, seed: number) => {
+  const cycle = 300; // Loops every 5 seconds
+  const progress = ((frame + seed * 45) % cycle) / cycle;
+
+  const r1 = interpolate(progress, [0, 0.5, 1], [46, 60, 46], { easing: Easing.inOut(Easing.quad) });
+  const r2 = interpolate(progress, [0, 0.5, 1], [54, 40, 54], { easing: Easing.inOut(Easing.quad) });
+  const r3 = interpolate(progress, [0, 0.5, 1], [60, 45, 60], { easing: Easing.inOut(Easing.quad) });
+  const r4 = interpolate(progress, [0, 0.5, 1], [40, 55, 40], { easing: Easing.inOut(Easing.quad) });
+
+  const r5 = interpolate(progress, [0, 0.5, 1], [50, 45, 50], { easing: Easing.inOut(Easing.quad) });
+  const r6 = interpolate(progress, [0, 0.5, 1], [45, 60, 45], { easing: Easing.inOut(Easing.quad) });
+  const r7 = interpolate(progress, [0, 0.5, 1], [55, 40, 55], { easing: Easing.inOut(Easing.quad) });
+  const r8 = interpolate(progress, [0, 0.5, 1], [50, 55, 50], { easing: Easing.inOut(Easing.quad) });
+
+  return `${r1}% ${r2}% ${r3}% ${r4}% / ${r5}% ${r6}% ${r7}% ${r8}%`;
 };
 
-const renderStreamAt = (ctx: CanvasRenderingContext2D, s: StreamData, x: number, y: number) => {
-    ctx.save();
-    ctx.translate(x, y);
-
-    s.fragments.forEach((f: Fragment) => {
-        const yDraw = -f.offset;
-        const r = s.color.r;
-        const g = s.color.g;
-        const b = s.color.b;
-
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${f.alpha})`;
-
-        if (s.type === 0) {
-            if (s.glow > 0 && f.isHead) {
-                drawGlowRect(ctx, 0, yDraw - f.h, s.width, f.h, r, g, b, f.alpha);
-            }
-            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${f.alpha})`;
-            ctx.fillRect(0, yDraw - f.h, s.width, f.h);
-        } 
-        else if (s.type === 1) {
-            const dashHeight = 5;
-            const space = 7;
-            for (let dy = 0; dy < f.h; dy += dashHeight + space) {
-                const actualH = Math.min(dashHeight, f.h - dy);
-                const drawY = yDraw - dy - actualH;
-                if (s.glow > 0 && f.isHead) {
-                    drawGlowRect(ctx, 0, drawY, s.width, actualH, r, g, b, f.alpha);
-                }
-                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${f.alpha})`;
-                ctx.fillRect(0, drawY, s.width, actualH);
-            }
-        } 
-        else if (s.type === 2) {
-            const laneW = (s.width / 2) - 3;
-            if (laneW > 3) {
-                const cellH = laneW;
-                const space = 4;
-                let bitIndex = 0;
-                for (let dy = 0; dy < f.h; dy += cellH + space) {
-                    const actualH = Math.min(cellH, f.h - dy);
-                    const drawY = yDraw - dy - actualH;
-                    
-                    if (f.bits[bitIndex % f.bits.length]) {
-                        if (s.glow > 0 && f.isHead) {
-                            drawGlowRect(ctx, 0, drawY, laneW, actualH, r, g, b, f.alpha);
-                        }
-                        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${f.alpha})`;
-                        ctx.fillRect(0, drawY, laneW, actualH);
-                    }
-                    
-                    if (f.bits[(bitIndex + 1) % f.bits.length]) {
-                        if (s.glow > 0 && f.isHead) {
-                            drawGlowRect(ctx, laneW + 6, drawY, laneW, actualH, r, g, b, f.alpha);
-                        }
-                        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${f.alpha})`;
-                        ctx.fillRect(laneW + 6, drawY, laneW, actualH);
-                    }
-                    bitIndex += 2;
-                }
-            } else {
-                if (s.glow > 0 && f.isHead) {
-                    drawGlowRect(ctx, 0, yDraw - f.h, s.width, f.h, r, g, b, f.alpha);
-                }
-                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${f.alpha})`;
-                ctx.fillRect(0, yDraw - f.h, s.width, f.h);
-            }
-        } 
-        else if (s.type === 3) {
-            const hexW = s.width;
-            const hexH = hexW * 0.866;
-            const space = hexH * 0.2;
-            let yOffset = 0;
-            for (let i = 0; i < f.hexCount; i++) {
-                const drawY = yDraw - yOffset - hexH;
-                if (drawY + hexH > yDraw - f.h) {
-                    if (s.glow > 0 && f.isHead) {
-                        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${f.alpha * 0.15})`;
-                        drawHex(ctx, -2, drawY - 2, hexW + 4, hexH + 4);
-                    }
-                    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${f.alpha})`;
-                    drawHex(ctx, 0, drawY, hexW, hexH);
-                }
-                yOffset += hexH + space;
-            }
-        }
-    });
-
-    ctx.restore();
+const getConfettiSpin = (frame: number, direction: number) => {
+  const cycle = 240; // 4 seconds
+  const progress = (frame % cycle) / cycle;
+  return progress * 360 * direction;
 };
 
-const drawStream = (ctx: CanvasRenderingContext2D, s: StreamData, t: number, H: number) => {
-    const yNorm = (s.baseY + t * s.cycles) % 1.0;
-    const yBase = yNorm * H;
+const getConfettiWander = (frame: number, config: { x: number; y: number; wanderScale: number }) => {
+  const cycle = 1200; // 20 seconds
+  const progress = (frame % cycle) / cycle;
+  const scale = config.wanderScale;
 
-    renderStreamAt(ctx, s, s.x, yBase - H);
-    renderStreamAt(ctx, s, s.x, yBase);
-    renderStreamAt(ctx, s, s.x, yBase + H);
-    renderStreamAt(ctx, s, s.x, yBase + (H * 2));
+  const dx = interpolate(
+    progress,
+    [0, 0.25, 0.5, 0.75, 1],
+    [0, 345.6 * scale, -268.8 * scale, 192 * scale, 0],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+  const dy = interpolate(
+    progress,
+    [0, 0.25, 0.5, 0.75, 1],
+    [0, -129.6 * scale, 172.8 * scale, 86.4 * scale, 0],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+
+  return { x: config.x + dx, y: config.y + dy };
 };
 
-export const PremiumCyberDataStream: React.FC = () => {
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const { width, height, fps } = useVideoConfig();
-    const frame = useCurrentFrame();
+const getMatrixDrift = (frame: number) => {
+  const cycle = 600; // 10 seconds
+  const progress = (frame % cycle) / cycle;
+  const tx = interpolate(progress, [0, 0.33, 0.66, 1], [0, 40, -30, 0], { easing: Easing.inOut(Easing.quad) });
+  const ty = interpolate(progress, [0, 0.33, 0.66, 1], [0, 30, 20, 0], { easing: Easing.inOut(Easing.quad) });
+  return { tx, ty };
+};
 
-    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+const getDotBlink = (frame: number, delaySeconds: number) => {
+  const cycle = 150; // 2.5 seconds
+  const delayFrames = Math.round(delaySeconds * 60);
+  const progress = ((frame + delayFrames) % cycle) / cycle;
 
-    const columns = 90; 
-    const colWidth = Math.floor(ORIGINAL_WIDTH / columns);
+  const opacity = interpolate(progress, [0, 0.5, 1], [0.25, 1, 0.25], { easing: Easing.inOut(Easing.quad) });
+  const scale = interpolate(progress, [0, 0.5, 1], [0.7, 1.2, 0.7], { easing: Easing.inOut(Easing.quad) });
+  return { opacity, scale };
+};
 
-    const streams = useMemo<StreamData[]>(() => {
-        const list: StreamData[] = [];
-        let seed = 98765;
-        const random = () => {
-            const x = Math.sin(seed++) * 10000;
-            return x - Math.floor(x);
-        };
+const getDriftLeft = (frame: number) => {
+  const cycle = 600; // 10 seconds
+  const progress = (frame % cycle) / cycle;
+  const tx = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -30, 20, -15, 0], { easing: Easing.inOut(Easing.quad) });
+  const ty = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -25, 15, 30, 0], { easing: Easing.inOut(Easing.quad) });
+  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -3, 2, -2, 0], { easing: Easing.inOut(Easing.quad) });
+  return { tx, ty, rot };
+};
 
-        for (let c = 0; c < columns; c++) {
-            const layers = [0];
-            if (random() > 0.55) layers.push(1);
-            if (random() > 0.75) layers.push(2);
+const getDriftRight = (frame: number) => {
+  const cycle = 600; // 10 seconds
+  const progress = (frame % cycle) / cycle;
+  const tx = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 30, -20, 15, 0], { easing: Easing.inOut(Easing.quad) });
+  const ty = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 20, -25, -15, 0], { easing: Easing.inOut(Easing.quad) });
+  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 3, -2, 2, 0], { easing: Easing.inOut(Easing.quad) });
+  return { tx, ty, rot };
+};
 
-            layers.forEach((depthLayer: number) => {
-                let streamWidth = 0;
-                let cycles = 1;
-                let maxAlpha = 0.2;
-                let glow = 0;
+const getGoldShimmer = (frame: number, offsetFrames: number = 0) => {
+  const cycle = 240; // 4 seconds
+  const progress = ((frame + offsetFrames + cycle * 10) % cycle) / cycle;
+  const brightness = interpolate(progress, [0, 0.5, 1], [1, 1.35, 1], { easing: Easing.inOut(Easing.quad) });
+  const saturate = interpolate(progress, [0, 0.5, 1], [1.1, 1.4, 1.1], { easing: Easing.inOut(Easing.quad) });
+  return `brightness(${brightness}) saturate(${saturate})`;
+};
 
-                if (depthLayer === 0) {
-                    streamWidth = colWidth * 0.25;
-                    cycles = 1; 
-                    maxAlpha = 0.15;
-                    glow = 0;
-                } else if (depthLayer === 1) {
-                    streamWidth = colWidth * 0.5;
-                    cycles = 2;
-                    maxAlpha = 0.45;
-                    glow = 4;
-                } else {
-                    streamWidth = colWidth * 0.8;
-                    cycles = Math.floor(random() * 2) + 3; 
-                    maxAlpha = 0.95;
-                    glow = 12;
-                }
+const getShineTransform = (frame: number, offsetFrames: number = 0) => {
+  const cycle = 210; // 3.5 seconds
+  const progress = ((frame + offsetFrames + cycle * 10) % cycle) / cycle;
+  const tx = interpolate(progress, [0, 0.6, 1], [-120, -120, 120], { easing: Easing.inOut(Easing.quad) });
+  return `translateX(${tx}%)`;
+};
 
-                const baseY = random();
-                const colorIndex = Math.floor(random() * COLORS.length);
-                const color = COLORS[colorIndex];
-                let x = c * colWidth + (colWidth - streamWidth) / 2;
+const getDriftCenter = (frame: number) => {
+  const cycleFrames = 600;
+  const progress = (frame % cycleFrames) / cycleFrames;
+  const tx = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 40, 0, -40, 0], { easing: Easing.inOut(Easing.quad) });
+  const ty = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -30, 40, -20, 0], { easing: Easing.inOut(Easing.quad) });
+  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, 90, 180, 270, 360], { easing: Easing.inOut(Easing.quad) });
+  return { tx, ty, rot };
+};
 
-                const type = Math.floor(random() * 4); 
-                const fragments: Fragment[] = [];
-                const numFrags = Math.floor(random() * 14) + 8; 
-                let currentOffset = 0;
+const getCounterSpin = (frame: number) => {
+  const cycle = 600;
+  const progress = (frame % cycle) / cycle;
+  const rot = interpolate(progress, [0, 0.25, 0.5, 0.75, 1], [0, -90, -180, -270, -360], { easing: Easing.inOut(Easing.quad) });
+  return rot;
+};
 
-                for (let i = 0; i < numFrags; i++) {
-                    const h = random() * 120 + 30; 
-                    const gap = random() * 25 + 10;
-                    const alpha = maxAlpha * Math.pow(1 - (i / numFrags), 1.8);
+const getSpinSlow = (frame: number) => {
+  const cycleFrames = 600;
+  const progress = (frame % cycleFrames) / cycleFrames;
+  return progress * -360;
+};
 
-                    const bits: boolean[] = [];
-                    if (type === 2) {
-                        for (let b = 0; b < 20; b++) {
-                            bits.push(random() > 0.35);
-                        }
-                    }
+const getTitleSway = (frame: number) => {
+  const cycle = 600; // 10 seconds
+  const progress = (frame % cycle) / cycle;
+  const tx = interpolate(progress, [0, 0.5, 1], [0, 25, 0], { easing: Easing.inOut(Easing.quad) });
+  const ty = interpolate(progress, [0, 0.5, 1], [0, 10, 0], { easing: Easing.inOut(Easing.quad) });
+  return { tx, ty };
+};
 
-                    let hexCount = 0;
-                    if (type === 3) {
-                        hexCount = Math.floor(h / (streamWidth * 0.9)) + 1;
-                    }
+const getGlitchTop = (frame: number) => {
+  const cycle = 120; // 2 seconds
+  const progress = (frame % cycle) / cycle;
 
-                    fragments.push({
-                        offset: currentOffset,
-                        h,
-                        alpha,
-                        isHead: i === 0,
-                        bits,
-                        hexCount,
-                    });
+  const clipTop = interpolate(progress, [0, 0.4, 0.8, 1], [0, 40, 0, 30], { easing: Easing.linear });
+  const clipBottom = interpolate(progress, [0, 0.4, 0.8, 1], [60, 20, 70, 30], { easing: Easing.linear });
+  const tx = interpolate(progress, [0, 0.4, 0.8, 1], [0, 3, 2, 0], { easing: Easing.linear });
+  const ty = interpolate(progress, [0, 0.4, 0.8, 1], [0, 1, -1, 1], { easing: Easing.linear });
 
-                    currentOffset += h + gap;
-                }
+  return {
+    clipPath: `inset(${clipTop}% 0% ${clipBottom}% 0%)`,
+    transform: `translate(${tx}px, ${ty}px)`,
+  };
+};
 
-                list.push({
-                    x,
-                    width: streamWidth,
-                    cycles,
-                    maxAlpha,
-                    glow,
-                    baseY,
-                    color,
-                    type,
-                    fragments,
-                });
-            });
-        }
-        return list;
-    }, [colWidth, columns]);
+const getGlitchBot = (frame: number) => {
+  const cycle = 60; // 1 second
+  const progress = (frame % cycle) / cycle;
 
-    useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | null;
-        if (!ctx) return;
+  const clipTop = interpolate(progress, [0, 0.4, 0.8, 1], [60, 70, 45, 65], { easing: Easing.linear });
+  const clipBottom = interpolate(progress, [0, 0.4, 0.8, 1], [0, 0, 25, 5], { easing: Easing.linear });
+  const tx = interpolate(progress, [0, 0.4, 0.8, 1], [0, -3, -2, 0], { easing: Easing.linear });
+  const ty = interpolate(progress, [0, 0.4, 0.8, 1], [0, -1, 1, -1], { easing: Easing.linear });
 
-        const cycleDuration = 10; 
-        const totalFramesPerCycle = fps * cycleDuration;
-        const currentCycleFrame = frame % totalFramesPerCycle;
-        const t = currentCycleFrame / totalFramesPerCycle; 
+  return {
+    clipPath: `inset(${clipTop}% 0% ${clipBottom}% 0%)`,
+    transform: `translate(${tx}px, ${ty}px)`,
+  };
+};
 
-        ctx.globalCompositeOperation = 'source-over';
+export const GoldEndScreen: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { width, height } = useVideoConfig();
 
-        const bgGrad = ctx.createRadialGradient(
-            ORIGINAL_WIDTH / 2, 
-            ORIGINAL_HEIGHT / 2, 
-            0, 
-            ORIGINAL_WIDTH / 2, 
-            ORIGINAL_HEIGHT / 2, 
-            ORIGINAL_WIDTH
+  const ORIGINAL_WIDTH = 1920;
+  const ORIGINAL_HEIGHT = 1080;
+  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+
+  // Compute animations for this frame
+  const matrixDrift = getMatrixDrift(frame);
+  const leftDrift = getDriftLeft(frame);
+  const rightDrift = getDriftRight(frame);
+  const circleDrift = getDriftCenter(frame);
+  const circleCounterSpin = getCounterSpin(frame);
+  const circleSpinSlow = getSpinSlow(frame);
+  const titleSway = getTitleSway(frame);
+  const glitchTop = getGlitchTop(frame);
+  const glitchBot = getGlitchBot(frame);
+
+  // Shimmer and shine calculations
+  const leftShimmer = getGoldShimmer(frame, 0);
+  const leftShine = getShineTransform(frame, 0);
+  const rightShimmer = getGoldShimmer(frame, -90); // Translate -1.5 seconds delay to frames
+  const rightShine = getShineTransform(frame, -30); // staggered shine
+  const circleShine = getShineTransform(frame, -60); // staggered circle shine
+
+  const watermarkDrift = getBlobDrift(frame, { driftDx: 0.8, driftDy: 0.6 });
+
+  // Styles defined inside for dynamic binding
+  const wrapperStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    background: `radial-gradient(circle at 50% 40%, ${BG_1}, ${BG_2} 80%)`,
+    fontFamily: "'Arial Black', 'Segoe UI', sans-serif",
+  };
+
+  const leftFrameStyle: React.CSSProperties = {
+    position: 'relative',
+    zIndex: 6,
+    transform: `translate(${leftDrift.tx}px, ${leftDrift.ty}px) rotate(${leftDrift.rot}deg)`,
+    marginRight: 60,
+  };
+
+  const rightFrameStyle: React.CSSProperties = {
+    position: 'relative',
+    zIndex: 6,
+    transform: `translate(${rightDrift.tx}px, ${rightDrift.ty}px) rotate(${rightDrift.rot}deg)`,
+    marginLeft: 60,
+  };
+
+  return (
+    <div style={wrapperStyle}>
+      {/* ===== Background Blobs ===== */}
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 1 }}>
+        {BLOB_CONFIGS.map((config: any, index: number) => {
+          const drift = getBlobDrift(frame, config);
+          const morph = getBlobMorph(frame, config.morphSeed);
+          return (
+            <div
+              key={`blob-${index}`}
+              style={{
+                position: 'absolute',
+                background: 'linear-gradient(135deg, rgba(255,243,196,0.55), rgba(184,134,11,0.25))',
+                borderRadius: morph,
+                filter: 'blur(2px)',
+                opacity: 0.6,
+                width: config.size,
+                height: config.size,
+                top: config.top,
+                left: config.left,
+                transform: `translate(${drift.tx}px, ${drift.ty}px) rotate(${drift.rot}deg)`,
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* ===== Watermark Background Label ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          zIndex: 3,
+          fontSize: 120,
+          fontWeight: 900,
+          color: 'rgba(255,255,255,0.07)',
+          letterSpacing: 6,
+          pointerEvents: 'none',
+          top: '35%',
+          left: '25%',
+          transform: `translate(${watermarkDrift.tx}px, ${watermarkDrift.ty}px) rotate(${watermarkDrift.rot}deg)`,
+          textTransform: 'uppercase',
+        }}
+      >
+        preview
+      </div>
+
+      {/* ===== Confetti elements ===== */}
+      {CONFETTI_CONFIGS.map((config: any, index: number) => {
+        const wander = getConfettiWander(frame, config);
+        const spin = getConfettiSpin(frame, config.spinDirection);
+        return (
+          <div
+            key={`confetti-${index}`}
+            style={{
+              position: 'absolute',
+              width: config.size,
+              height: config.size,
+              background: `linear-gradient(135deg, ${GOLD_4}, ${GOLD_1})`,
+              boxShadow: '0 0 10px rgba(255,243,196,0.6)',
+              zIndex: 4,
+              left: wander.x,
+              top: wander.y,
+              transform: `rotate(${spin}deg)`,
+            }}
+          />
         );
-        bgGrad.addColorStop(0, '#1A102A'); 
-        bgGrad.addColorStop(1, '#050308'); 
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+      })}
 
-        ctx.fillStyle = "rgba(50, 20, 80, 0.08)";
-        for (let dx = 0; dx < ORIGINAL_WIDTH; dx += 64) {
-            for (let dy = 0; dy < ORIGINAL_HEIGHT; dy += 64) {
-                ctx.fillRect(dx, dy, 2, 2);
-            }
-        }
+      {/* ===== Dot Matrix Panel ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 150,
+          left: 180,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(10, 18px)',
+          gridTemplateRows: 'repeat(5, 18px)',
+          gap: 8,
+          zIndex: 6,
+          transform: `translate(${matrixDrift.tx}px, ${matrixDrift.ty}px)`,
+        }}
+      >
+        {DOT_DELAYS.map((delay: number, index: number) => {
+          const blink = getDotBlink(frame, delay);
+          return (
+            <span
+              key={`dot-${index}`}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: GOLD_4,
+                boxShadow: `0 0 6px ${GOLD_2}`,
+                opacity: blink.opacity,
+                transform: `scale(${blink.scale})`,
+              }}
+            />
+          );
+        })}
+      </div>
 
-        ctx.globalCompositeOperation = 'screen';
+      {/* ===== Head Title with RGB Glitch ===== */}
+      <h1
+        style={{
+          position: 'absolute',
+          top: 110,
+          width: '100%',
+          textAlign: 'center',
+          zIndex: 7,
+          fontSize: 64,
+          fontWeight: 900,
+          color: GOLD_4,
+          textShadow: `0 0 15px ${GOLD_1}, 0 5px 10px rgba(0,0,0,0.5)`,
+          transform: `translate(${titleSway.tx}px, ${titleSway.ty}px)`,
+        }}
+      >
+        SUBSCRIBE{' '}
+        <span
+          style={{
+            position: 'relative',
+            display: 'inline-block',
+            marginLeft: 15,
+          }}
+        >
+          FOR MORE INFO
+          {/* Glitch Overlay Top */}
+          <span
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              color: '#00eaff',
+              overflow: 'hidden',
+              clipPath: glitchTop.clipPath,
+              transform: glitchTop.transform,
+            }}
+            aria-hidden="true"
+          >
+            FOR MORE INFO
+          </span>
+          {/* Glitch Overlay Bottom */}
+          <span
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              color: '#ff00d4',
+              overflow: 'hidden',
+              clipPath: glitchBot.clipPath,
+              transform: glitchBot.transform,
+            }}
+            aria-hidden="true"
+          >
+            FOR MORE INFO
+          </span>
+        </span>
+      </h1>
 
-        streams.forEach((s: StreamData) => {
-            drawStream(ctx, s, t, ORIGINAL_HEIGHT);
-        });
-
-    }, [frame, fps, streams]);
-
-    const wrapperStyle: React.CSSProperties = {
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        backgroundColor: '#050308',
-    };
-
-    return (
-        <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: '#050308' }}>
-            <div style={wrapperStyle}>
-                <canvas
-                    ref={canvasRef}
-                    width={ORIGINAL_WIDTH}
-                    height={ORIGINAL_HEIGHT}
-                    style={{ display: 'block', width: '100%', height: '100%' }}
-                />
+      {/* ===== Main Video Grid Container ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '55%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 1500,
+          height: 500,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 5,
+        }}
+      >
+        {/* Left Video Rect */}
+        <div style={leftFrameStyle}>
+          <div
+            style={{
+              width: 360,
+              height: 215,
+              borderRadius: 8,
+              padding: 10,
+              background: `linear-gradient(135deg, ${GOLD_2}, ${GOLD_3} 40%, ${GOLD_4} 60%, ${GOLD_1})`,
+              boxShadow: `0 0 25px rgba(212,175,55,0.7), 0 15px 40px rgba(0,0,0,0.35)`,
+              filter: leftShimmer,
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                background: '#fff',
+                borderRadius: 4,
+                boxShadow: 'inset 0 0 25px rgba(0,0,0,0.15)',
+                overflow: 'hidden',
+                position: 'relative',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.95) 50%, transparent 70%)',
+                  transform: leftShine,
+                }}
+              />
             </div>
+          </div>
         </div>
-    );
+
+        {/* Center Circular Video */}
+        <div
+          style={{
+            position: 'relative',
+            width: 310,
+            height: 310,
+            borderRadius: '50%',
+            padding: 20,
+            background: `conic-gradient(${GOLD_2}, ${GOLD_3}, ${GOLD_4}, ${GOLD_1}, ${GOLD_2})`,
+            boxShadow: `0 0 35px rgba(212,175,55,0.8), 0 15px 45px rgba(0,0,0,0.4)`,
+            zIndex: 10,
+            transform: `translate(${circleDrift.tx}px, ${circleDrift.ty}px) rotate(${circleDrift.rot}deg)`,
+          }}
+        >
+          {/* Inner static counter-rotating screen */}
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+              background: '#fff',
+              boxShadow: 'inset 0 0 30px rgba(0,0,0,0.15)',
+              position: 'relative',
+              overflow: 'hidden',
+              transform: `rotate(${circleCounterSpin}deg)`,
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(120deg, transparent 35%, rgba(255,255,255,0.95) 50%, transparent 65%)',
+                transform: circleShine,
+              }}
+            />
+          </div>
+
+          {/* Outer Rotating Dashed Ring */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: -22,
+              borderRadius: '50%',
+              border: `3px dashed rgba(255,243,196,0.6)`,
+              transform: `rotate(${circleSpinSlow}deg)`,
+              pointerEvents: 'none',
+            }}
+          />
+        </div>
+
+        {/* Right Video Rect */}
+        <div style={rightFrameStyle}>
+          <div
+            style={{
+              width: 360,
+              height: 215,
+              borderRadius: 8,
+              padding: 10,
+              background: `linear-gradient(135deg, ${GOLD_2}, ${GOLD_3} 40%, ${GOLD_4} 60%, ${GOLD_1})`,
+              boxShadow: `0 0 25px rgba(212,175,55,0.7), 0 15px 40px rgba(0,0,0,0.35)`,
+              filter: rightShimmer,
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                background: '#fff',
+                borderRadius: 4,
+                boxShadow: 'inset 0 0 25px rgba(0,0,0,0.15)',
+                overflow: 'hidden',
+                position: 'relative',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.95) 50%, transparent 70%)',
+                  transform: rightShine,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Floating Labels beneath elements */}
+        <span
+          style={{
+            position: 'absolute',
+            bottom: 30,
+            left: 110,
+            fontSize: 26,
+            fontWeight: 900,
+            letterSpacing: 2,
+            color: GOLD_4,
+            textShadow: `0 0 8px ${GOLD_1}, 0 2px 4px rgba(0,0,0,0.5)`,
+            zIndex: 8,
+            whiteSpace: 'nowrap',
+            transform: `translate(${leftDrift.tx}px, ${leftDrift.ty}px) rotate(${leftDrift.rot}deg)`,
+          }}
+        >
+          WATCH NEXT
+        </span>
+
+        <span
+          style={{
+            position: 'absolute',
+            bottom: 30,
+            right: 110,
+            fontSize: 26,
+            fontWeight: 900,
+            letterSpacing: 2,
+            color: GOLD_4,
+            textShadow: `0 0 8px ${GOLD_1}, 0 2px 4px rgba(0,0,0,0.5)`,
+            zIndex: 8,
+            whiteSpace: 'nowrap',
+            transform: `translate(${rightDrift.tx}px, ${rightDrift.ty}px) rotate(${rightDrift.rot}deg)`,
+          }}
+        >
+          RECOMMENDED
+        </span>
+      </div>
+    </div>
+  );
 };
 
-export default PremiumCyberDataStream;
-// END_OF_FILE
+export default GoldEndScreen;
