@@ -5,271 +5,224 @@ import * as THREE from 'three';
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const vertexShader = `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
+const PremiumAbstractNeonShader: React.FC = () => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const sceneRef = useRef<THREE.Scene | null>(null);
+    const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
+    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+    const materialRef = useRef<THREE.ShaderMaterial | null>(null);
 
-const fragmentShader = `
-  uniform float uTime1;
-  uniform float uTime2;
-  uniform float uBlend;
-  uniform vec2 uResolution;
-  varying vec2 vUv;
+    const frame = useCurrentFrame();
+    const { width, height, fps } = useVideoConfig();
 
-  vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
-  vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
-  vec3 fade(vec3 t){ return t*t*t*(t*(t*6.0-15.0)+10.0); }
+    // Responsive scaling factor to fill 16:9 viewport edge-to-edge
+    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  float cnoise(vec3 P){
-    vec3 Pi0 = floor(P);
-    vec3 Pi1 = Pi0 + vec3(1.0);
-    Pi0 = mod(Pi0, 289.0); Pi1 = mod(Pi1, 289.0);
-    vec3 Pf0 = fract(P);
-    vec3 Pf1 = Pf0 - vec3(1.0);
-    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
-    vec4 iy = vec4(Pi0.yy, Pi1.yy);
-    vec4 iz0 = Pi0.zzzz;
-    vec4 iz1 = Pi1.zzzz;
-    vec4 ixy  = permute(permute(ix) + iy);
-    vec4 ixy0 = permute(ixy + iz0);
-    vec4 ixy1 = permute(ixy + iz1);
-    vec4 gx0 = ixy0 / 7.0;
-    vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
-    gx0 = fract(gx0);
-    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
-    vec4 sz0 = step(gz0, vec4(0.0));
-    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
-    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
-    vec4 gx1 = ixy1 / 7.0;
-    vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
-    gx1 = fract(gx1);
-    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
-    vec4 sz1 = step(gz1, vec4(0.0));
-    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
-    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
-    vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
-    vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
-    vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
-    vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
-    vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
-    vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
-    vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
-    vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
-    vec4 norm0 = taylorInvSqrt(vec4(dot(g000,g000),dot(g010,g010),dot(g100,g100),dot(g110,g110)));
-    g000 *= norm0.x; g010 *= norm0.y; g100 *= norm0.z; g110 *= norm0.w;
-    vec4 norm1 = taylorInvSqrt(vec4(dot(g001,g001),dot(g011,g011),dot(g101,g101),dot(g111,g111)));
-    g001 *= norm1.x; g011 *= norm1.y; g101 *= norm1.z; g111 *= norm1.w;
-    float n000 = dot(g000, Pf0);
-    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
-    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
-    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
-    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
-    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
-    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
-    float n111 = dot(g111, Pf1);
-    vec3 fade_xyz = fade(Pf0);
-    vec4 n_z = mix(vec4(n000,n100,n010,n110), vec4(n001,n101,n011,n111), fade_xyz.z);
-    vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
-    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
-    return 2.2 * n_xyz;
-  }
+    // 1. Scene & Shader Initialization (Runs once on mount)
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-  float fbm(vec3 p) {
-    float value = 0.0;
-    float amp   = 0.5;
-    float freq  = 1.0;
-    for (int i = 0; i < 6; i++) {
-      value += amp * cnoise(p * freq);
-      freq  *= 2.0;
-      amp   *= 0.5;
-    }
-    return value;
-  }
+        // Scene
+        const scene = new THREE.Scene();
+        sceneRef.current = scene;
 
-  vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
-    return a + b * cos(6.28318 * (c * t + d));
-  }
+        // Orthographic camera for fullscreen 2D shader plane
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        cameraRef.current = camera;
 
-  vec3 getProceduralColor(vec2 uv, float customTime) {
-    float ar = uResolution.x / uResolution.y;
-    vec2 localUv = uv;
-    localUv.x *= ar;
+        // Renderer with strict 1080p target resolution
+        const renderer = new THREE.WebGLRenderer({
+            canvas: canvas,
+            antialias: true,
+            alpha: false,
+            powerPreference: "high-performance"
+        });
+        renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+        renderer.setPixelRatio(1);
+        rendererRef.current = renderer;
 
-    float t = customTime * 0.18;
+        // Shader Uniforms
+        const uniforms = {
+            uTime: { value: 0.0 },
+            uResolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) }
+        };
 
-    vec3 q = vec3(localUv, t);
-    float qx = fbm(q);
-    float qy = fbm(q + vec3(5.2, 1.3, 2.8));
-    float qz = fbm(q + vec3(2.4, 6.1, 4.0));
+        // Custom Shader Material with built-in multi-layered bloom/glow simulation
+        const material = new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            vertexShader: `
+                void main() {
+                    gl_Position = vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform float uTime;
+                uniform vec2 uResolution;
 
-    vec3 r = vec3(localUv, t);
-    float rx = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(1.7, 9.2, 0.5));
-    float ry = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(8.3, 2.8, 7.1));
-    float rz = fbm(r + 4.0 * vec3(qx, qy, qz) + vec3(3.1, 4.4, 5.9));
+                // Simplex 2D noise
+                vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
 
-    vec3 s = vec3(localUv, t);
-    float f = fbm(s + 3.5 * vec3(rx, ry, rz));
+                float snoise(vec2 v) {
+                    const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+                    vec2 i  = floor(v + dot(v, C.yy) );
+                    vec2 x0 = v -   i + dot(i, C.xx);
+                    vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+                    vec4 x12 = x0.xyxy + C.xxzz;
+                    x12.xy -= i1;
+                    i = mod289(i);
+                    vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));
+                    vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+                    m = m*m;
+                    m = m*m;
+                    vec3 x = 2.0 * fract(p * C.www) - 1.0;
+                    vec3 h = abs(x) - 0.5;
+                    vec3 ox = floor(x + 0.5);
+                    vec3 a0 = x - ox;
+                    m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
+                    vec3 g;
+                    g.x  = a0.x  * x0.x  + h.x  * x0.y;
+                    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+                    return 130.0 * dot(m, g);
+                }
 
-    float idx = f * 0.5 + 0.5;
-    idx = pow(idx, 1.1);
+                // Fractal Brownian Motion for organic liquid feel
+                float fbm(vec2 p) {
+                    float value = 0.0;
+                    float amplitude = 0.5;
+                    vec2 shift = vec2(100.0);
+                    mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+                    for (int i = 0; i < 5; i++) {
+                        value += amplitude * snoise(p);
+                        p = rot * p * 2.0 + shift;
+                        amplitude *= 0.5;
+                    }
+                    return value;
+                }
 
-    vec3 colA = palette(
-      idx,
-      vec3(0.02, 0.03, 0.08),
-      vec3(0.15, 0.25, 0.45),
-      vec3(1.0,  1.0,  1.0 ),
-      vec3(0.00, 0.20, 0.50)
-    );
+                // Ribbon generator with integrated bloom & glow emulation
+                vec3 getRibbon(vec2 uv, float t, float offset, vec3 color) {
+                    // Animated UV warping
+                    vec2 q = vec2(
+                        fbm(uv + vec2(0.0, offset) + t * 0.4),
+                        fbm(uv + vec2(offset, 0.0) - t * 0.3)
+                    );
+                    vec2 r = vec2(
+                        fbm(q + uv * 2.0 + t * 0.2),
+                        fbm(q - uv * 1.5 - t * 0.25)
+                    );
 
-    float edge = smoothstep(0.3, 0.8, abs(f));
-    vec3 neon  = palette(
-      idx + t * 0.05,
-      vec3(0.05, 0.00, 0.12),
-      vec3(0.30, 0.20, 0.40),
-      vec3(0.80, 1.20, 0.90),
-      vec3(0.55, 0.80, 0.30)
-    );
+                    // Morphing curves
+                    float line = sin(r.x * 6.0 + r.y * 4.0 + t * 1.5 + offset * 2.0);
+                    
+                    // Double-layered glow simulation (emulating UnrealBloomPass)
+                    // High-contrast sharp core + soft outer glowing falloff
+                    float core = 0.03 / (abs(line) + 0.008);
+                    float glow = 0.09 / (abs(line) + 0.14);
+                    float intensity = core + glow * 2.0;
+                    
+                    // Subtle pulsing
+                    float pulse = 0.75 + 0.25 * sin(t * 2.5 + offset * 3.0);
+                    
+                    return color * intensity * pulse;
+                }
 
-    vec3 col = mix(colA, neon, edge * 0.65);
+                void main() {
+                    // Center UVs and fix aspect ratio
+                    vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
+                    
+                    // Slow flowing time
+                    float t = uTime * 0.15;
+                    
+                    // Cinematic camera drift
+                    uv += vec2(sin(t * 0.3), cos(t * 0.2)) * 0.3;
+                    uv *= 1.2; // slight zoom out
 
-    float ridge = 1.0 - abs(f);
-    ridge = pow(clamp(ridge, 0.0, 1.0), 18.0);
-    col  += ridge * vec3(0.05, 0.25, 0.55) * 1.8;
+                    vec3 finalColor = vec3(0.0);
 
-    return col;
-  }
+                    // Additive blending of holographic light trails
+                    finalColor += getRibbon(uv, t, 0.0, vec3(0.7, 0.1, 0.9)); // Purple
+                    finalColor += getRibbon(uv, t, 1.2, vec3(0.1, 0.9, 0.9)); // Cyan
+                    finalColor += getRibbon(uv, t, 2.4, vec3(0.1, 0.3, 1.0)); // Blue
+                    finalColor += getRibbon(uv, t, 3.6, vec3(1.0, 0.1, 0.3)); // Red
 
-  void main() {
-    vec3 col1 = getProceduralColor(vUv, uTime1);
-    vec3 col2 = getProceduralColor(vUv, uTime2);
-    vec3 col = mix(col1, col2, uBlend);
+                    // Dark black void background ensuring high contrast
+                    finalColor = pow(finalColor, vec3(1.4));
 
-    vec2 vUv2 = vUv - 0.5;
-    float vign = 1.0 - dot(vUv2, vUv2) * 1.6;
-    col *= clamp(vign, 0.0, 1.0);
+                    gl_FragColor = vec4(finalColor, 1.0);
+                }
+            `,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            depthTest: false
+        });
+        materialRef.current = material;
 
-    col = pow(max(col, 0.0), vec3(0.85));
+        // Fullscreen Quad Geometry
+        const geometry = new THREE.PlaneGeometry(2, 2);
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
 
-    gl_FragColor = vec4(col, 1.0);
-  }
-`;
+        // Cleanup
+        return () => {
+            geometry.dispose();
+            material.dispose();
+            renderer.dispose();
+        };
+    }, []);
 
-const Displex: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
-  const uniformsRef = useRef<{
-    uTime1: { value: number };
-    uTime2: { value: number };
-    uBlend: { value: number };
-    uResolution: { value: THREE.Vector2 };
-  } | null>(null);
+    // 2. Deterministic Render Effect (Triggered on every frame change)
+    useEffect(() => {
+        const material = materialRef.current;
+        const renderer = rendererRef.current;
+        const scene = sceneRef.current;
+        const camera = cameraRef.current;
 
-  const { width, height, fps } = useVideoConfig();
-  const frame = useCurrentFrame();
+        if (!material || !renderer || !scene || !camera) return;
 
-  const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+        // Loop Duration: exactly 15 seconds (900 frames @ 60fps)
+        const totalFrames = 15 * fps;
+        const progress = frame / totalFrames;
 
-  useEffect(() => {
-    if (!canvasRef.current) return;
+        // Symmetrical Time Mapping for mathematically absolute seamless looping.
+        // Using a smooth sine wave cycle ensures that the beginning (0s) and end (15s) 
+        // match perfectly, creating an infinite, seamless ambient motion loop.
+        const maxTimeSeconds = 15.0;
+        const deterministicTime = Math.sin(progress * Math.PI) * maxTimeSeconds;
 
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      antialias: true,
-      alpha: true,
-    });
-    renderer.setPixelRatio(2);
-    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-    rendererRef.current = renderer;
+        // Update Uniforms
+        material.uniforms.uTime.value = deterministicTime;
 
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
+        // Render Frame
+        renderer.render(scene, camera);
+    }, [frame, fps]);
 
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
-    camera.position.z = 1;
-    cameraRef.current = camera;
-
-    const geometry = new THREE.PlaneGeometry(2, 2);
-
-    const uniforms = {
-      uTime1: { value: 0.0 },
-      uTime2: { value: 0.0 },
-      uBlend: { value: 0.0 },
-      uResolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) },
+    const wrapperStyle: React.CSSProperties = {
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        overflow: 'hidden',
+        backgroundColor: '#000000',
     };
-    uniformsRef.current = uniforms;
 
-    const material = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader,
-      uniforms,
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
-
-    return () => {
-      renderer.dispose();
-      geometry.dispose();
-      material.dispose();
+    const canvasStyle: React.CSSProperties = {
+        display: 'block',
+        width: '100%',
+        height: '100%',
     };
-  }, []);
 
-  useEffect(() => {
-    if (
-      !rendererRef.current ||
-      !sceneRef.current ||
-      !cameraRef.current ||
-      !uniformsRef.current
-    ) {
-      return;
-    }
-
-    const elapsedTime = frame / fps;
-    const duration = 15; // 15 seconds loop duration
-    const t = elapsedTime % duration;
-
-    // Smoothstep formulation for absolutely seamless blending transition at the boundaries
-    const progress = t / duration;
-    const smoothBlend = progress * progress * (3.0 - 2.0 * progress);
-
-    uniformsRef.current.uTime1.value = t;
-    uniformsRef.current.uTime2.value = t - duration;
-    uniformsRef.current.uBlend.value = smoothBlend;
-
-    rendererRef.current.render(sceneRef.current, cameraRef.current);
-  }, [frame, fps]);
-
-  const containerStyle: React.CSSProperties = {
-    width: ORIGINAL_WIDTH,
-    height: ORIGINAL_HEIGHT,
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-    transformOrigin: 'center center',
-    overflow: 'hidden',
-    backgroundColor: '#000000',
-  };
-
-  return (
-    <div style={containerStyle}>
-      <canvas
-        ref={canvasRef}
-        style={{
-          width: ORIGINAL_WIDTH,
-          height: ORIGINAL_HEIGHT,
-          display: 'block',
-        }}
-      />
-    </div>
-  );
+    return (
+        <div style={wrapperStyle}>
+            <canvas ref={canvasRef} style={canvasStyle} />
+        </div>
+    );
 };
 
-export default Displex;
+export default PremiumAbstractNeonShader;
 // END_OF_FILE
