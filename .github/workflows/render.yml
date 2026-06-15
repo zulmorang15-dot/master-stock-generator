@@ -65,6 +65,8 @@ jobs:
               --codec=h264 \
               --scale=0.3 \
               --gl=swangle \
+              --concurrency=1 \
+              --timeout=120000 \
               --muted \
               --log=verbose
           else
@@ -74,6 +76,8 @@ jobs:
               --props=temp-props.json \
               --codec=prores4444 \
               --gl=egl \
+              --concurrency=1 \
+              --timeout=120000 \
               --muted \
               --log=verbose
           fi

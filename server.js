@@ -2664,7 +2664,8 @@ app.post("/api/trigger-github-render", async (req, res) => {
           duration_frames: String(Number(item.durationInFrames) || 150),
           fps: String(item.fps || 30),
           judul: item.judul || "Stock Video",
-          keywords: item.keywords || "motion, abstract, loop"
+          keywords: item.keywords || "motion, abstract, loop",
+          has_threejs: (item.promptCode || '').includes('THREE') ? 'true' : 'false'
         }
       },
       {
@@ -3024,7 +3025,8 @@ async function runPreviewRenderBackground(itemId) {
             duration_frames: String(item.durationInFrames || 300),
             fps: String(item.fps || 30),
             judul: item.judul || "Stock Video",
-            keywords: item.keywords || "motion, abstract, loop"
+            keywords: item.keywords || "motion, abstract, loop",
+            has_threejs: (item.promptCode || '').includes('THREE') ? 'true' : 'false'
           }
         },
         {

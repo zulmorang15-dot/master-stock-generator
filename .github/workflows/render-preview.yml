@@ -31,6 +31,16 @@ on:
         required: false
         default: 'motion, abstract, loop'
         type: string
+      render_timeout:
+        description: 'Per-frame render timeout in ms (default: 120000 = 2min)'
+        required: false
+        default: '120000'
+        type: string
+      has_threejs:
+        description: 'Whether composition uses Three.js (reduces concurrency)'
+        required: false
+        default: 'false'
+        type: string
 
 jobs:
   render-preview:
@@ -87,14 +97,26 @@ jobs:
           cat temp-props.json
 
       - name: Render Preview MP4 (scale 0.3)
+        env:
+          HAS_THREEJS: ${{ github.event.inputs.has_threejs }}
+          RENDER_TIMEOUT: ${{ github.event.inputs.render_timeout }}
         run: |
           echo "=== Rendering preview for composition: ${{ github.event.inputs.composition_id }} ==="
+          TIMEOUT_MS=${RENDER_TIMEOUT:-120000}
+          if [ "$HAS_THREEJS" = "true" ]; then
+            echo "Three.js detected — using concurrency=1 and timeout=${TIMEOUT_MS}ms"
+            CONCURRENCY=1
+          else
+            CONCURRENCY=2
+          fi
           xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npx remotion render Composition \
             "out/${{ github.event.inputs.composition_id }}-preview.mp4" \
             --props=temp-props.json \
             --codec=h264 \
             --scale=0.3 \
             --gl=swangle \
+            --concurrency=$CONCURRENCY \
+            --timeout=$TIMEOUT_MS \
             --muted \
             --log=verbose
 
