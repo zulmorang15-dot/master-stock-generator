@@ -4,12 +4,11 @@ import * as THREE from 'three';
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
-const LOOP_DURATION = 15.0; // 15 seconds loop
 
-export const MonoInk: React.FC = () => {
+export const CyberNeon: React.FC = () => {
   const { width, height, fps } = useVideoConfig();
   const frame = useCurrentFrame();
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -19,16 +18,12 @@ export const MonoInk: React.FC = () => {
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvasRef.current) return;
 
-    const renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: true,
-      alpha: true,
-    });
+    const canvas = canvasRef.current;
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(2);
     renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT, false);
-    renderer.setPixelRatio(1);
     rendererRef.current = renderer;
 
     const scene = new THREE.Scene();
@@ -39,16 +34,16 @@ export const MonoInk: React.FC = () => {
 
     const uniforms = {
       uTime: { value: 0 },
-      uLoop: { value: LOOP_DURATION },
+      uLoop: { value: 15.0 }, // Seamlessly fit 15-second duration
       uResolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) },
-      uMode: { value: 1 },
-      uC0: { value: new THREE.Vector3(0.85, 0.86, 0.90) },
-      uC1: { value: new THREE.Vector3(0.55, 0.58, 0.65) },
-      uC2: { value: new THREE.Vector3(0.32, 0.34, 0.40) },
-      uC3: { value: new THREE.Vector3(0.70, 0.72, 0.78) },
-      uC4: { value: new THREE.Vector3(0.95, 0.96, 1.00) },
-      uC5: { value: new THREE.Vector3(0.18, 0.19, 0.24) },
-      uCD: { value: new THREE.Vector3(0.04, 0.04, 0.06) },
+      uMode: { value: 2 },
+      uC0: { value: new THREE.Vector3(0.10, 0.90, 0.95) },
+      uC1: { value: new THREE.Vector3(0.20, 0.40, 0.95) },
+      uC2: { value: new THREE.Vector3(0.75, 0.20, 0.95) },
+      uC3: { value: new THREE.Vector3(0.95, 0.15, 0.70) },
+      uC4: { value: new THREE.Vector3(0.95, 0.85, 0.30) },
+      uC5: { value: new THREE.Vector3(0.05, 0.55, 0.85) },
+      uCD: { value: new THREE.Vector3(0.03, 0.02, 0.10) },
     };
 
     const material = new THREE.ShaderMaterial({
@@ -68,156 +63,107 @@ export const MonoInk: React.FC = () => {
         uniform int uMode;
         uniform vec3 uC0, uC1, uC2, uC3, uC4, uC5, uCD;
         #define TAU 6.28318530718
-
-        float ph() {
-          return (uTime / uLoop) * TAU;
+        float ph(){ return (uTime/uLoop)*TAU; }
+        float inf(vec2 uv, vec2 c, float r){ return 1.0 - smoothstep(0.0, r, length(uv-c)); }
+        float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+        float noise(vec2 p){
+          vec2 i=floor(p), f=fract(p);
+          float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+          vec2 u=f*f*(3.0-2.0*f); return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);
         }
-
-        float inf(vec2 uv, vec2 c, float r) {
-          return 1.0 - smoothstep(0.0, r, length(uv - c));
+        float smoothGrain(vec2 uv, float p){
+          float t=p/TAU; float f=fract(t*24.0); float i=floor(t*24.0); vec2 g=uv*uResolution*0.9;
+          return (mix(hash(g+i),hash(g+i+1.0),smoothstep(0.0,1.0,f)))*2.0-1.0;
         }
-
-        float hash(vec2 p) {
-          p = fract(p * vec2(123.34, 456.21));
-          p += dot(p, p + 45.32);
-          return fract(p.x * p.y);
-        }
-
-        float noise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          float a = hash(i);
-          float b = hash(i + vec2(1.0, 0.0));
-          float c = hash(i + vec2(0.0, 1.0));
-          float d = hash(i + vec2(1.0, 1.0));
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-        }
-
-        float smoothGrain(vec2 uv, float p) {
-          float t = p / TAU;
-          float f = fract(t * 24.0);
-          float i = floor(t * 24.0);
-          vec2 g = uv * uResolution * 0.9;
-          return (mix(hash(g + i), hash(g + i + 1.0), smoothstep(0.0, 1.0, f))) * 2.0 - 1.0;
-        }
-
-        void main() {
-          vec2 uv = vUv;
-          float p = ph();
-          vec2 wuv = uv;
-          if (uMode == 1 || uMode == 2) {
-            float w1 = noise(uv * 3.0 + vec2(cos(p), sin(p)) * 0.6);
-            float w2 = noise(uv * 3.0 + vec2(cos(p + 2.0), sin(p + 1.3)) * 0.6 + 5.0);
-            wuv += (vec2(w1, w2) - 0.5) * 0.35;
+        void main(){
+          vec2 uv=vUv; float p=ph(); vec2 wuv = uv;
+          if(uMode==1 || uMode==2){
+            float w1 = noise(uv*3.0 + vec2(cos(p),sin(p))*0.6);
+            float w2 = noise(uv*3.0 + vec2(cos(p+2.0),sin(p+1.3))*0.6 + 5.0); wuv += (vec2(w1,w2)-0.5)*0.35;
           }
-          vec2 c0 = vec2(0.28 + 0.10 * cos(p), 0.70 + 0.08 * sin(p));
-          vec2 c1 = vec2(0.40 + 0.09 * cos(p + 1.2), 0.78 + 0.07 * sin(p + 0.6));
-          vec2 c2 = vec2(0.82 + 0.08 * cos(p + 2.0), 0.55 + 0.10 * sin(p + 1.5));
-          vec2 c3 = vec2(0.68 + 0.07 * cos(p + 3.1), 0.42 + 0.09 * sin(p + 2.4));
-          vec2 c4 = vec2(0.74 + 0.06 * cos(p + 4.0), 0.50 + 0.06 * sin(p + 3.3));
-          vec2 c5 = vec2(0.18 + 0.09 * cos(p + 5.0), 0.30 + 0.08 * sin(p + 4.2));
-          vec2 cd = vec2(0.30 + 0.08 * cos(p + 0.7), 0.10 + 0.07 * sin(p + 5.1));
-          float r = 0.55 + 0.06 * sin(p);
-          vec3 col = uCD;
-          col = mix(col, uC0, clamp(inf(wuv, c0, r + 0.05), 0.0, 1.0));
-          col = mix(col, uC1, clamp(inf(wuv, c1, r), 0.0, 1.0) * 0.95);
-          col = mix(col, uC5, clamp(inf(wuv, c5, r - 0.05), 0.0, 1.0) * 0.9);
-          col = mix(col, uC3, clamp(inf(wuv, c3, r - 0.08), 0.0, 1.0) * 0.95);
-          col = mix(col, uC4, clamp(inf(wuv, c4, r - 0.18), 0.0, 1.0) * 0.85);
-          col = mix(col, uC2, clamp(inf(wuv, c2, r + 0.02), 0.0, 1.0) * 0.95);
-          col = mix(col, uCD, clamp(inf(wuv, cd, 0.32), 0.0, 1.0) * 0.55);
-          float lum = dot(col, vec3(0.299, 0.587, 0.114));
-          if (uMode == 2) {
-            col = mix(vec3(lum), col, 1.45);
-            col += col * col * 0.35;
-            col = pow(col, vec3(0.88));
-          } else {
-            col = mix(vec3(lum), col, 1.20);
-            col = pow(col, vec3(0.95));
-          }
-          vec2 vd = uv - 0.5;
-          vd.x *= uResolution.x / uResolution.y;
-          float vig = pow(1.0 - smoothstep(0.45, 0.95, length(vd)), 1.4);
-          col *= mix(0.55, 1.0, vig);
-          col += smoothGrain(uv, p) * mix(0.06, 0.025, lum);
-          gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+          vec2 c0=vec2(0.28+0.10*cos(p), 0.70+0.08*sin(p)); vec2 c1=vec2(0.40+0.09*cos(p+1.2), 0.78+0.07*sin(p+0.6));
+          vec2 c2=vec2(0.82+0.08*cos(p+2.0), 0.55+0.10*sin(p+1.5)); vec2 c3=vec2(0.68+0.07*cos(p+3.1), 0.42+0.09*sin(p+2.4));
+          vec2 c4=vec2(0.74+0.06*cos(p+4.0), 0.50+0.06*sin(p+3.3)); vec2 c5=vec2(0.18+0.09*cos(p+5.0), 0.30+0.08*sin(p+4.2));
+          vec2 cd=vec2(0.30+0.08*cos(p+0.7), 0.10+0.07*sin(p+5.1));
+          float r=0.55+0.06*sin(p); vec3 col=uCD;
+          col=mix(col,uC0,clamp(inf(wuv,c0,r+0.05),0.0,1.0)); col=mix(col,uC1,clamp(inf(wuv,c1,r),0.0,1.0)*0.95);
+          col=mix(col,uC5,clamp(inf(wuv,c5,r-0.05),0.0,1.0)*0.9); col=mix(col,uC3,clamp(inf(wuv,c3,r-0.08),0.0,1.0)*0.95);
+          col=mix(col,uC4,clamp(inf(wuv,c4,r-0.18),0.0,1.0)*0.85); col=mix(col,uC2,clamp(inf(wuv,c2,r+0.02),0.0,1.0)*0.95);
+          col=mix(col,uCD,clamp(inf(wuv,cd,0.32),0.0,1.0)*0.55);
+          float lum=dot(col,vec3(0.299,0.587,0.114));
+          if(uMode==2){ col=mix(vec3(lum),col,1.45); col+=col*col*0.35; col=pow(col,vec3(0.88)); } 
+          else { col=mix(vec3(lum),col,1.20); col=pow(col,vec3(0.95)); }
+          vec2 vd=uv-0.5; vd.x*=uResolution.x/uResolution.y;
+          float vig=pow(1.0-smoothstep(0.45,0.95,length(vd)),1.4);
+          col*=mix(0.55,1.0,vig); col+=smoothGrain(uv,p)*mix(0.06,0.025,lum);
+          gl_FragColor=vec4(clamp(col,0.0,1.0),1.0);
         }
       `,
     });
     materialRef.current = material;
 
-    const geometry = new THREE.PlaneGeometry(2, 2);
-    const mesh = new THREE.Mesh(geometry, material);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
     scene.add(mesh);
 
     return () => {
       renderer.dispose();
-      geometry.dispose();
+      mesh.geometry.dispose();
       material.dispose();
     };
   }, []);
 
   useEffect(() => {
+    const renderer = rendererRef.current;
     const scene = sceneRef.current;
     const camera = cameraRef.current;
-    const renderer = rendererRef.current;
     const material = materialRef.current;
 
-    if (!scene || !camera || !renderer || !material) return;
-
-    const totalFrames = fps * LOOP_DURATION;
-    const localFrame = frame % totalFrames;
-    const elapsedTime = localFrame / fps;
-
-    material.uniforms.uTime.value = elapsedTime;
-    renderer.render(scene, camera);
+    if (renderer && scene && camera && material) {
+      // Frame-locked calculation mapped to the 15-second loop
+      const time = (frame / fps) % 15.0;
+      material.uniforms.uTime.value = time;
+      renderer.render(scene, camera);
+    }
   }, [frame, fps]);
 
+  const containerStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    backgroundColor: '#06050a',
+  };
+
+  const canvasStyle: React.CSSProperties = {
+    display: 'block',
+    width: '100%',
+    height: '100%',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: '42px',
+    bottom: '36px',
+    color: 'rgba(255, 255, 255, 0.55)',
+    fontSize: '36px',
+    letterSpacing: '6px',
+    textTransform: 'uppercase',
+    pointerEvents: 'none',
+    mixBlendMode: 'overlay',
+    fontFamily: 'system-ui, sans-serif',
+  };
+
   return (
-    <div
-      style={{
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        background: '#06050a',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'system-ui, sans-serif',
-      }}
-    >
-      <canvas
-        ref={canvasRef}
-        style={{
-          display: 'block',
-          width: '100%',
-          height: '100%',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          left: '14px',
-          bottom: '12px',
-          color: 'rgba(255, 255, 255, 0.55)',
-          fontSize: '12px',
-          letterSpacing: '2px',
-          textTransform: 'uppercase',
-          pointerEvents: 'none',
-          mixBlendMode: 'overlay',
-        }}
-      >
-        05 · Mono Ink
-      </div>
+    <div style={containerStyle}>
+      <canvas ref={canvasRef} style={canvasStyle} />
+      <div style={labelStyle}>04 · Cyber Neon</div>
     </div>
   );
 };
 
-export default MonoInk;
+export default CyberNeon;
 // END_OF_FILE
