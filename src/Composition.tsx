@@ -1,18 +1,6 @@
 import React, { useRef, useEffect, useMemo } from 'react';
 import { useVideoConfig, useCurrentFrame } from 'remotion';
 
-const ORIGINAL_WIDTH = 3840;
-const ORIGINAL_HEIGHT = 2160;
-const COLUMNS = 140;
-const COL_WIDTH = Math.floor(ORIGINAL_WIDTH / COLUMNS);
-
-const COLORS = [
-    { r: 255, g: 215, b: 0 },   // Luminous Gold
-    { r: 75, g: 0, b: 130 },    // Deep Amethyst Purple
-    { r: 255, g: 165, b: 0 },   // Amber Core Highlight
-    { r: 180, g: 100, b: 240 }  // Violet Highlight
-];
-
 interface Fragment {
     offset: number;
     h: number;
@@ -22,7 +10,13 @@ interface Fragment {
     hexCount: number;
 }
 
-interface StreamConfig {
+interface Color {
+    r: number;
+    g: number;
+    b: number;
+}
+
+interface DataStreamInstance {
     x: number;
     depthLayer: number;
     width: number;
@@ -30,10 +24,22 @@ interface StreamConfig {
     maxAlpha: number;
     glow: number;
     baseY: number;
-    color: { r: number; g: number; b: number };
+    color: Color;
     type: number;
     fragments: Fragment[];
 }
+
+const ORIGINAL_WIDTH = 3840;
+const ORIGINAL_HEIGHT = 2160;
+const COLUMNS = 140;
+const COL_WIDTH = Math.floor(ORIGINAL_WIDTH / COLUMNS);
+
+const COLORS: Color[] = [
+    { r: 255, g: 215, b: 0 },   // Luminous Gold
+    { r: 75, g: 0, b: 130 },    // Deep Amethyst Purple
+    { r: 255, g: 165, b: 0 },   // Amber Core Highlight
+    { r: 180, g: 100, b: 240 }  // Violet Highlight
+];
 
 function drawHex(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number): void {
     ctx.beginPath();
@@ -47,8 +53,8 @@ function drawHex(ctx: CanvasRenderingContext2D, x: number, y: number, width: num
     ctx.fill();
 }
 
-function createStream(c: number, depthLayer: number, rand: () => number): StreamConfig {
-    let x = c * COL_WIDTH;
+const createStream = (colIndex: number, depthLayer: number, random: () => number): DataStreamInstance => {
+    let x = colIndex * COL_WIDTH;
     let width = 0;
     let cycles = 0;
     let maxAlpha = 0;
@@ -66,36 +72,33 @@ function createStream(c: number, depthLayer: number, rand: () => number): Stream
         glow = 10;
     } else {
         width = COL_WIDTH * 0.8;
-        cycles = Math.floor(rand() * 2) + 3; // 3 or 4
+        cycles = Math.floor(random() * 2) + 3;
         maxAlpha = 1.0;
         glow = 40;
     }
 
-    const baseY = rand();
-    const color = COLORS[Math.floor(rand() * COLORS.length)];
+    const baseY = random();
+    const color = COLORS[Math.floor(random() * COLORS.length)];
     x += (COL_WIDTH - width) / 2;
 
-    const type = Math.floor(rand() * 4);
+    const type = Math.floor(random() * 4);
     const fragments: Fragment[] = [];
-    const numFrags = Math.floor(rand() * 18) + 10;
+    const numFrags = Math.floor(random() * 18) + 10;
     let currentOffset = 0;
 
     for (let i = 0; i < numFrags; i++) {
-        const h = rand() * 240 + 60;
-        const gap = rand() * 50 + 20;
-        const alpha = maxAlpha * Math.pow(1 - i / numFrags, 1.8);
+        const h = random() * 240 + 60;
+        const gap = random() * 50 + 20;
+        const alpha = maxAlpha * Math.pow(1 - (i / numFrags), 1.8);
 
         const bitPattern: boolean[] = [];
         if (type === 2) {
             for (let b = 0; b < 30; b++) {
-                bitPattern.push(rand() > 0.35);
+                bitPattern.push(random() > 0.35);
             }
         }
 
-        let hexCount = 0;
-        if (type === 3) {
-            hexCount = Math.floor(h / (width * 0.9)) + 1;
-        }
+        const hexCount = (type === 3) ? Math.floor(h / (width * 0.9)) + 1 : 0;
 
         fragments.push({
             offset: currentOffset,
@@ -103,7 +106,7 @@ function createStream(c: number, depthLayer: number, rand: () => number): Stream
             alpha,
             isHead: i === 0,
             bits: bitPattern,
-            hexCount,
+            hexCount
         });
 
         currentOffset += h + gap;
@@ -119,23 +122,43 @@ function createStream(c: number, depthLayer: number, rand: () => number): Stream
         baseY,
         color,
         type,
-        fragments,
+        fragments
     };
-}
+};
 
-function renderAt(ctx: CanvasRenderingContext2D, s: StreamConfig, x: number, y: number): void {
+const generateStreams = (): DataStreamInstance[] => {
+    const streamsList: DataStreamInstance[] = [];
+    let seed = 98765;
+    const random = (): number => {
+        const x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    };
+
+    for (let c = 0; c < COLUMNS; c++) {
+        streamsList.push(createStream(c, 0, random));
+
+        if (random() > 0.55) {
+            streamsList.push(createStream(c, 1, random));
+        }
+
+        if (random() > 0.75) {
+            streamsList.push(createStream(c, 2, random));
+        }
+    }
+    return streamsList;
+};
+
+const renderAt = (ctx: CanvasRenderingContext2D, stream: DataStreamInstance, x: number, y: number): void => {
     ctx.save();
     ctx.translate(x, y);
 
-    for (let i = 0; i < s.fragments.length; i++) {
-        const f = s.fragments[i];
+    for (const f of stream.fragments) {
         const yDraw = -f.offset;
+        ctx.fillStyle = `rgba(${stream.color.r}, ${stream.color.g}, ${stream.color.b}, ${f.alpha})`;
 
-        ctx.fillStyle = `rgba(${s.color.r}, ${s.color.g}, ${s.color.b}, ${f.alpha})`;
-
-        if (s.glow > 0) {
-            ctx.shadowBlur = f.isHead ? s.glow : s.glow * 0.5;
-            ctx.shadowColor = `rgb(${s.color.r}, ${s.color.g}, ${s.color.b})`;
+        if (stream.glow > 0) {
+            ctx.shadowBlur = f.isHead ? stream.glow : stream.glow * 0.5;
+            ctx.shadowColor = `rgb(${stream.color.r}, ${stream.color.g}, ${stream.color.b})`;
             ctx.shadowOffsetX = f.isHead ? 2 : 1;
             ctx.shadowOffsetY = f.isHead ? 2 : 1;
         } else {
@@ -144,17 +167,17 @@ function renderAt(ctx: CanvasRenderingContext2D, s: StreamConfig, x: number, y: 
             ctx.shadowOffsetY = 0;
         }
 
-        if (s.type === 0) {
-            ctx.fillRect(0, yDraw - f.h, s.width, f.h);
-        } else if (s.type === 1) {
+        if (stream.type === 0) {
+            ctx.fillRect(0, yDraw - f.h, stream.width, f.h);
+        } else if (stream.type === 1) {
             const dashHeight = 5;
             const space = 7;
             for (let dy = 0; dy < f.h; dy += dashHeight + space) {
                 const actualH = Math.min(dashHeight, f.h - dy);
-                ctx.fillRect(0, yDraw - dy - actualH, s.width, actualH);
+                ctx.fillRect(0, yDraw - dy - actualH, stream.width, actualH);
             }
-        } else if (s.type === 2) {
-            const laneW = (s.width / 2) - 3;
+        } else if (stream.type === 2) {
+            const laneW = (stream.width / 2) - 3;
             if (laneW > 3) {
                 const cellH = laneW;
                 const space = 4;
@@ -170,14 +193,14 @@ function renderAt(ctx: CanvasRenderingContext2D, s: StreamConfig, x: number, y: 
                     bitIndex += 2;
                 }
             } else {
-                ctx.fillRect(0, yDraw - f.h, s.width, f.h);
+                ctx.fillRect(0, yDraw - f.h, stream.width, f.h);
             }
-        } else if (s.type === 3) {
-            const hexW = s.width;
+        } else if (stream.type === 3) {
+            const hexW = stream.width;
             const hexH = hexW * 0.866;
             const space = hexH * 0.2;
             let yOffset = 0;
-            for (let hi = 0; hi < f.hexCount; hi++) {
+            for (let i = 0; i < f.hexCount; i++) {
                 const drawY = yDraw - yOffset - hexH;
                 if (drawY + hexH > yDraw - f.h) {
                     drawHex(ctx, 0, drawY, hexW, hexH);
@@ -187,55 +210,41 @@ function renderAt(ctx: CanvasRenderingContext2D, s: StreamConfig, x: number, y: 
         }
     }
     ctx.restore();
-}
+};
 
-export const LuminousDataStream: React.FC = () => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const { width, height, durationInFrames } = useVideoConfig();
+const drawStream = (ctx: CanvasRenderingContext2D, stream: DataStreamInstance, t: number): void => {
+    const yNorm = (stream.baseY + t * stream.cycles) % 1.0;
+    const yBase = yNorm * ORIGINAL_HEIGHT;
+
+    renderAt(ctx, stream, stream.x, yBase - ORIGINAL_HEIGHT);
+    renderAt(ctx, stream, stream.x, yBase);
+    renderAt(ctx, stream, stream.x, yBase + ORIGINAL_HEIGHT);
+    renderAt(ctx, stream, stream.x, yBase + (ORIGINAL_HEIGHT * 2));
+};
+
+export const CyberDataStreamOverlay: React.FC = () => {
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const { width, height, fps } = useVideoConfig();
     const frame = useCurrentFrame();
 
+    const streams = useMemo(() => generateStreams(), []);
+
     const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
-
-    // Precalculate deterministic stream layout based on seeded LGC PRNG
-    const streams = useMemo(() => {
-        let seed = 98765;
-        const rand = (): number => {
-            const x = Math.sin(seed++) * 10000;
-            return x - Math.floor(x);
-        };
-
-        const tempStreams: StreamConfig[] = [];
-        for (let c = 0; c < COLUMNS; c++) {
-            // Layer 0
-            tempStreams.push(createStream(c, 0, rand));
-
-            // Layer 1 (45% chance)
-            if (rand() > 0.55) {
-                tempStreams.push(createStream(c, 1, rand));
-            }
-
-            // Layer 2 (25% chance)
-            if (rand() > 0.75) {
-                tempStreams.push(createStream(c, 2, rand));
-            }
-        }
-        return tempStreams;
-    }, []);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | null;
+        const ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D | null;
         if (!ctx) return;
 
-        // Strictly normalize time t (0.0 to 1.0) based on frame and duration
-        const t = frame / durationInFrames;
+        // Exactly 10-second looping cycle (60fps * 10 = 600 frames)
+        const cycleFrames = fps * 10;
+        const localFrame = frame % cycleFrames;
+        const t = localFrame / cycleFrames;
 
-        // Reset composite mode to draw background
         ctx.globalCompositeOperation = 'source-over';
 
-        // Draw deep cinematic gradient background with purple tint
         const bgGrad = ctx.createRadialGradient(
             ORIGINAL_WIDTH / 2,
             ORIGINAL_HEIGHT / 2,
@@ -249,7 +258,6 @@ export const LuminousDataStream: React.FC = () => {
         ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
 
-        // Dot matrix overlay
         ctx.fillStyle = "rgba(50, 20, 80, 0.1)";
         for (let dx = 0; dx < ORIGINAL_WIDTH; dx += 64) {
             for (let dy = 0; dy < ORIGINAL_HEIGHT; dy += 64) {
@@ -257,37 +265,27 @@ export const LuminousDataStream: React.FC = () => {
             }
         }
 
-        // Set screen mode for vibrant glow
         ctx.globalCompositeOperation = 'screen';
 
-        // Draw all data streams
         for (let i = 0; i < streams.length; i++) {
-            const s = streams[i];
-            const yNorm = (s.baseY + t * s.cycles) % 1.0;
-            const yBase = yNorm * ORIGINAL_HEIGHT;
-
-            // Render wraps for seamless loop animation
-            renderAt(ctx, s, s.x, yBase - ORIGINAL_HEIGHT);
-            renderAt(ctx, s, s.x, yBase);
-            renderAt(ctx, s, s.x, yBase + ORIGINAL_HEIGHT);
-            renderAt(ctx, s, s.x, yBase + (ORIGINAL_HEIGHT * 2));
+            drawStream(ctx, streams[i], t);
         }
-    }, [frame, durationInFrames, streams]);
-
-    const wrapperStyle: React.CSSProperties = {
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-        backgroundColor: '#050308',
-    };
+    }, [frame, fps, streams]);
 
     return (
-        <div style={wrapperStyle}>
+        <div
+            style={{
+                width: ORIGINAL_WIDTH,
+                height: ORIGINAL_HEIGHT,
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+                transformOrigin: 'center center',
+                overflow: 'hidden',
+                backgroundColor: '#050308'
+            }}
+        >
             <canvas
                 ref={canvasRef}
                 width={ORIGINAL_WIDTH}
@@ -295,12 +293,12 @@ export const LuminousDataStream: React.FC = () => {
                 style={{
                     width: '100%',
                     height: '100%',
-                    display: 'block',
+                    display: 'block'
                 }}
             />
         </div>
     );
 };
 
-export default LuminousDataStream;
+export default CyberDataStreamOverlay;
 // END_OF_FILE
