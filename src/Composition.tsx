@@ -30,12 +30,12 @@ const PremiumAbstractNeonShader: React.FC = () => {
       alpha: false,
       powerPreference: "high-performance" 
     });
-    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
+    renderer.setSize(width, height);
     renderer.setPixelRatio(1);
 
     const uniforms = {
       uTime: { value: 0.0 },
-      uResolution: { value: new THREE.Vector2(ORIGINAL_WIDTH, ORIGINAL_HEIGHT) }
+      uResolution: { value: new THREE.Vector2(width, height) }
     };
 
     const material = new THREE.ShaderMaterial({
@@ -159,7 +159,7 @@ const PremiumAbstractNeonShader: React.FC = () => {
       geometry.dispose();
       material.dispose();
     };
-  }, []);
+  }, [width, height]);
 
   // Frame-locked update for WebGL rendering
   useEffect(() => {
