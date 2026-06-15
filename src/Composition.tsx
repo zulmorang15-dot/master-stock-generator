@@ -2,366 +2,487 @@ import React, { useRef, useEffect } from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 import * as THREE from 'three';
 
-// Deterministic Cinematic Theme Setup
-const THEME = {
-  primaryColor: 0x00f0ff,
-  secondaryColor: 0xff00ff,
-  bgGradientStart: "#03020c",
-  bgGradientEnd: "#000000",
-  cssGlow: "#00f0ff",
-  cssGlowSec: "#ff00ff",
-  glassBg: "rgba(10, 10, 18, 0.45)",
-  glassBorder: "rgba(0, 240, 255, 0.4)"
-};
-
-const PARTICLE_COUNT = 1000;
-
-// Pre-calculate randomized layout structures outside render loop to maintain deterministic state
-const PARTICLE_DATA = Array.from({ length: PARTICLE_COUNT }, () => {
-  const radius = Math.random() * 55 + 5;
-  const theta = Math.random() * Math.PI * 2;
-  const z = (Math.random() - 0.5) * 120;
-  const phase = Math.random() * Math.PI * 2;
-  return { radius, theta, z, phase };
-});
-
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const PremiumCinematicEndscreen: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { width, height, fps } = useVideoConfig();
+const vertexShaderSource = `
+    uniform float uTime;
+    uniform float uFrequency;
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec3 vViewPosition;
+    
+    vec3 distort(vec3 p) {
+        float t = uTime;
+        p.x += sin(p.y * uFrequency + t) * 0.25;
+        p.y += cos(p.z * uFrequency + t * 1.2) * 0.25;
+        p.z += sin(p.x * uFrequency + t * 0.8) * 0.20;
+        p.x += cos(p.z * 4.0 + t * 2.0) * 0.05;
+        p.y += sin(p.x * 4.0 + t * 1.5) * 0.05;
+        return p;
+    }
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const particlesRef = useRef<THREE.Points | null>(null);
-  const complexMeshRef = useRef<THREE.Mesh | null>(null);
+    void main() {
+        vUv = uv;
+        vec3 stablePosition = position;
+        vec3 displacedPosition = distort(stablePosition);
+        
+        float delta = 0.01;
+        vec3 pX = distort(stablePosition + vec3(delta, 0.0, 0.0));
+        vec3 pY = distort(stablePosition + vec3(0.0, delta, 0.0));
+        vec3 normalOut = normalize(cross(pX - displacedPosition, pY - displacedPosition));
+        
+        vNormal = normalize(normalMatrix * normalOut);
+        vec4 mvPosition = modelViewMatrix * vec4(displacedPosition, 1.0);
+        vViewPosition = -mvPosition.xyz;
+        
+        gl_Position = projectionMatrix * mvPosition;
+    }
+`;
 
-  // Clean scaling calculation to ensure fullscreen coverage with no black bars
-  const scaleFactor = Math.max(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
+const fragmentShaderSource = `
+    uniform vec3 uColorBase;
+    uniform vec3 uColorHighlight;
+    uniform vec3 uColorGlow;
+    uniform float uTime;
+    varying vec2 vUv;
+    varying vec3 vNormal;
+    varying vec3 vViewPosition;
 
-  const loopDuration = 15; // 15 seconds loop
-  const totalFrames = fps * loopDuration;
-  const localFrame = frame % totalFrames;
-  const elapsedTime = localFrame / fps;
-  const loopFreq = (2 * Math.PI) / loopDuration;
+    void main() {
+        vec3 normal = normalize(vNormal);
+        vec3 viewDir = normalize(vViewPosition);
+        
+        float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+        
+        vec3 lightDir1 = normalize(vec3(2.0, 3.0, 4.0));
+        vec3 lightDir2 = normalize(vec3(-3.0, -2.0, 2.0));
+        
+        float diffuse1 = max(dot(normal, lightDir1), 0.0);
+        float diffuse2 = max(dot(normal, lightDir2), 0.0);
+        
+        vec3 reflectDir = reflect(-lightDir1, normal);
+        float spec = pow(max(dot(reflectDir, viewDir), 0.0), 32.0);
+        
+        vec3 chromeSurface = mix(uColorBase, uColorHighlight, normal.z * 0.5 + 0.5);
+        chromeSurface += vec3(fresnel * 0.6) * uColorGlow;
+        
+        vec3 finalColor = chromeSurface + (diffuse1 * 0.1) + (diffuse2 * vec3(0.0, 0.3, 0.4)) + (spec * 0.7);
+        
+        gl_FragColor = vec4(finalColor, 0.92);
+    }
+`;
 
-  // Cinematic Entry & Exit UI Reveal Animations (Seamless loop pairing)
-  const introTransition = interpolate(localFrame, [0, 45], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-    easing: Easing.out(Easing.quad),
-  });
-  const outroTransition = interpolate(localFrame, [totalFrames - 45, totalFrames], [1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-    easing: Easing.in(Easing.quad),
-  });
-  const uiTransition = introTransition * outroTransition;
+export const LiquidChromeEndscreen: React.FC = () => {
+    const { width, height, fps } = useVideoConfig();
+    const frame = useCurrentFrame();
 
-  // Initialize ThreeJS Cinematic Engine
-  useEffect(() => {
-    if (!canvasRef.current) return;
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+    const sceneRef = useRef<THREE.Scene | null>(null);
+    const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+    const liquidRibbonMeshRef = useRef<THREE.Mesh | null>(null);
+    const centerRingMeshRef = useRef<THREE.Mesh | null>(null);
+    
+    const customUniformsRef = useRef<{
+        uTime: { value: number };
+        uFrequency: { value: number };
+        uColorBase: { value: THREE.Color };
+        uColorHighlight: { value: THREE.Color };
+        uColorGlow: { value: THREE.Color };
+    } | null>(null);
 
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x020105, 0.015);
-    sceneRef.current = scene;
+    const secondaryUniformsRef = useRef<{
+        uTime: { value: number };
+        uFrequency: { value: number };
+        uColorBase: { value: THREE.Color };
+        uColorHighlight: { value: THREE.Color };
+        uColorGlow: { value: THREE.Color };
+    } | null>(null);
 
-    const camera = new THREE.PerspectiveCamera(60, ORIGINAL_WIDTH / ORIGINAL_HEIGHT, 0.1, 1000);
-    camera.position.z = 45;
-    cameraRef.current = camera;
+    // Scaling to fit rendering dimension exactly
+    const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-    const renderer = new THREE.WebGLRenderer({
-      canvas: canvasRef.current,
-      antialias: true,
-      alpha: true,
+    // Initial WebGL Setup
+    useEffect(() => {
+        if (!canvasRef.current) return;
+
+        const renderWidth = ORIGINAL_WIDTH;
+        const renderHeight = ORIGINAL_HEIGHT;
+
+        const renderer = new THREE.WebGLRenderer({
+            canvas: canvasRef.current,
+            antialias: true,
+            alpha: false,
+        });
+        renderer.setSize(renderWidth, renderHeight);
+        renderer.setPixelRatio(2);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        rendererRef.current = renderer;
+
+        const scene = new THREE.Scene();
+        sceneRef.current = scene;
+
+        const camera = new THREE.PerspectiveCamera(45, renderWidth / renderHeight, 0.1, 100);
+        camera.position.set(0, 0, 8);
+        cameraRef.current = camera;
+
+        // Unified shader uniforms mapping
+        const customUniforms = {
+            uTime: { value: 0 },
+            uFrequency: { value: 1.5 },
+            uColorBase: { value: new THREE.Color('#080d1a') },
+            uColorHighlight: { value: new THREE.Color('#c2d6ff') },
+            uColorGlow: { value: new THREE.Color('#00f2fe') }
+        };
+        customUniformsRef.current = customUniforms;
+
+        const secondaryUniforms = {
+            uTime: { value: 0 },
+            uFrequency: { value: 2.2 },
+            uColorBase: { value: new THREE.Color('#05030a') },
+            uColorHighlight: { value: new THREE.Color('#9d4edd') },
+            uColorGlow: { value: new THREE.Color('#00f2fe') }
+        };
+        secondaryUniformsRef.current = secondaryUniforms;
+
+        const liquidMaterial = new THREE.ShaderMaterial({
+            vertexShader: vertexShaderSource,
+            fragmentShader: fragmentShaderSource,
+            uniforms: customUniforms,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+
+        const secondaryLiquidMaterial = new THREE.ShaderMaterial({
+            vertexShader: vertexShaderSource,
+            fragmentShader: fragmentShaderSource,
+            uniforms: secondaryUniforms,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+
+        const liquidRibbonGeo = new THREE.TorusKnotGeometry(2.5, 0.6, 200, 35, 3, 5);
+        const centralRingGeo = new THREE.TorusGeometry(1.2, 0.12, 32, 100);
+
+        const liquidRibbonMesh = new THREE.Mesh(liquidRibbonGeo, liquidMaterial);
+        scene.add(liquidRibbonMesh);
+        liquidRibbonMeshRef.current = liquidRibbonMesh;
+
+        const centerRingMesh = new THREE.Mesh(centralRingGeo, secondaryLiquidMaterial);
+        centerRingMesh.position.set(0, 0, 1.5);
+        scene.add(centerRingMesh);
+        centerRingMeshRef.current = centerRingMesh;
+
+        const ambientLight = new THREE.AmbientLight('#020205', 0.5);
+        scene.add(ambientLight);
+
+        const pointLightCyan = new THREE.PointLight('#00f2fe', 3, 15);
+        pointLightCyan.position.set(-4, 3, 2);
+        scene.add(pointLightCyan);
+
+        const pointLightPurple = new THREE.PointLight('#7b2cbf', 4, 15);
+        pointLightPurple.position.set(4, -3, 2);
+        scene.add(pointLightPurple);
+
+        return () => {
+            renderer.dispose();
+            liquidRibbonGeo.dispose();
+            centralRingGeo.dispose();
+            liquidMaterial.dispose();
+            secondaryLiquidMaterial.dispose();
+        };
+    }, []);
+
+    // Deterministic Loop Rendering Loop
+    useEffect(() => {
+        const renderer = rendererRef.current;
+        const scene = sceneRef.current;
+        const camera = cameraRef.current;
+        const customUniforms = customUniformsRef.current;
+        const secondaryUniforms = secondaryUniformsRef.current;
+        const liquidRibbonMesh = liquidRibbonMeshRef.current;
+        const centerRingMesh = centerRingMeshRef.current;
+
+        if (!renderer || !scene || !camera) return;
+
+        // Perfectly loop-aligned phase mapping (1200 frames loop)
+        const shaderTime1 = (2 * Math.PI * 3 * frame) / 1200;
+        const shaderTime2 = (2 * Math.PI * 4 * frame) / 1200;
+
+        if (customUniforms) {
+            customUniforms.uTime.value = shaderTime1;
+        }
+        if (secondaryUniforms) {
+            secondaryUniforms.uTime.value = shaderTime2;
+        }
+
+        // Seamless 3D Rotations
+        if (liquidRibbonMesh) {
+            liquidRibbonMesh.rotation.x = (2 * Math.PI * 1 * frame) / 1200;
+            liquidRibbonMesh.rotation.y = (2 * Math.PI * 1 * frame) / 1200;
+            liquidRibbonMesh.rotation.z = Math.sin((2 * Math.PI * 1 * frame) / 1200) * 0.2;
+        }
+
+        if (centerRingMesh) {
+            centerRingMesh.rotation.x = Math.cos((2 * Math.PI * 2 * frame) / 1200) * 0.3;
+            centerRingMesh.rotation.y = Math.sin((2 * Math.PI * 2 * frame) / 1200) * 0.3;
+            centerRingMesh.rotation.z = (-2 * Math.PI * 2 * frame) / 1200;
+        }
+
+        // Loop-safe simulated drift
+        const driftAngle = (2 * Math.PI * frame) / 1200;
+        camera.position.x = Math.sin(driftAngle) * 0.15;
+        camera.position.y = Math.cos(driftAngle * 2) * 0.05;
+        camera.lookAt(0, 0, 0);
+
+        renderer.render(scene, camera);
+    }, [frame, fps]);
+
+    // UI Animations & Interactive Demonstration Simulations
+    // 4-second (240-frame) clean loop cycles
+    const sweepProgress = frame % 240;
+
+    const shineLeft = interpolate(sweepProgress, [0, 80, 240], [-100, 200, 200], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+        easing: Easing.linear,
     });
-    renderer.setSize(ORIGINAL_WIDTH, ORIGINAL_HEIGHT);
-    renderer.setPixelRatio(2);
-    rendererRef.current = renderer;
 
-    // Fluid Vortex Particle System Setup
-    const particleGeo = new THREE.BufferGeometry();
-    const positions = new Float32Array(PARTICLE_COUNT * 3);
-
-    PARTICLE_DATA.forEach((pt, i) => {
-      positions[i * 3] = Math.cos(pt.theta) * pt.radius;
-      positions[i * 3 + 1] = Math.sin(pt.theta) * pt.radius;
-      positions[i * 3 + 2] = pt.z;
+    const leftSweepOpacity = interpolate(sweepProgress, [0, 60, 120, 240], [0, 0.6, 0, 0], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+        easing: Easing.inOut(Easing.quad),
     });
 
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const pMaterial = new THREE.PointsMaterial({
-      color: THEME.primaryColor,
-      size: 0.35,
-      transparent: true,
-      opacity: 0.85,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+    const rightSweepOpacity = interpolate(sweepProgress, [0, 100, 160, 240], [0, 0, 0.6, 0], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+        easing: Easing.inOut(Easing.quad),
     });
 
-    const particles = new THREE.Points(particleGeo, pMaterial);
-    scene.add(particles);
-    particlesRef.current = particles;
+    // Simulated Interactive Hover Phases
+    // Left card hovers from frame 120 to 360
+    let leftCardScale = 1.0;
+    let leftCardTranslateY = 0;
+    let leftCardBorderColor = 'rgba(0, 242, 254, 0.15)';
+    let leftCardShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 40px rgba(0, 242, 254, 0.05)';
 
-    // Abstract Sculptural Torus Knot Core
-    const complexGeometry = new THREE.TorusKnotGeometry(14, 3.5, 200, 32, 3, 5);
-    const meshMaterial = new THREE.MeshStandardMaterial({
-      color: THEME.secondaryColor,
-      wireframe: true,
-      roughness: 0.1,
-      metalness: 0.9,
-      emissive: THEME.secondaryColor,
-      emissiveIntensity: 0.45,
-    });
+    if (frame >= 120 && frame < 360) {
+        const hoverProgress = interpolate(frame, [120, 180, 300, 360], [0, 1, 1, 0], {
+            extrapolateLeft: 'clamp',
+            extrapolateRight: 'clamp',
+            easing: Easing.inOut(Easing.quad),
+        });
+        leftCardScale = interpolate(hoverProgress, [0, 1], [1.0, 1.04]);
+        leftCardTranslateY = interpolate(hoverProgress, [0, 1], [0, -4]);
+        leftCardBorderColor = `rgba(0, 242, 254, ${interpolate(hoverProgress, [0, 1], [0.15, 0.5])})`;
+        leftCardShadow = hoverProgress > 0.5 
+            ? '0 30px 60px -10px rgba(0, 0, 0, 0.9), 0 0 50px rgba(0, 242, 254, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+            : '0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 40px rgba(0, 242, 254, 0.05)';
+    }
 
-    const complexMesh = new THREE.Mesh(complexGeometry, meshMaterial);
-    complexMesh.position.set(0, 0, -10);
-    scene.add(complexMesh);
-    complexMeshRef.current = complexMesh;
+    // Center subscribe hovers from frame 480 to 720
+    let subscribeScale = 1.0;
+    let subscribeBorderColor = 'rgba(157, 78, 221, 0.25)';
+    let subscribeShadow = '0 0 50px rgba(157, 78, 221, 0.15), inset 0 0 30px rgba(0, 242, 254, 0.05)';
 
-    // Lights
-    const dirLight1 = new THREE.DirectionalLight(0xffffff, 2);
-    dirLight1.position.set(1, 1, 1).normalize();
-    scene.add(dirLight1);
+    if (frame >= 480 && frame < 720) {
+        const hoverProgress = interpolate(frame, [480, 540, 660, 720], [0, 1, 1, 0], {
+            extrapolateLeft: 'clamp',
+            extrapolateRight: 'clamp',
+            easing: Easing.inOut(Easing.quad),
+        });
+        subscribeScale = interpolate(hoverProgress, [0, 1], [1.0, 1.06]);
+        subscribeBorderColor = `rgba(0, 242, 254, ${interpolate(hoverProgress, [0, 1], [0.25, 0.6])})`;
+        subscribeShadow = hoverProgress > 0.5
+            ? '0 0 60px rgba(0, 242, 254, 0.3), 0 0 30px rgba(157, 78, 221, 0.3), inset 0 0 20px rgba(255, 255, 255, 0.1)'
+            : '0 0 50px rgba(157, 78, 221, 0.15), inset 0 0 30px rgba(0, 242, 254, 0.05)';
+    }
 
-    const pointLight = new THREE.PointLight(THEME.primaryColor, 3, 100);
-    pointLight.position.set(0, 0, 10);
-    scene.add(pointLight);
+    // Right card hovers from frame 840 to 1080
+    let rightCardScale = 1.0;
+    let rightCardTranslateY = 0;
+    let rightCardBorderColor = 'rgba(0, 242, 254, 0.15)';
+    let rightCardShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 40px rgba(0, 242, 254, 0.05)';
 
-    return () => {
-      renderer.dispose();
-      particleGeo.dispose();
-      pMaterial.dispose();
-      complexGeometry.dispose();
-      meshMaterial.dispose();
+    if (frame >= 840 && frame < 1080) {
+        const hoverProgress = interpolate(frame, [840, 900, 1020, 1080], [0, 1, 1, 0], {
+            extrapolateLeft: 'clamp',
+            extrapolateRight: 'clamp',
+            easing: Easing.inOut(Easing.quad),
+        });
+        rightCardScale = interpolate(hoverProgress, [0, 1], [1.0, 1.04]);
+        rightCardTranslateY = interpolate(hoverProgress, [0, 1], [0, -4]);
+        rightCardBorderColor = `rgba(0, 242, 254, ${interpolate(hoverProgress, [0, 1], [0.15, 0.5])})`;
+        rightCardShadow = hoverProgress > 0.5
+            ? '0 30px 60px -10px rgba(0, 0, 0, 0.9), 0 0 50px rgba(0, 242, 254, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+            : '0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 40px rgba(0, 242, 254, 0.05)';
+    }
+
+    // Styles objects transformed to CamelCase React Styles
+    const containerStyle: React.CSSProperties = {
+        width: ORIGINAL_WIDTH,
+        height: ORIGINAL_HEIGHT,
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+        transformOrigin: 'center center',
+        backgroundColor: '#030307',
+        overflow: 'hidden',
+        boxShadow: '0 0 100px rgba(0, 0, 0, 0.8)',
     };
-  }, []);
 
-  // Frame-Locked Updates
-  useEffect(() => {
-    const renderer = rendererRef.current;
-    const scene = sceneRef.current;
-    const camera = cameraRef.current;
-    const particles = particlesRef.current;
-    const complexMesh = complexMeshRef.current;
+    const canvasStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 1,
+    };
 
-    if (!renderer || !scene || !camera) return;
+    const vignetteStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        background: 'radial-gradient(circle at center, transparent 30%, rgba(0, 0, 0, 0.4) 70%, rgba(2, 2, 6, 0.95) 100%)',
+        pointerEvents: 'none',
+        zIndex: 2,
+    };
 
-    // Seamless camera rotation/drift path mapping
-    camera.position.x = Math.sin(elapsedTime * loopFreq) * 2.5;
-    camera.position.y = Math.cos(elapsedTime * loopFreq) * 1.8;
-    camera.lookAt(scene.position);
+    const uiLayerStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 3,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(12, 1fr)',
+        gridTemplateRows: 'repeat(12, 1fr)',
+        padding: '90px',
+        pointerEvents: 'none',
+    };
 
-    // Knot core continuous seamless transformation
-    if (complexMesh) {
-      complexMesh.rotation.x = elapsedTime * loopFreq * 2;
-      complexMesh.rotation.y = elapsedTime * loopFreq * 3;
-      complexMesh.rotation.z = Math.sin(elapsedTime * loopFreq) * 0.5;
-    }
+    const videoPlaceholderStyle: React.CSSProperties = {
+        pointerEvents: 'auto',
+        borderRadius: '24px',
+        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
+        backdropFilter: 'blur(25px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(25px) saturate(180%)',
+        position: 'relative',
+        overflow: 'hidden',
+    };
 
-    // Mathematical dynamic particle stream updates
-    if (particles) {
-      const positions = particles.geometry.attributes.position.array as Float32Array;
-      const zRange = 120;
+    const videoLeftStyle: React.CSSProperties = {
+        ...videoPlaceholderStyle,
+        gridColumn: '1 / 5',
+        gridRow: '4 / 10',
+        width: '530px',
+        height: '298px',
+        alignSelf: 'center',
+        transform: `scale(${leftCardScale}) translateY(${leftCardTranslateY}px)`,
+        borderColor: leftCardBorderColor,
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        boxShadow: leftCardShadow,
+    };
 
-      for (let i = 0; i < PARTICLE_COUNT; i++) {
-        const pt = PARTICLE_DATA[i];
-        let currentZ = pt.z + elapsedTime * 16.0;
-        currentZ = ((currentZ + 60) % zRange) - 60; // Clean viewport modulo wrap
+    const videoRightStyle: React.CSSProperties = {
+        ...videoPlaceholderStyle,
+        gridColumn: '9 / 13',
+        gridRow: '4 / 10',
+        width: '530px',
+        height: '298px',
+        alignSelf: 'center',
+        justifySelf: 'end',
+        transform: `scale(${rightCardScale}) translateY(${rightCardTranslateY}px)`,
+        borderColor: rightCardBorderColor,
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        boxShadow: rightCardShadow,
+    };
 
-        const idx = i * 3;
-        positions[idx] = Math.cos(pt.theta) * pt.radius + Math.sin(elapsedTime * loopFreq * 5 + pt.phase) * 1.5;
-        positions[idx + 1] = Math.sin(pt.theta) * pt.radius + Math.cos(elapsedTime * loopFreq * 5 + pt.phase) * 1.5;
-        positions[idx + 2] = currentZ;
-      }
+    const shineStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: 0,
+        left: `${shineLeft}%`,
+        width: '50%',
+        height: '100%',
+        background: 'linear-gradient(90deg, transparent, rgba(0, 242, 254, 0.2), transparent)',
+        transform: 'skewX(-25deg)',
+    };
 
-      particles.geometry.attributes.position.needsUpdate = true;
-      particles.rotation.z = elapsedTime * loopFreq;
-    }
+    const subscribeContainerStyle: React.CSSProperties = {
+        gridColumn: '5 / 9',
+        gridRow: '4 / 10',
+        placeSelf: 'center',
+        width: '240px',
+        height: '240px',
+        position: 'relative',
+        pointerEvents: 'auto',
+    };
 
-    renderer.render(scene, camera);
-  }, [localFrame, elapsedTime, loopFreq]);
+    const subscribeCoreStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: '20px',
+        left: '20px',
+        width: '200px',
+        height: '200px',
+        borderRadius: '50%',
+        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: `scale(${subscribeScale})`,
+        borderColor: subscribeBorderColor,
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        boxShadow: subscribeShadow,
+    };
 
-  // Frame-Locked Gradient Sweep (4.5s cycle)
-  const sweepFrame = localFrame % (fps * 4.5);
-  const sweepPercent = interpolate(sweepFrame, [0, fps * 4.5], [-100, 100], {
-    easing: Easing.inOut(Easing.quad),
-  });
+    const lightSweepStyle = (opacityValue: number): React.CSSProperties => ({
+        position: 'absolute',
+        width: '100%',
+        height: '100%',
+        top: 0,
+        left: 0,
+        background: 'linear-gradient(to bottom, transparent, rgba(0, 242, 254, 0.15), transparent)',
+        opacity: opacityValue,
+        pointerEvents: 'none',
+    });
 
-  // Infinite Ambient Float Mechanics for Placeholders
-  const floatYLeft = Math.sin(elapsedTime * loopFreq * 2) * 10;
-  const floatYRight = Math.cos(elapsedTime * loopFreq * 2) * 10;
-  const floatXLeft = Math.cos(elapsedTime * loopFreq) * 6;
-  const floatXRight = -Math.cos(elapsedTime * loopFreq) * 6;
+    return (
+        <div style={containerStyle}>
+            <canvas ref={canvasRef} style={canvasStyle} />
+            
+            <div style={vignetteStyle} />
 
-  // Reveal Animations
-  const videoYOffset = interpolate(uiTransition, [0, 1], [60, 0]);
-  const videoScale = interpolate(uiTransition, [0, 1], [0.8, 1]);
-  const subscribeScale = interpolate(uiTransition, [0, 1], [0, 1], {
-    easing: Easing.bezier(0.25, 1, 0.5, 1.15),
-  });
+            <div style={uiLayerStyle}>
+                <div style={videoLeftStyle} id="card-left">
+                    <div style={shineStyle} />
+                    <div style={lightSweepStyle(leftSweepOpacity)} />
+                </div>
 
-  // Seamless ring rotation coordinates
-  const ring1Rotation = (localFrame / totalFrames) * 360;
-  const ring2Rotation = 360 - (localFrame / totalFrames) * 360;
+                <div style={subscribeContainerStyle} id="card-center">
+                    <div style={subscribeCoreStyle} />
+                </div>
 
-  // Style Definitions (Guaranteeing CamelCase JSX compliance)
-  const wrapperStyle: React.CSSProperties = {
-    width: ORIGINAL_WIDTH,
-    height: ORIGINAL_HEIGHT,
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-    transformOrigin: 'center center',
-    overflow: 'hidden',
-    background: 'radial-gradient(circle at 50% 50%, #0a0616 0%, #020105 100%)',
-  };
-
-  const uiLayerStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: 10,
-    pointerEvents: 'auto',
-    boxSizing: 'border-box',
-    padding: '90px',
-  };
-
-  const videoPlaceholderBase: React.CSSProperties = {
-    position: 'absolute',
-    width: '620px',
-    height: '348px',
-    background: THEME.glassBg,
-    backdropFilter: 'blur(25px) saturate(180%)',
-    WebkitBackdropFilter: 'blur(25px) saturate(180%)',
-    border: `3px solid ${THEME.glassBorder}`,
-    borderRadius: '24px',
-    boxShadow: `0 0 50px rgba(0, 0, 0, 0.8), inset 0 0 30px rgba(255, 255, 255, 0.05), 0 0 30px ${THEME.glassBorder}`,
-    overflow: 'hidden',
-  };
-
-  const leftVideoStyle: React.CSSProperties = {
-    ...videoPlaceholderBase,
-    left: '110px',
-    top: '366px',
-    transform: `translate(${floatXLeft}px, ${floatYLeft + videoYOffset}px) scale(${videoScale})`,
-    opacity: uiTransition,
-  };
-
-  const rightVideoStyle: React.CSSProperties = {
-    ...videoPlaceholderBase,
-    right: '110px',
-    top: '366px',
-    transform: `translate(${floatXRight}px, ${floatYRight + videoYOffset}px) scale(${videoScale})`,
-    opacity: uiTransition,
-  };
-
-  const sweepOverlayStyle: React.CSSProperties = {
-    content: '""',
-    position: 'absolute',
-    top: '-50%',
-    left: '-50%',
-    width: '200%',
-    height: '200%',
-    background: 'linear-gradient(45deg, transparent 45%, rgba(255, 255, 255, 0.1) 50%, transparent 55%)',
-    transform: `translate(${sweepPercent}%, ${sweepPercent}%) rotate(45deg)`,
-    pointerEvents: 'none',
-  };
-
-  const subscribeWrapperStyle: React.CSSProperties = {
-    position: 'absolute',
-    left: '50%',
-    top: '540px',
-    transform: 'translate(-50%, -50%)',
-    width: '280px',
-    height: '280px',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-  };
-
-  const outerRingBaseStyle: React.CSSProperties = {
-    position: 'absolute',
-    borderRadius: '50%',
-    opacity: 0.6 * uiTransition,
-    pointerEvents: 'none',
-  };
-
-  const ring1Style: React.CSSProperties = {
-    ...outerRingBaseStyle,
-    width: '250px',
-    height: '250px',
-    border: `2px dashed ${THEME.cssGlowSec}`,
-    filter: `drop-shadow(0 0 8px ${THEME.cssGlowSec})`,
-    transform: `rotate(${ring1Rotation}deg)`,
-  };
-
-  const ring2Style: React.CSSProperties = {
-    ...outerRingBaseStyle,
-    width: '275px',
-    height: '275px',
-    border: `1px solid ${THEME.cssGlow}`,
-    borderImage: `linear-gradient(to right, ${THEME.cssGlow} 40px, transparent 180px) 1`,
-    filter: `drop-shadow(0 0 12px ${THEME.cssGlow})`,
-    transform: `rotate(${ring2Rotation}deg)`,
-  };
-
-  const subscribeCircleStyle: React.CSSProperties = {
-    width: '190px',
-    height: '190px',
-    background: THEME.glassBg,
-    backdropFilter: 'blur(30px)',
-    WebkitBackdropFilter: 'blur(30px)',
-    border: `4px solid ${THEME.cssGlow}`,
-    borderRadius: '50%',
-    boxShadow: `0 0 60px rgba(0, 0, 0, 0.9), 0 0 40px ${THEME.cssGlow}, inset 0 0 25px rgba(255, 255, 255, 0.1)`,
-    position: 'relative',
-    zIndex: 5,
-    cursor: 'pointer',
-    transform: `scale(${subscribeScale})`,
-    opacity: uiTransition,
-  };
-
-  const vignetteStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    background: 'radial-gradient(circle at 50% 50%, transparent 30%, rgba(2, 1, 5, 0.85) 100%)',
-    zIndex: 5,
-    pointerEvents: 'none',
-  };
-
-  return (
-    <div style={wrapperStyle}>
-      <canvas ref={canvasRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' }} />
-      <div style={vignetteStyle} />
-      <div style={uiLayerStyle}>
-        <div style={leftVideoStyle}>
-          <div style={sweepOverlayStyle} />
+                <div style={videoRightStyle} id="card-right">
+                    <div style={shineStyle} />
+                    <div style={lightSweepStyle(rightSweepOpacity)} />
+                </div>
+            </div>
         </div>
-
-        <div style={subscribeWrapperStyle}>
-          <div style={ring1Style} />
-          <div style={ring2Style} />
-          <div style={subscribeCircleStyle} />
-        </div>
-
-        <div style={rightVideoStyle}>
-          <div style={sweepOverlayStyle} />
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
-export default PremiumCinematicEndscreen;
+export default LiquidChromeEndscreen;
 // END_OF_FILE
