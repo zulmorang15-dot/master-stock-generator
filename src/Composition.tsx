@@ -1,504 +1,529 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
 
-// 🎨 CYBER COLOR PALETTE
-const COLORS = ['#00f0ff', '#0066ff', '#bd00ff', '#ff00c8', '#00ff9d', '#3d7bff', '#00d4ff'];
-
-// Deterministic seed-based PRNG to avoid Math.random() inside component render
-let seed = 98765;
-const random = () => {
-  const x = Math.sin(seed++) * 10000;
-  return x - Math.floor(x);
-};
-const rnd = (min: number, max: number) => min + random() * (max - min);
-const pick = <T,>(arr: T[]): T => arr[Math.floor(random() * arr.length)];
-
-// Smooth color interpolation helper for frame-locked breathing effects
-const interpColor = (p: number, r1: number, g1: number, b1: number, a1: number, r2: number, g2: number, b2: number, a2: number) => {
-  const r = Math.round(r1 + (r2 - r1) * p);
-  const g = Math.round(g1 + (g2 - g1) * p);
-  const b = Math.round(b1 + (b2 - b1) * p);
-  const a = a1 + (a2 - a1) * p;
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-};
-
-interface StreakData {
-  width: number;
-  height: number;
-  left: number;
-  color: string;
-  opacity: number;
-  rev: boolean;
-  duration: number;
-  offset: number;
+// Seed-based Pseudo-Random Number Generator for strict determinism
+function createSeededRandom(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
+  }
+  return function() {
+    h = Math.imul(h ^ h >>> 16, 2246822507);
+    h = Math.imul(h ^ h >>> 13, 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
 }
 
-// Generate static, deterministic stream of vertical lines
-const STREAKS: StreakData[] = Array.from({ length: 50 }).map(() => {
-  const thick = rnd(2, 9);
-  return {
-    width: thick,
-    height: rnd(80, 420),
-    left: rnd(0, 100),
-    color: pick(COLORS),
-    opacity: Number(rnd(0.35, 0.9).toFixed(2)),
-    rev: random() > 0.5,
-    duration: rnd(1.5, 3.5),
-    offset: random(),
-  };
+const rng = createSeededRandom("neon_cyberpunk_seed_payload_v1");
+
+const COLORS = ['#00b3ff', '#ff1f5a', '#8a2be2', '#00ffd5', '#ff00e6', '#5d8bff', '#ff7a00', '#39ff14'];
+
+// Pre-calculate randomized elements outside render
+const STREAKS = Array.from({ length: 50 }).map(() => {
+  const color = COLORS[Math.floor(rng() * COLORS.length)];
+  const thick = 2 + rng() * 7;
+  const width = 80 + rng() * 340;
+  const top = rng() * 100;
+  const rev = rng() > 0.5;
+  const opacity = 0.35 + rng() * 0.55;
+  const duration = 1.2 + rng() * 2.3;
+  const delay = rng() * 5;
+  return { color, thick, width, top, rev, opacity, duration, delay };
 });
 
-interface DotlineData {
-  width: number;
-  height: number;
-  left: number;
-  color: string;
-  gap: number;
-  opacity: number;
-  rev: boolean;
-  duration: number;
-  offset: number;
-}
-
-// Generate static vertical dotted lines
-const DOTLINES: DotlineData[] = Array.from({ length: 24 }).map(() => {
-  const size = rnd(2, 5);
-  return {
-    width: size,
-    height: rnd(120, 380),
-    left: rnd(0, 100),
-    color: pick(COLORS),
-    gap: rnd(8, 18),
-    opacity: Number(rnd(0.5, 1).toFixed(2)),
-    rev: random() > 0.5,
-    duration: rnd(1.8, 3.8),
-    offset: random(),
-  };
+const DOTLINES = Array.from({ length: 24 }).map(() => {
+  const color = COLORS[Math.floor(rng() * COLORS.length)];
+  const size = 2 + rng() * 3;
+  const gap = 8 + rng() * 10;
+  const width = 120 + rng() * 260;
+  const top = rng() * 100;
+  const rev = rng() > 0.5;
+  const opacity = 0.5 + rng() * 0.5;
+  const duration = 1.5 + rng() * 2.3;
+  const delay = rng() * 5;
+  return { color, size, gap, width, top, rev, opacity, duration, delay };
 });
 
-interface DotData {
-  size: number;
-  top: number;
-  left: number;
-  color: string;
-  opacity: number;
-  moveDuration: number;
-  twinkleDuration: number;
-  moveOffset: number;
-  twinkleOffset: number;
-}
-
-// Generate static twinkling ambient background particles
-const DOTS: DotData[] = Array.from({ length: 45 }).map(() => {
-  return {
-    size: rnd(2, 6),
-    top: rnd(0, 100),
-    left: rnd(0, 100),
-    color: pick(COLORS),
-    opacity: Number(rnd(0.4, 1).toFixed(2)),
-    moveDuration: rnd(2.5, 6),
-    twinkleDuration: rnd(1.5, 3),
-    moveOffset: random(),
-    twinkleOffset: random(),
-  };
+const DOTS = Array.from({ length: 45 }).map(() => {
+  const color = COLORS[Math.floor(rng() * COLORS.length)];
+  const size = 2 + rng() * 4;
+  const top = rng() * 100;
+  const left = rng() * 100;
+  const opacity = 0.4 + rng() * 0.6;
+  const twinkleDuration = 1.5 + rng() * 1.5;
+  const twinkleDelay = rng() * 2;
+  const moveDuration = 2 + rng() * 4;
+  const moveDelay = rng() * 6;
+  return { color, size, top, left, opacity, twinkleDuration, twinkleDelay, moveDuration, moveDelay };
 });
 
 const ORIGINAL_WIDTH = 1920;
 const ORIGINAL_HEIGHT = 1080;
 
-const CyberNeonFlow: React.FC = () => {
-  const frame = useCurrentFrame();
+const CyberpunkNeonFrames: React.FC = () => {
   const { width, height, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
 
-  // Fullscreen 16:9 aspect ratio preservation scaling
+  // Fullscreen scale logic
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // 1. Ambient Background Hue shift (20s cycle matches total duration seamlessly)
-  const hue = (frame / (fps * 20)) * 360;
-  const ambientStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    background: `
-      radial-gradient(circle at 50% 50%, rgba(0, 102, 255, 0.28), transparent 60%),
-      radial-gradient(circle at 20% 80%, rgba(189, 0, 255, 0.18), transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(0, 240, 255, 0.18), transparent 50%)
-    `,
-    zIndex: 0,
-    filter: `hue-rotate(${hue}deg)`,
-  };
+  // 1. Ambient shifting radial glow (20s cycle)
+  const hueRotate = interpolate(frame % (fps * 20), [0, fps * 20], [0, 360]);
 
-  // 2. Pixel Grid moving & breathing (4s pulse cycle, 20s grid translation loops at exactly 38px size)
-  const gridPulseProgress = (frame % (fps * 4)) / (fps * 4);
-  const gridPulseOpacity = interpolate(gridPulseProgress, [0, 0.5, 1], [0.22, 0.55, 0.22]);
-  const gridScrollProgress = (frame / (fps * 20)) * 38;
-  const pixelGridStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: -50,
-    backgroundImage: `
-      linear-gradient(rgba(0, 240, 255, 0.07) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 240, 255, 0.07) 1px, transparent 1px)
-    `,
-    backgroundSize: '38px 38px',
-    opacity: gridPulseOpacity,
-    transform: `translateY(${gridScrollProgress}px)`,
-    zIndex: 1,
-  };
+  // 2. Pixel grid parallax pulse & scroll
+  const gridOpacity = interpolate(
+    frame % (fps * 4),
+    [0, fps * 2, fps * 4],
+    [0.22, 0.55, 0.22],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+  const gridScrollX = interpolate(frame % (fps * 20), [0, fps * 20], [0, 38]);
+  const gridScrollY = interpolate(frame % (fps * 20), [0, fps * 20], [0, 38]);
 
-  // 3. Scanline sweep effect (10s cycle)
-  const scanProgress = (frame % (fps * 10)) / (fps * 10);
-  const scanLeft = interpolate(scanProgress, [0, 1], [-160, 1920]);
-  const scanlineStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0,
-    height: '100%',
-    width: 160,
-    background: 'linear-gradient(to right, transparent, rgba(0, 240, 255, 0.08), rgba(189, 0, 255, 0.08), transparent)',
-    zIndex: 3,
-    pointerEvents: 'none',
-    left: scanLeft,
-  };
+  // 3. Scanline horizontal sweep (5s cycle)
+  const scanTop = interpolate(frame % (fps * 5), [0, fps * 5], [-140, ORIGINAL_HEIGHT]);
 
-  // 4. Glitching & pulsing neon Title (5s cycle loop)
-  const titleGlowPulseProgress = (frame % (fps * 2.5)) / (fps * 2.5);
-  const titleBrightness = interpolate(titleGlowPulseProgress, [0, 0.5, 1], [1, 1.8, 1]);
-  const titleSaturate = interpolate(titleGlowPulseProgress, [0, 0.5, 1], [1.2, 1.7, 1.2]);
-
-  const titleGlitchProgress = (frame % (fps * 5)) / (fps * 5);
-  const titleTx = interpolate(titleGlitchProgress, [0, 0.90, 0.91, 0.93, 0.95, 1.0], [0, 0, -3, 3, 0, 0]);
-  const titleSkewX = interpolate(titleGlitchProgress, [0, 0.90, 0.91, 0.93, 0.95, 1.0], [0, 0, 5, -5, 0, 0]);
-
-  let titleShadow = '0 0 12px #00f0ff, 0 0 24px #ff00c8';
-  if (titleGlitchProgress >= 0.90 && titleGlitchProgress < 0.92) {
-    titleShadow = '2px 0 #ff00c8, -2px 0 #00f0ff';
-  } else if (titleGlitchProgress >= 0.92 && titleGlitchProgress < 0.94) {
-    titleShadow = '-2px 0 #ff00c8, 2px 0 #00f0ff';
-  }
-
-  const titleStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 140,
-    width: '100%',
-    textAlign: 'center',
-    zIndex: 5,
-    color: '#fff',
-    fontSize: 44,
-    letterSpacing: 10,
-    textTransform: 'uppercase',
-    textShadow: titleShadow,
-    filter: `brightness(${titleBrightness}) saturate(${titleSaturate})`,
-    transform: `translateX(${titleTx}px) skewX(${titleSkewX}deg)`,
-    fontFamily: `'Segoe UI', Arial, sans-serif`,
-    fontWeight: 700,
-  };
-
-  // 5. Container floating motion (5s cycle loop)
-  const containerFloatProgress = (frame % (fps * 5)) / (fps * 5);
-  const containerY = interpolate(containerFloatProgress, [0, 0.5, 1], [0, -20, 0], {
-    easing: Easing.inOut(Easing.quad),
-  });
-  const containerStyle: React.CSSProperties = {
-    position: 'relative',
-    zIndex: 5,
-    width: 1200,
-    height: 450,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    transform: `translateY(${containerY}px)`,
-  };
-
-  // 6. Generic Flicker animation for Content/CTA labels
-  const labelFlickerProgress = (frame % (fps * 5)) / (fps * 5);
-  const labelOpacity = interpolate(
-    labelFlickerProgress,
-    [0, 0.92, 0.93, 0.94, 0.96, 0.97, 1.0],
-    [1, 1, 0.4, 1, 0.6, 1, 1]
+  // 4. Main container float animation (5s cycle)
+  const translateY = interpolate(
+    frame % (fps * 5),
+    [0, fps * 2.5, fps * 5],
+    [0, -14, 0],
+    { easing: Easing.inOut(Easing.quad) }
   );
 
-  const labelStyle: React.CSSProperties = {
+  // 5. Shared Glow Pulse values (4s cycle)
+  const brightness = interpolate(
+    frame % (fps * 4),
+    [0, fps * 2, fps * 4],
+    [1, 1.8, 1],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+  const saturate = interpolate(
+    frame % (fps * 4),
+    [0, fps * 2, fps * 4],
+    [1.2, 1.7, 1.2],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+
+  // 6. Border flow background positional shifting (5s cycle)
+  const bgPosX = interpolate(frame % (fps * 5), [0, fps * 5], [0, 100]);
+  const bgPosXRight = interpolate(frame % (fps * 5), [0, fps * 5], [100, 0]);
+
+  // 7. Perspective rotations (5s cycle)
+  const tiltAngleL = interpolate(
+    frame % (fps * 5),
+    [0, fps * 2.5, fps * 5],
+    [6, -2, 6],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+  const tiltAngleR = interpolate(
+    (frame + Math.round(1.2 * fps)) % (fps * 5),
+    [0, fps * 2.5, fps * 5],
+    [-6, 2, -6],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+
+  // 8. Circle Spin (5s cycle) and orbit elements
+  const rotateDeg = interpolate(frame % (fps * 5), [0, fps * 5], [0, 360]);
+  const rotateDegReverse = interpolate(frame % (fps * 10), [0, fps * 10], [0, 360]);
+  const orbitRotate = interpolate(frame % (fps * 4), [0, fps * 4], [0, 360]);
+
+  // 9. Breathe Pulse (4s cycle) for circle shadows
+  const breatheProgress = interpolate(
+    frame % (fps * 4),
+    [0, fps * 2, fps * 4],
+    [0, 1, 0],
+    { easing: Easing.inOut(Easing.quad) }
+  );
+  const shadowBlur1 = interpolate(breatheProgress, [0, 1], [18, 30]);
+  const shadowBlur2 = interpolate(breatheProgress, [0, 1], [40, 70]);
+  const shadowBlur3 = interpolate(breatheProgress, [0, 1], [25, 35]);
+  const breatheShadowColor1 = breatheProgress > 0.5 ? '#ff00e6' : '#8a2be2';
+  const breatheShadowColor2 = breatheProgress > 0.5 ? 'rgba(0,255,213,0.7)' : 'rgba(0,200,255,0.5)';
+  const breatheShadowColor3 = breatheProgress > 0.5 ? 'rgba(255,0,230,0.4)' : 'rgba(150,0,255,0.3)';
+
+  // 10. Text flicker opacity (5s cycle)
+  const flickerFrame = frame % (fps * 5);
+  const pct = (flickerFrame / (fps * 5)) * 100;
+  let flickerOpacity = 1;
+  if (pct >= 92 && pct < 93) flickerOpacity = interpolate(pct, [92, 93], [1, 0.4]);
+  else if (pct >= 93 && pct < 94) flickerOpacity = interpolate(pct, [93, 94], [0.4, 1]);
+  else if (pct >= 94 && pct < 96) flickerOpacity = interpolate(pct, [94, 96], [1, 0.6]);
+  else if (pct >= 96 && pct < 97) flickerOpacity = interpolate(pct, [96, 97], [0.6, 1]);
+
+  // 11. Title Glitch translation / skew calculation (5s cycle)
+  const titleGlitchFrame = frame % (fps * 5);
+  const glitchPct = (titleGlitchFrame / (fps * 5)) * 100;
+  let glitchX = 0;
+  let glitchSkew = 0;
+  let useGlitchShadow = false;
+  if (glitchPct >= 90 && glitchPct < 91) {
+    glitchX = interpolate(glitchPct, [90, 91], [0, -3]);
+    glitchSkew = interpolate(glitchPct, [90, 91], [0, 5]);
+    useGlitchShadow = true;
+  } else if (glitchPct >= 91 && glitchPct < 93) {
+    glitchX = interpolate(glitchPct, [91, 93], [-3, 3]);
+    glitchSkew = interpolate(glitchPct, [91, 93], [5, -5]);
+    useGlitchShadow = true;
+  } else if (glitchPct >= 93 && glitchPct < 95) {
+    glitchX = interpolate(glitchPct, [93, 95], [3, 0]);
+    glitchSkew = interpolate(glitchPct, [93, 95], [-5, 0]);
+    useGlitchShadow = true;
+  }
+
+  const mainWrapperStyle: React.CSSProperties = {
+    width: ORIGINAL_WIDTH,
+    height: ORIGINAL_HEIGHT,
     position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    fontSize: 24,
-    fontWeight: 700,
-    letterSpacing: 2,
-    color: '#d6faff',
-    textShadow: '0 0 10px #00f0ff, 0 0 18px #ff00c8',
-    pointerEvents: 'none',
-    opacity: labelOpacity,
-    fontFamily: `'Segoe UI', Arial, sans-serif`,
-  };
-
-  // --- Dynamic Framework animations (Left Card, Right Card, Center Circle) ---
-  const globalPulseProgress = (frame % (fps * 2.5)) / (fps * 2.5);
-  const elementBrightness = interpolate(globalPulseProgress, [0, 0.5, 1], [1, 1.8, 1]);
-  const elementSaturate = interpolate(globalPulseProgress, [0, 0.5, 1], [1.2, 1.7, 1.2]);
-
-  // A. Left Rect Frame
-  const rectLeftBorderFlowY = ((frame % (fps * 5)) / (fps * 5)) * 100;
-  const tiltLProgress = (frame % (fps * 5)) / (fps * 5);
-  const tiltLAngle = interpolate(tiltLProgress, [0, 0.5, 1], [6, -2, 6]);
-
-  const rectLeftStyle: React.CSSProperties = {
-    position: 'absolute',
-    width: 380,
-    height: 240,
-    left: 100,
-    borderRadius: 8,
-    border: '3px solid transparent',
-    background: `
-      linear-gradient(rgba(4, 8, 20, 0.85), rgba(4, 8, 20, 0.85)) padding-box,
-      linear-gradient(160deg, #00f0ff, #0066ff, #bd00ff, #00ff9d, #00f0ff) border-box
-    `,
-    backgroundSize: '100% 100%, 300% 300%',
-    backgroundPosition: `0% 0%, 50% ${rectLeftBorderFlowY}%`,
-    boxShadow: '0 0 16px #00f0ff, 0 0 35px rgba(189, 0, 255, 0.55), inset 0 0 25px rgba(0, 240, 255, 0.25)',
-    filter: `brightness(${elementBrightness}) saturate(${elementSaturate})`,
-    transform: `perspective(800px) rotateY(${tiltLAngle}deg)`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    backdropFilter: 'blur(2px)',
-  };
-
-  // B. Right Rect Frame
-  const rectRightBorderFlowY = 100 - ((frame % (fps * 5)) / (fps * 5)) * 100;
-  const tiltRProgress = ((frame % (fps * 5)) / (fps * 5) + 0.24) % 1;
-  const tiltRAngle = interpolate(tiltRProgress, [0, 0.5, 1], [-6, 2, -6]);
-
-  const rectRightStyle: React.CSSProperties = {
-    position: 'absolute',
-    width: 380,
-    height: 240,
-    right: 100,
-    borderRadius: 8,
-    border: '3px solid transparent',
-    background: `
-      linear-gradient(rgba(4, 8, 20, 0.85), rgba(4, 8, 20, 0.85)) padding-box,
-      linear-gradient(20deg, #ff00c8, #bd00ff, #0066ff, #00ff9d, #ff00c8) border-box
-    `,
-    backgroundSize: '100% 100%, 300% 300%',
-    backgroundPosition: `0% 0%, 50% ${rectRightBorderFlowY}%`,
-    boxShadow: '0 0 16px #ff00c8, 0 0 35px rgba(0, 102, 255, 0.55), inset 0 0 25px rgba(189, 0, 255, 0.25)',
-    filter: `brightness(${elementBrightness}) saturate(${elementSaturate})`,
-    transform: `perspective(800px) rotateY(${tiltRAngle}deg)`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    backdropFilter: 'blur(2px)',
-  };
-
-  // C. Centered Circular Frame components
-  const breatheProgress = (frame % (fps * 4)) / (fps * 4);
-  const bValue = interpolate(breatheProgress, [0, 0.5, 1], [0, 1, 0]);
-
-  // Color & intensity breathing transitions inside Center CTA Frame
-  const shadowColor1 = interpColor(bValue, 189, 0, 255, 1.0, 255, 0, 200, 1.0);
-  const shadowColor2 = interpColor(bValue, 0, 240, 255, 0.5, 0, 255, 157, 0.7);
-  const shadowColor3 = interpColor(bValue, 189, 0, 255, 0.3, 255, 0, 200, 0.4);
-
-  const cShadowWidth1 = interpolate(bValue, [0, 1], [18, 30]);
-  const cShadowWidth2 = interpolate(bValue, [0, 1], [40, 70]);
-  const cShadowWidth3 = interpolate(bValue, [0, 1], [25, 35]);
-
-  const spinAngle = ((frame % (fps * 5)) / (fps * 5)) * 360;
-  const dashAngle = -((frame % (fps * 10)) / (fps * 10)) * 360;
-  const orbitAngle = ((frame % (fps * 4)) / (fps * 4)) * 360;
-
-  const circleContainerStyle: React.CSSProperties = {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    zIndex: 10,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  };
-
-  const circleStyle: React.CSSProperties = {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: '50%',
-    border: '3px solid transparent',
-    background: `
-      radial-gradient(circle, rgba(4, 10, 25, 0.9), rgba(4, 8, 20, 0.85)) padding-box,
-      conic-gradient(#ff00c8, #bd00ff, #0066ff, #00f0ff, #00ff9d, #ff00c8) border-box
-    `,
-    boxShadow: `0 0 ${cShadowWidth1}px ${shadowColor1}, 0 0 ${cShadowWidth2}px ${shadowColor2}, inset 0 0 ${cShadowWidth3}px ${shadowColor3}`,
-    filter: `brightness(${elementBrightness}) saturate(${elementSaturate})`,
-    transform: `rotate(${spinAngle}deg)`,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  };
-
-  const orbitStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: -22,
+    top: '50%',
     left: '50%',
-    width: 10,
-    height: 10,
-    marginLeft: -5,
-    borderRadius: '50%',
-    backgroundColor: '#00ff9d',
-    boxShadow: '0 0 14px #00ff9d',
-    transformOrigin: '5px 142px',
-    transform: `rotate(${orbitAngle}deg)`,
+    transform: `translate(-50%, -50%) scale(${scaleFactor})`,
+    transformOrigin: 'center center',
+    overflow: 'hidden',
+    backgroundColor: '#03020a',
+    fontFamily: "'Segoe UI', Arial, sans-serif",
   };
 
   return (
-    <div
-      style={{
-        backgroundColor: '#01030a',
-        width: ORIGINAL_WIDTH,
-        height: ORIGINAL_HEIGHT,
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: `translate(-50%, -50%) scale(${scaleFactor})`,
-        transformOrigin: 'center center',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Background Layers */}
-      <div style={ambientStyle} />
-      <div style={pixelGridStyle} />
-      <div style={scanlineStyle} />
+    <div style={mainWrapperStyle}>
+      {/* Ambient background with hueRotate */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: `
+            radial-gradient(circle at 50% 50%, rgba(120,40,200,0.28), transparent 60%),
+            radial-gradient(circle at 20% 50%, rgba(255,0,80,0.18), transparent 50%),
+            radial-gradient(circle at 80% 50%, rgba(0,150,255,0.18), transparent 50%)
+          `,
+          zIndex: 0,
+          filter: `hue-rotate(${hueRotate}deg)`,
+        }}
+      />
 
-      {/* Dynamic particles, streaks & dashed dotlines */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 2 }}>
-        {STREAKS.map((s, i) => {
-          const localProgress = ((frame / (fps * s.duration)) + s.offset) % 1;
-          const y = s.rev
-            ? interpolate(localProgress, [0, 1], [-450, 1350])
-            : interpolate(localProgress, [0, 1], [1350, -450]);
+      {/* Moving pixel grid overlay */}
+      <div
+        style={{
+          position: 'absolute',
+          top: -50,
+          left: -50,
+          right: -50,
+          bottom: -50,
+          backgroundImage: `
+            linear-gradient(rgba(120,80,255,0.07) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(120,80,255,0.07) 1px, transparent 1px)
+          `,
+          backgroundSize: '38px 38px',
+          opacity: gridOpacity,
+          transform: `translate(${gridScrollX}px, ${gridScrollY}px)`,
+          zIndex: 1,
+        }}
+      />
 
+      {/* Sweeping scanline */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          width: '100%',
+          height: 140,
+          background: 'linear-gradient(to bottom, transparent, rgba(0,234,255,0.08), rgba(255,0,230,0.08), transparent)',
+          zIndex: 3,
+          pointerEvents: 'none',
+          top: scanTop,
+        }}
+      />
+
+      {/* Streaks & Floating Dots particles layer */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', zIndex: 2 }}>
+        {STREAKS.map((s, idx) => {
+          const durationFrames = s.duration * fps;
+          const delayFrames = s.delay * fps;
+          const progress = ((frame + delayFrames) % durationFrames) / durationFrames;
+          const x = interpolate(progress, [0, 1], s.rev ? [ORIGINAL_WIDTH + 450, -450] : [-450, ORIGINAL_WIDTH + 450]);
           return (
             <div
-              key={`streak-${i}`}
+              key={`streak-${idx}`}
               style={{
                 position: 'absolute',
                 borderRadius: 6,
                 filter: 'blur(0.6px)',
+                height: s.thick,
                 width: s.width,
-                height: s.height,
-                left: `${s.left}%`,
-                background: `linear-gradient(180deg, transparent, ${s.color}, transparent)`,
-                boxShadow: `0 0 ${s.width * 2}px ${s.color}`,
+                top: `${s.top}%`,
+                left: 0,
+                transform: `translateX(${x}px)`,
+                background: `linear-gradient(90deg, transparent, ${s.color}, transparent)`,
+                boxShadow: `0 0 ${s.thick * 2}px ${s.color}`,
                 opacity: s.opacity,
-                transform: `translateY(${y}px)`,
               }}
             />
           );
         })}
 
-        {DOTLINES.map((d, i) => {
-          const localProgress = ((frame / (fps * d.duration)) + d.offset) % 1;
-          const y = d.rev
-            ? interpolate(localProgress, [0, 1], [-450, 1350])
-            : interpolate(localProgress, [0, 1], [1350, -450]);
-
+        {DOTLINES.map((d, idx) => {
+          const durationFrames = d.duration * fps;
+          const delayFrames = d.delay * fps;
+          const progress = ((frame + delayFrames) % durationFrames) / durationFrames;
+          const x = interpolate(progress, [0, 1], d.rev ? [ORIGINAL_WIDTH + 450, -450] : [-450, ORIGINAL_WIDTH + 450]);
           return (
             <div
-              key={`dotline-${i}`}
+              key={`dotline-${idx}`}
               style={{
                 position: 'absolute',
+                height: d.size,
                 width: d.width,
-                height: d.height,
-                left: `${d.left}%`,
-                backgroundImage: `radial-gradient(circle, ${d.color} 0 ${d.width / 2}px, transparent ${d.width / 2 + 0.5}px)`,
-                backgroundSize: `${d.width}px ${d.gap}px`,
-                backgroundRepeat: 'repeat-y',
-                filter: `drop-shadow(0 0 ${d.width * 2}px ${d.color})`,
+                top: `${d.top}%`,
+                left: 0,
+                transform: `translateX(${x}px)`,
+                backgroundImage: `radial-gradient(circle, ${d.color} 0 ${d.size / 2}px, transparent ${d.size / 2 + 0.5}px)`,
+                backgroundSize: `${d.gap}px ${d.size}px`,
+                backgroundRepeat: 'repeat-x',
+                filter: `drop-shadow(0 0 ${d.size * 2}px ${d.color})`,
                 opacity: d.opacity,
-                transform: `translateY(${y}px)`,
               }}
             />
           );
         })}
 
-        {DOTS.map((p, i) => {
-          const localMoveProgress = ((frame / (fps * p.moveDuration)) + p.moveOffset) % 1;
-          const y = interpolate(localMoveProgress, [0, 1], [1350, -450]);
+        {DOTS.map((dot, idx) => {
+          const moveDurationFrames = dot.moveDuration * fps;
+          const moveDelayFrames = dot.moveDelay * fps;
+          const moveProgress = ((frame + moveDelayFrames) % moveDurationFrames) / moveDurationFrames;
+          const x = interpolate(moveProgress, [0, 1], [-450, ORIGINAL_WIDTH + 450]);
 
-          const localTwinkleProgress = ((frame / (fps * p.twinkleDuration)) + p.twinkleOffset) % 1;
-          const twinkleOpacity = interpolate(localTwinkleProgress, [0, 0.5, 1], [0.3, 1, 0.3]);
+          const twinkleDurationFrames = dot.twinkleDuration * fps;
+          const twinkleDelayFrames = dot.twinkleDelay * fps;
+          const twinkleProgress = ((frame + twinkleDelayFrames) % twinkleDurationFrames) / twinkleDurationFrames;
+          const twinkleAlpha = interpolate(twinkleProgress, [0, 0.5, 1], [0.3 * dot.opacity, dot.opacity, 0.3 * dot.opacity]);
 
           return (
             <div
-              key={`dot-${i}`}
+              key={`dot-${idx}`}
               style={{
                 position: 'absolute',
                 borderRadius: '50%',
-                width: p.size,
-                height: p.size,
-                left: `${p.left}%`,
-                background: p.color,
-                boxShadow: `0 0 ${p.size * 3}px ${p.color}`,
-                opacity: p.opacity * twinkleOpacity,
-                transform: `translateY(${y}px)`,
+                width: dot.size,
+                height: dot.size,
+                top: `${dot.top}%`,
+                left: 0,
+                transform: `translateX(${x}px)`,
+                background: dot.color,
+                boxShadow: `0 0 ${dot.size * 3}px ${dot.color}`,
+                opacity: twinkleAlpha,
               }}
             />
           );
         })}
       </div>
 
-      {/* Cyber Title */}
-      <h1 style={titleStyle}>Cyber Neon Flow</h1>
+      {/* Glitch Animated Cyber Title */}
+      <h1
+        style={{
+          position: 'absolute',
+          top: 80,
+          width: '100%',
+          textAlign: 'center',
+          zIndex: 5,
+          color: '#fff',
+          fontSize: 32,
+          letterSpacing: 8,
+          textTransform: 'uppercase',
+          textShadow: useGlitchShadow
+            ? (glitchX < 0 ? "3px 0 #ff003c, -3px 0 #00eaff" : "-3px 0 #ff003c, 3px 0 #00eaff")
+            : '0 0 12px #00eaff, 0 0 24px #ff00e6',
+          transform: `translateX(${glitchX}px) skewX(${glitchSkew}deg)`,
+          filter: `brightness(${brightness}) saturate(${saturate})`,
+        }}
+      >
+        Digital Neon Flow
+      </h1>
 
-      {/* Frames Interface Wrapper */}
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-        <div style={containerStyle}>
-          {/* Left Panel */}
-          <div style={rectLeftStyle}>
-            <span style={labelStyle}>CONTENT 01</span>
-          </div>
+      {/* Main interactive cards container */}
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          width: 1000,
+          height: 360,
+          zIndex: 5,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          transform: `translate(-50%, -50%) translateY(${translateY}px)`,
+        }}
+      >
+        {/* Left Rect Frame */}
+        <div
+          style={{
+            position: 'absolute',
+            width: 360,
+            height: 220,
+            left: 60,
+            borderRadius: 8,
+            border: '3px solid transparent',
+            background: `
+              linear-gradient(rgba(8,5,20,0.55), rgba(8,5,20,0.55)) padding-box,
+              linear-gradient(160deg, #00b3ff, #6a00ff, #ff1f5a, #00ffd5, #00b3ff) border-box
+            `,
+            backgroundSize: '100% 100%, 300% 300%',
+            backgroundPosition: `0% 0%, ${bgPosX}% 50%`,
+            boxShadow: '0 0 12px #00b3ff, 0 0 30px rgba(255,31,90,0.6), inset 0 0 25px rgba(0,150,255,0.25)',
+            filter: `brightness(${brightness}) saturate(${saturate})`,
+            transform: `perspective(800px) rotateY(${tiltAngleL}deg)`,
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          <span
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: '#eaf6ff',
+              textShadow: '0 0 10px #00eaff, 0 0 18px #ff00d4',
+              pointerEvents: 'none',
+              opacity: flickerOpacity,
+            }}
+          >
+            CONTENT 01
+          </span>
+        </div>
 
-          {/* Central Circular CTA Component */}
-          <div style={circleContainerStyle}>
-            {/* outer dashed spinning border */}
-            <div
-              style={{
-                position: 'absolute',
-                inset: -18,
-                borderRadius: '50%',
-                border: '1px dashed rgba(0, 240, 255, 0.5)',
-                transform: `rotate(${dashAngle}deg)`,
-              }}
-            />
+        {/* Center Circular Frame */}
+        <div
+          style={{
+            position: 'absolute',
+            width: 210,
+            height: 210,
+            borderRadius: '50%',
+            border: '3px solid transparent',
+            background: `
+              radial-gradient(circle, rgba(10,5,25,0.7), rgba(8,5,20,0.55)) padding-box,
+              conic-gradient(#ff1f5a, #6a00ff, #00b3ff, #00ffd5, #ff00e6, #ff1f5a) border-box
+            `,
+            boxShadow: `0 0 ${shadowBlur1}px ${breatheShadowColor1}, 0 0 ${shadowBlur2}px ${breatheShadowColor2}, inset 0 0 ${shadowBlur3}px ${breatheShadowColor3}`,
+            zIndex: 10,
+            filter: `brightness(${brightness}) saturate(${saturate})`,
+            transform: `rotate(${rotateDeg}deg)`,
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          {/* Circular Orbit Dash Line (reversing rotation internally) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: -18,
+              left: -18,
+              right: -18,
+              bottom: -18,
+              borderRadius: '50%',
+              border: '1px dashed rgba(0,234,255,0.5)',
+              transform: `rotate(${-rotateDegReverse}deg)`,
+              pointerEvents: 'none',
+            }}
+          />
 
-            {/* main frame */}
-            <div style={circleStyle}>
-              {/* rotating the label in reverse cancels the parent spin, keeping text legible */}
-              <span
-                style={{
-                  ...labelStyle,
-                  transform: `rotate(${-spinAngle}deg)`,
-                  fontSize: 28,
-                }}
-              >
-                CTA
-              </span>
-            </div>
+          {/* Orbiting glowing dot element */}
+          <div
+            style={{
+              position: 'absolute',
+              top: -22,
+              left: '50%',
+              width: 10,
+              height: 10,
+              marginLeft: -5,
+              borderRadius: '50%',
+              background: '#00ffd5',
+              boxShadow: '0 0 14px #00ffd5',
+              transformOrigin: '5px 127px',
+              transform: `rotate(${orbitRotate}deg)`,
+            }}
+          />
 
-            {/* satellite orbit point */}
-            <div style={orbitStyle} />
-          </div>
+          {/* CTA Center Label (reversing parent rotation to keep text right-side-up) */}
+          <span
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: '#eaf6ff',
+              textShadow: '0 0 10px #00eaff, 0 0 18px #ff00d4',
+              pointerEvents: 'none',
+              transform: `rotate(${-rotateDeg}deg)`,
+              opacity: flickerOpacity,
+            }}
+          >
+            CTA
+          </span>
+        </div>
 
-          {/* Right Panel */}
-          <div style={rectRightStyle}>
-            <span style={labelStyle}>CONTENT 02</span>
-          </div>
+        {/* Right Rect Frame */}
+        <div
+          style={{
+            position: 'absolute',
+            width: 360,
+            height: 220,
+            right: 60,
+            borderRadius: 8,
+            border: '3px solid transparent',
+            background: `
+              linear-gradient(rgba(8,5,20,0.55), rgba(8,5,20,0.55)) padding-box,
+              linear-gradient(20deg, #ff1f5a, #6a00ff, #00b3ff, #00ffd5, #ff1f5a) border-box
+            `,
+            backgroundSize: '100% 100%, 300% 300%',
+            backgroundPosition: `0% 0%, ${bgPosXRight}% 50%`,
+            boxShadow: '0 0 12px #ff1f5a, 0 0 30px rgba(0,150,255,0.6), inset 0 0 25px rgba(120,0,255,0.25)',
+            filter: `brightness(${brightness}) saturate(${saturate})`,
+            transform: `perspective(800px) rotateY(${tiltAngleR}deg)`,
+            backdropFilter: 'blur(2px)',
+          }}
+        >
+          <span
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              fontSize: 16,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: '#eaf6ff',
+              textShadow: '0 0 10px #00eaff, 0 0 18px #ff00d4',
+              pointerEvents: 'none',
+              opacity: flickerOpacity,
+            }}
+          >
+            CONTENT 02
+          </span>
         </div>
       </div>
     </div>
   );
 };
 
-export default CyberNeonFlow;
+export default CyberpunkNeonFrames;
 // END_OF_FILE
