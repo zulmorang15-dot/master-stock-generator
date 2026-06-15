@@ -64,7 +64,7 @@ jobs:
               --props=temp-props.json \
               --codec=h264 \
               --scale=0.3 \
-              --gl=egl \
+              --gl=swangle \
               --concurrency=1 \
               --timeout=120000 \
               --muted \
@@ -75,7 +75,7 @@ jobs:
               "out/${{ github.event.client_payload.item.id }}.mov" \
               --props=temp-props.json \
               --codec=prores4444 \
-              --gl=egl \
+              --gl=swangle \
               --concurrency=1 \
               --timeout=120000 \
               --muted \
