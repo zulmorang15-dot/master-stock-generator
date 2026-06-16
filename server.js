@@ -1382,10 +1382,13 @@ app.post("/api/render-4k", async (req, res) => {
     };
     fs.writeFileSync(tempPropsFile, JSON.stringify(props));
 
-    // 3. Jalankan render 4K ProRes
+    // 3. Jalankan render 4K ProRes — prores4444 for transparent, prores (422) for opaque
     const outputFile = path.join("out", `${item.id}-4k.mov`);
-    const cmd = `npx remotion render Composition "${outputFile}" --codec=prores --props="${tempPropsFile}" --muted`;
-    console.log(`Running CLI: ${cmd}`);
+    const isTransparent = item.transparent === true || item.transparent === 'true';
+    const codec = isTransparent ? 'prores4444' : 'prores';
+    const pixelFormat = isTransparent ? 'yuva444p10le' : 'yuv422p10le';
+    const cmd = `npx remotion render Composition "${outputFile}" --codec=${codec} --pixel-format=${pixelFormat} --props="${tempPropsFile}" --muted`;
+    console.log(`Running CLI: ${cmd} (transparent=${isTransparent})`);
 
     execSync(cmd, { stdio: "inherit" });
 
@@ -2794,7 +2797,8 @@ app.post("/api/trigger-github-render", async (req, res) => {
           fps: String(item.fps || 30),
           judul: item.judul || "Stock Video",
           keywords: item.keywords || "motion, abstract, loop",
-          has_threejs: ((item.promptCode || '').includes('THREE') || (item.promptCode || '').includes("getContext('2d')") || (item.promptCode || '').includes('shadowBlur')) ? 'true' : 'false'
+          has_threejs: ((item.promptCode || '').includes('THREE') || (item.promptCode || '').includes("getContext('2d')") || (item.promptCode || '').includes('shadowBlur')) ? 'true' : 'false',
+          transparent: String(item.transparent || false)
         }
       },
       {
@@ -3442,7 +3446,8 @@ async function run4kRenderBackground(itemId) {
             fps: String(item.fps || 30),
             judul: item.judul || "Stock Video",
             keywords: item.keywords || "motion, abstract, loop",
-            transparent: String(item.transparent || false)
+            transparent: String(item.transparent || false),
+            has_threejs: ((item.promptCode || '').includes('THREE') || (item.promptCode || '').includes("getContext('2d')") || (item.promptCode || '').includes('shadowBlur')) ? 'true' : 'false'
           }
         },
         {

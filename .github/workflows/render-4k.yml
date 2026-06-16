@@ -109,9 +109,13 @@ jobs:
         run: |
           echo "=== Rendering 4K ProRes for composition: ${{ github.event.inputs.composition_id }} ==="
           PIXEL_FORMAT="yuv422p10le"
+          PRORES_CODEC="prores"
           if [ "${{ github.event.inputs.transparent }}" = "true" ]; then
             PIXEL_FORMAT="yuva444p10le"
-            echo "=== Transparent background requested. Using yuva444p10le. ==="
+            PRORES_CODEC="prores4444"
+            echo "=== Transparent background requested. Using prores4444 + yuva444p10le. ==="
+          else
+            echo "=== Opaque background. Using prores (422) + yuv422p10le. ==="
           fi
           TIMEOUT_MS=${RENDER_TIMEOUT:-120000}
           if [ "$HAS_THREEJS" = "true" ]; then
@@ -123,7 +127,7 @@ jobs:
           xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npx remotion render Composition \
             "out/${{ github.event.inputs.composition_id }}-4k.mov" \
             --props=temp-props.json \
-            --codec=prores \
+            --codec=$PRORES_CODEC \
             --pixel-format=$PIXEL_FORMAT \
             --gl=swangle \
             --concurrency=$CONCURRENCY \
