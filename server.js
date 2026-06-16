@@ -1382,12 +1382,12 @@ app.post("/api/render-4k", async (req, res) => {
     };
     fs.writeFileSync(tempPropsFile, JSON.stringify(props));
 
-    // 3. Jalankan render 4K ProRes — prores4444 for transparent, prores (422) for opaque
+    // 3. Jalankan render 4K ProRes — prores 4444 for transparent, prores 422 HQ (default) for opaque
     const outputFile = path.join("out", `${item.id}-4k.mov`);
     const isTransparent = item.transparent === true || item.transparent === 'true';
-    const codec = isTransparent ? 'prores4444' : 'prores';
     const pixelFormat = isTransparent ? 'yuva444p10le' : 'yuv422p10le';
-    const cmd = `npx remotion render Composition "${outputFile}" --codec=${codec} --pixel-format=${pixelFormat} --props="${tempPropsFile}" --muted`;
+    const profileFlag = isTransparent ? '--prores-profile=4444' : '';
+    const cmd = `npx remotion render Composition "${outputFile}" --codec=prores ${profileFlag} --pixel-format=${pixelFormat} --props="${tempPropsFile}" --muted`;
     console.log(`Running CLI: ${cmd} (transparent=${isTransparent})`);
 
     execSync(cmd, { stdio: "inherit" });

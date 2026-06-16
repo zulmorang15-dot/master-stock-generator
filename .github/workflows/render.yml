@@ -71,19 +71,20 @@ jobs:
               --log=verbose
           else
             echo "=== Rendering ProRes 4K MOV ==="
-            PRORES_CODEC="prores"
+            PRORES_PROFILE=""
             PIXEL_FORMAT="yuv422p10le"
             if [ "${{ github.event.client_payload.item.transparent }}" = "true" ]; then
-              PRORES_CODEC="prores4444"
+              PRORES_PROFILE="--prores-profile=4444"
               PIXEL_FORMAT="yuva444p10le"
-              echo "=== Transparent background — using prores4444 + yuva444p10le ==="
+              echo "=== Transparent background — using prores 4444 + yuva444p10le ==="
             else
-              echo "=== Opaque background — using prores (422) + yuv422p10le ==="
+              echo "=== Opaque background — using prores 422 HQ (default) + yuv422p10le ==="
             fi
             xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npx remotion render Composition \
               "out/${{ github.event.client_payload.item.id }}.mov" \
               --props=temp-props.json \
-              --codec=$PRORES_CODEC \
+              --codec=prores \
+              $PRORES_PROFILE \
               --pixel-format=$PIXEL_FORMAT \
               --gl=swangle \
               --concurrency=1 \
