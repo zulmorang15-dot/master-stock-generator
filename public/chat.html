@@ -430,8 +430,8 @@
       background: #f1f5f9;
     }
 
-    /* Message Action Buttons (Edit, Copy) */
-    .btn-msg-action {
+    /* User Message Editing */
+    .btn-edit-msg {
       background: none; border: none; color: var(--text-dim);
       cursor: pointer; padding: 6px; border-radius: 50%;
       font-size: 12px; opacity: 0; transition: all 0.15s;
@@ -439,10 +439,8 @@
       display: flex; align-items: center; justify-content: center;
       width: 28px; height: 28px;
     }
-    .msg-bubble-wrapper:hover .btn-msg-action { opacity: 1; }
-    .btn-msg-action:hover { background: var(--bg3); color: var(--cyan); }
-    .btn-copy-msg:hover { color: var(--green); }
-    .btn-edit-msg:hover { color: var(--cyan); }
+    .msg-bubble-wrapper:hover .btn-edit-msg { opacity: 1; }
+    .btn-edit-msg:hover { background: var(--bg3); color: var(--cyan); }
 
     .edit-msg-container {
       display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: 260px;
@@ -1545,8 +1543,7 @@ function renderMessageBubble(msg, index) {
             ${imgHtml}
             <div class="msg-text-content">${content}</div>
           </div>
-          <button class="btn-msg-action btn-copy-msg" onclick="copyMessage(${index})" title="Salin Pesan">📋</button>
-          <button class="btn-msg-action btn-edit-msg" onclick="startEditMessage(${index})" title="Edit Pesan">✏️</button>
+          <button class="btn-edit-msg" onclick="startEditMessage(${index})" title="Edit Pesan">✏️</button>
         </div>
         <div class="msg-meta">${timeStr}</div>
       </div>`;
@@ -1557,7 +1554,6 @@ function renderMessageBubble(msg, index) {
         <div class="msg-avatar assistant">🤖</div>
         <div class="msg-bubble-wrapper">
           <div class="msg-bubble">${content}</div>
-          <button class="btn-msg-action btn-copy-msg" onclick="copyMessage(${index})" title="Salin Pesan">📋</button>
         </div>
         <div class="msg-meta">${timeStr}${modelStr}</div>
       </div>`;
@@ -1939,33 +1935,6 @@ function renderMarkdown(text) {
   html = html.replace(/<p>\s*<br>\s*<\/p>/g, '');
 
   return html;
-}
-
-// ═══════════════════════════════════════════════════════════
-// COPY MESSAGE
-// ═══════════════════════════════════════════════════════════
-function copyMessage(index) {
-  const msg = activeSessionMessages[index];
-  if (!msg || !msg.content) return;
-
-  navigator.clipboard.writeText(msg.content).then(() => {
-    // Visual feedback — find the copy button and temporarily change it
-    const group = document.getElementById(`msg-group-${index}`);
-    if (group) {
-      const btn = group.querySelector('.btn-copy-msg');
-      if (btn) {
-        btn.textContent = '✅';
-        btn.style.color = 'var(--green)';
-        setTimeout(() => {
-          btn.textContent = '📋';
-          btn.style.color = '';
-        }, 2000);
-      }
-    }
-    showToast('📋 Pesan disalin ke clipboard');
-  }).catch(e => {
-    showToast('❌ Gagal menyalin: ' + e.message);
-  });
 }
 
 // ═══════════════════════════════════════════════════════════
