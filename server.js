@@ -4749,113 +4749,39 @@ app.patch("/api/chat/sessions/:id", (req, res) => {
   }
 });
 
-// Helper to upload a local file to multiple public image hosts with automatic fallbacks
+// Helper to upload a local file to tmpfiles.org and return a direct download URL
 async function uploadToTmpFiles(localFilePath) {
   try {
     const fs = require('fs');
     if (!fs.existsSync(localFilePath)) {
-      console.warn(`[ImageUpload] File not found: ${localFilePath}`);
+      console.warn(`[TmpFiles] File not found: ${localFilePath}`);
       return null;
     }
-
     const fileBuffer = fs.readFileSync(localFilePath);
-    const ext = path.extname(localFilePath).toLowerCase();
-    const mimeType = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
-
-    // Helper to perform fetch with abort timeout
-    const fetchWithTimeout = async (url, options, timeoutMs = 15000) => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const response = await fetch(url, { ...options, signal: controller.signal });
-        clearTimeout(timeoutId);
-        return response;
-      } catch (err) {
-        clearTimeout(timeoutId);
-        throw err;
-      }
-    };
-
-    // Provider 1: Uguu.se (24 hours retention, extremely stable, usually not blocked in Indonesia)
-    try {
-      const fileBlob = new Blob([fileBuffer], { type: mimeType });
-      const formData = new FormData();
-      formData.append('files[]', fileBlob, path.basename(localFilePath));
-
-      console.log(`[ImageUpload] Uploading ${path.basename(localFilePath)} to Uguu.se...`);
-      const response = await fetchWithTimeout('https://uguu.se/upload.php', {
-        method: 'POST',
-        body: formData
-      }, 15000);
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.files && result.files[0]) {
-          const downloadUrl = result.files[0].url;
-          console.log(`[ImageUpload] Uguu.se upload success: ${downloadUrl}`);
-          return downloadUrl;
-        }
-      }
-      console.warn(`[ImageUpload] Uguu.se returned status ${response.status}`);
-    } catch (err) {
-      console.warn(`[ImageUpload] Uguu.se upload failed: ${err.message}`);
+    const fileBlob = new Blob([fileBuffer], { type: 'image/png' });
+    
+    const formData = new FormData();
+    formData.append('file', fileBlob, path.basename(localFilePath));
+    
+    console.log(`[TmpFiles] Uploading ${path.basename(localFilePath)}...`);
+    const response = await fetch('https://tmpfiles.org/api/v1/upload', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Upload failed with status ${response.status}`);
     }
-
-    // Provider 2: TmpFiles.org (60 minutes retention, fallback)
-    try {
-      const fileBlob = new Blob([fileBuffer], { type: mimeType });
-      const formData = new FormData();
-      formData.append('file', fileBlob, path.basename(localFilePath));
-
-      console.log(`[ImageUpload] Uploading ${path.basename(localFilePath)} to TmpFiles.org...`);
-      const response = await fetchWithTimeout('https://tmpfiles.org/api/v1/upload', {
-        method: 'POST',
-        body: formData
-      }, 20000);
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.status === 'success' && result.data && result.data.url) {
-          const downloadUrl = result.data.url.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
-          console.log(`[ImageUpload] TmpFiles.org upload success: ${downloadUrl}`);
-          return downloadUrl;
-        }
-      }
-      console.warn(`[ImageUpload] TmpFiles.org returned status ${response.status}`);
-    } catch (err) {
-      console.warn(`[ImageUpload] TmpFiles.org upload failed: ${err.message}`);
+    
+    const result = await response.json();
+    if (result.status === 'success' && result.data && result.data.url) {
+      const downloadUrl = result.data.url.replace('https://tmpfiles.org/', 'https://tmpfiles.org/dl/');
+      console.log(`[TmpFiles] Upload success: ${downloadUrl}`);
+      return downloadUrl;
     }
-
-    // Provider 3: Catbox.moe (permanent retention, fallback)
-    try {
-      const fileBlob = new Blob([fileBuffer], { type: mimeType });
-      const formData = new FormData();
-      formData.append('reqtype', 'fileupload');
-      formData.append('fileToUpload', fileBlob, path.basename(localFilePath));
-
-      console.log(`[ImageUpload] Uploading ${path.basename(localFilePath)} to Catbox.moe...`);
-      const response = await fetchWithTimeout('https://catbox.moe/user/api.php', {
-        method: 'POST',
-        body: formData
-      }, 15000);
-
-      if (response.ok) {
-        const url = await response.text();
-        const downloadUrl = url.trim();
-        if (downloadUrl.startsWith('http')) {
-          console.log(`[ImageUpload] Catbox.moe upload success: ${downloadUrl}`);
-          return downloadUrl;
-        }
-      }
-      console.warn(`[ImageUpload] Catbox.moe returned status ${response.status}`);
-    } catch (err) {
-      console.warn(`[ImageUpload] Catbox.moe upload failed: ${err.message}`);
-    }
-
-    console.error(`[ImageUpload] All upload providers failed for file: ${localFilePath}`);
-    return null;
+    throw new Error('Invalid response payload');
   } catch (err) {
-    console.error(`[ImageUpload] Error in uploadToTmpFiles:`, err.message);
+    console.error(`[TmpFiles] Error uploading to tmpfiles.org:`, err.message);
     return null;
   }
 }
@@ -4908,13 +4834,11 @@ app.post("/api/chat/sessions/:id/message", async (req, res) => {
     if (imageUrl && imageUrl.startsWith('/chat-uploads/')) {
       const localPath = path.join(__dirname, 'public', imageUrl);
       publicImageUrl = await uploadToTmpFiles(localPath);
-      if (!publicImageUrl) {
-        throw new Error("Gagal mengunggah gambar ke server publik untuk dibaca oleh AI. Silakan coba lagi.");
-      }
     }
 
     // Call Syntx AI (account rotation is handled automatically by syntx-bot)
-    const aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl);
+    // Pass publicImageUrl if successfully generated, otherwise fallback to imageUrl
+    const aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl || imageUrl);
 
     // Save assistant message
     const assistantMsg = {
@@ -5029,13 +4953,10 @@ app.post("/api/chat/sessions/:id/message/:messageIndex/edit", async (req, res) =
     if (imageUrl && imageUrl.startsWith('/chat-uploads/')) {
       const localPath = path.join(__dirname, 'public', imageUrl);
       publicImageUrl = await uploadToTmpFiles(localPath);
-      if (!publicImageUrl) {
-        throw new Error("Gagal mengunggah gambar ke server publik untuk dibaca oleh AI. Silakan coba lagi.");
-      }
     }
 
     // Call Syntx AI
-    const aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl);
+    const aiResponse = await syntxBot.callSyntx(contextPrompt.trim(), activeModel, {}, publicImageUrl || imageUrl);
 
     // Save assistant message
     const assistantMsg = {
