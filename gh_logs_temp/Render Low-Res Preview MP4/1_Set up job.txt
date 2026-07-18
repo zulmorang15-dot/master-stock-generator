@@ -1,0 +1,33 @@
+﻿2026-06-14T14:05:55.8118127Z Current runner version: '2.335.1'
+2026-06-14T14:05:55.8153893Z ##[group]Runner Image Provisioner
+2026-06-14T14:05:55.8155151Z Hosted Compute Agent
+2026-06-14T14:05:55.8155989Z Version: 20260527.539
+2026-06-14T14:05:55.8157041Z Commit: a891dd388383b896fa6ac04a82c0b75cec981078
+2026-06-14T14:05:55.8158156Z Build Date: 2026-05-27T21:39:57Z
+2026-06-14T14:05:55.8159859Z Worker ID: {c35c31e5-32ee-4bec-953e-1c558d56783e}
+2026-06-14T14:05:55.8160996Z Azure Region: eastus
+2026-06-14T14:05:55.8161817Z ##[endgroup]
+2026-06-14T14:05:55.8164328Z ##[group]Operating System
+2026-06-14T14:05:55.8165301Z Ubuntu
+2026-06-14T14:05:55.8166222Z 24.04.4
+2026-06-14T14:05:55.8166994Z LTS
+2026-06-14T14:05:55.8167738Z ##[endgroup]
+2026-06-14T14:05:55.8168710Z ##[group]Runner Image
+2026-06-14T14:05:55.8169618Z Image: ubuntu-24.04
+2026-06-14T14:05:55.8170578Z Version: 20260607.184.1
+2026-06-14T14:05:55.8172460Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260607.184/images/ubuntu/Ubuntu2404-Readme.md
+2026-06-14T14:05:55.8175230Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260607.184
+2026-06-14T14:05:55.8176801Z ##[endgroup]
+2026-06-14T14:05:55.8178726Z ##[group]GITHUB_TOKEN Permissions
+2026-06-14T14:05:55.8181806Z Contents: read
+2026-06-14T14:05:55.8182952Z Metadata: read
+2026-06-14T14:05:55.8183802Z Packages: read
+2026-06-14T14:05:55.8184753Z ##[endgroup]
+2026-06-14T14:05:55.8187747Z Secret source: Actions
+2026-06-14T14:05:55.8189235Z Prepare workflow directory
+2026-06-14T14:05:55.8645569Z Prepare all required actions
+2026-06-14T14:05:55.8700855Z Getting action download info
+2026-06-14T14:05:56.1851506Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2026-06-14T14:05:56.2525226Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-06-14T14:05:56.3430385Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-06-14T14:05:56.5562359Z Complete job name: Render Low-Res Preview MP4

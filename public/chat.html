@@ -13,13 +13,15 @@
       --bg2: #0d1424;
       --bg3: #131d30;
       --bg4: #1a2540;
-      --border: rgba(56,189,248,0.12);
+      --surface: var(--bg2);
+      --surface-2: var(--bg3);
+      --border: rgba(148,163,184,0.12);
       --border-hover: rgba(56,189,248,0.35);
       --cyan: #38bdf8;
       --cyan-dim: rgba(56,189,248,0.12);
-      --cyan-glow: rgba(56,189,248,0.25);
+      --cyan-glow: rgba(56,189,248,0.22);
       --green: #10b981;
-      --green-dim: rgba(16,185,129,0.15);
+      --green-dim: rgba(16,185,129,0.14);
       --red: #ef4444;
       --red-dim: rgba(239,68,68,0.12);
       --amber: #f59e0b;
@@ -28,24 +30,38 @@
       --text: #e2e8f0;
       --text-dim: #64748b;
       --text-mid: #94a3b8;
-      --radius: 14px;
+      --radius: 12px;
       --radius-sm: 8px;
-      --sidebar-w: 260px;
+      --shadow: 0 8px 30px rgba(0,0,0,0.28);
+      --sidebar-w: 272px;
+      --focus: 0 0 0 3px rgba(56,189,248,0.18);
     }
 
     body.light-mode {
-      --bg: #f8fafc;
+      --bg: #f4f7fb;
       --bg2: #ffffff;
-      --bg3: #f1f5f9;
+      --bg3: #eef2f7;
       --bg4: #e2e8f0;
-      --border: rgba(148, 163, 184, 0.22);
-      --border-hover: rgba(56, 189, 248, 0.55);
+      --surface: var(--bg2);
+      --surface-2: var(--bg3);
+      --border: rgba(15,23,42,0.08);
+      --border-hover: rgba(2,132,199,0.35);
+      --cyan: #0284c7;
+      --cyan-dim: rgba(2,132,199,0.10);
+      --cyan-glow: rgba(2,132,199,0.16);
+      --green: #059669;
+      --green-dim: rgba(5,150,105,0.10);
+      --red: #dc2626;
+      --red-dim: rgba(220,38,38,0.10);
+      --amber: #d97706;
       --text: #0f172a;
       --text-dim: #64748b;
       --text-mid: #475569;
-      --cyan-dim: rgba(56, 189, 248, 0.08);
+      --purple: #7c3aed;
+      --blue: #2563eb;
+      --shadow: 0 8px 28px rgba(15,23,42,0.08);
+      --focus: 0 0 0 3px rgba(2,132,199,0.15);
     }
-
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Inter', sans-serif;
@@ -84,6 +100,41 @@
       opacity: 0;
       pointer-events: none;
     }
+    
+    /* ── REDESIGN POLISH ────────────────────────── */
+    body {
+      background: radial-gradient(1200px 500px at 10% -10%, rgba(56,189,248,0.08), transparent 50%),
+        radial-gradient(900px 400px at 100% 0%, rgba(168,85,247,0.07), transparent 45%), var(--bg);
+    }
+    .sidebar {
+      background: linear-gradient(180deg, #0b1220 0%, #0a101c 100%) !important;
+      border-right: 1px solid var(--border);
+    }
+    body.light-mode .sidebar { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important; }
+    .chat-main {
+      background: transparent;
+    }
+    .message-bubble {
+      box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+      border: 1px solid var(--border);
+    }
+    .session-item {
+      border-radius: 10px;
+      transition: all 0.18s ease;
+    }
+    .session-item:hover { background: rgba(56,189,248,0.07); border-color: rgba(56,189,248,0.18); }
+    #btnNewChat {
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(56,189,248,0.14), rgba(168,85,247,0.14));
+      border: 1px solid rgba(56,189,248,0.28);
+    }
+    #btnNewChat:hover {
+      background: linear-gradient(135deg, rgba(56,189,248,0.24), rgba(168,85,247,0.24));
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(56,189,248,0.18);
+    }
+    .sidebar-pool { background: rgba(16,185,129,0.06) !important; backdrop-filter: blur(4px); }
+
     .sidebar-toggle {
       position: fixed;
       top: 12px;
@@ -259,6 +310,9 @@
     .session-model-badge.gemini { background: rgba(56,189,248,0.12); color: var(--cyan); }
     .session-model-badge.chatgpt { background: rgba(16,185,129,0.15); color: var(--green); }
     .session-model-badge.grok { background: rgba(168,85,247,0.15); color: var(--purple); }
+    .session-model-badge.deepseek { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .session-model-badge.qwen { background: rgba(236,72,153,0.15); color: #ec4899; }
+    .session-model-badge.perplexity { background: rgba(20,184,166,0.15); color: #14b8a6; }
     .session-model-badge.other { background: rgba(94,234,212,0.15); color: #0d9488; }
     .btn-del-session {
       background: none; border: none; color: var(--text-dim);
@@ -862,60 +916,62 @@
         <span style="font-size:11px; color:var(--text-dim);">Model:</span>
         <select class="model-select" id="modelSelect" onchange="onModelChange()">
           <optgroup label="⭐ Claude Sonnet (Direkomendasikan)">
-            <option value="claude-sonnet-4-6" selected>Claude Sonnet 4.6</option>
-            <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
-            <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+            <option value="claude-sonnet-5">👁 Claude Sonnet 5</option>
+            <option value="claude-sonnet-4-6" selected>👁 Claude Sonnet 4.6</option>
+            <option value="claude-sonnet-4-5-20250929">👁 Claude Sonnet 4.5</option>
+            <option value="claude-sonnet-4-20250514">👁 Claude Sonnet 4</option>
+            <option value="claude-fable-5">👁 Claude Fable 5</option>
           </optgroup>
           <optgroup label="🧠 Claude Opus (Paling Cerdas)">
-            <option value="claude-opus-4-8">Claude Opus 4.8</option>
-            <option value="claude-opus-4-7">Claude Opus 4.7</option>
-            <option value="claude-opus-4-6">Claude Opus 4.6</option>
-            <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
-            <option value="claude-opus-4-20250514">Claude Opus 4</option>
-            <option value="claude-opus-4-1-20250805">Claude Opus 4.1</option>
+            <option value="claude-opus-4-8">👁 Claude Opus 4.8</option>
+            <option value="claude-opus-4-7">👁 Claude Opus 4.7</option>
+            <option value="claude-opus-4-6">👁 Claude Opus 4.6</option>
+            <option value="claude-opus-4-5-20251101">👁 Claude Opus 4.5</option>
+            <option value="claude-opus-4-1-20250805">👁 Claude Opus 4.1</option>
           </optgroup>
           <optgroup label="💬 ChatGPT">
-            <option value="gpt-5.5">GPT-5.5</option>
-            <option value="gpt-5.4-pro">GPT-5.4 Pro</option>
-            <option value="gpt-5.4">GPT-5.4</option>
-            <option value="gpt-5.3-chat-latest">GPT-5.3 Chat</option>
-            <option value="gpt-5.2">GPT-5.2</option>
-            <option value="gpt-5.1">GPT-5.1</option>
-            <option value="gpt-5-2025-08-07">GPT-5</option>
-            <option value="gpt-5-mini-2025-08-07">GPT-5 Mini</option>
-            <option value="gpt-5-nano-2025-08-07">GPT-5 Nano</option>
-            <option value="gpt-4.1-2025-04-14">GPT-4.1</option>
-            <option value="gpt-4.1-mini-2025-04-14">GPT-4.1 Mini</option>
-            <option value="gpt-4.1-nano-2025-04-14">GPT-4.1 Nano</option>
+            <option value="gpt-5.6-luna">👁 GPT-5.6 Luna</option>
+            <option value="gpt-5.6-sol">👁 GPT-5.6 Sol</option>
+            <option value="gpt-5.6-terra">👁 GPT-5.6 Terra</option>
+            <option value="gpt-5.5">👁 GPT-5.5</option>
+            <option value="gpt-5.4-pro">👁 GPT-5.4 Pro</option>
+            <option value="gpt-5.4">👁 GPT-5.4</option>
+            <option value="gpt-5.3-chat-latest">👁 GPT-5.3 Chat</option>
+            <option value="gpt-5.2">👁 GPT-5.2</option>
+            <option value="gpt-5.1">👁 GPT-5.1</option>
+            <option value="gpt-5-2025-08-07">👁 GPT-5</option>
+            <option value="gpt-5-mini-2025-08-07">👁 GPT-5 Mini</option>
+            <option value="gpt-5-nano-2025-08-07">👁 GPT-5 Nano</option>
+            <option value="gpt-4.1-2025-04-14">👁 GPT-4.1</option>
+            <option value="gpt-4.1-mini-2025-04-14">👁 GPT-4.1 Mini</option>
+            <option value="gpt-4.1-nano-2025-04-14">👁 GPT-4.1 Nano</option>
           </optgroup>
           <optgroup label="✨ Gemini">
-            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-            <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-3.5-flash">👁 Gemini 3.5 Flash</option>
+            <option value="gemini-3.1-pro-preview">👁 Gemini 3.1 Pro</option>
+            <option value="gemini-2.5-pro">👁 Gemini 2.5 Pro</option>
+            <option value="gemini-2.5-flash">👁 Gemini 2.5 Flash</option>
           </optgroup>
           <optgroup label="💡 Grok">
-            <option value="grok-4.3">Grok 4.3</option>
-            <option value="grok-4">Grok 4</option>
-            <option value="grok-3">Grok 3</option>
-            <option value="grok-3-reasoner">Grok 3 Reasoner</option>
-            <option value="grok-3-deepsearch">Grok 3 DeepSearch</option>
+            <option value="grok-4.5">👁 Grok 4.5</option>
+            <option value="grok-4.3">👁 Grok 4.3</option>
+            <option value="grok-4">👁 Grok 4</option>
           </optgroup>
           <optgroup label="🐉 DeepSeek">
-            <option value="deepseek-r1">DeepSeek R1</option>
-            <option value="deepseek-v3">DeepSeek V3</option>
+            <option value="deepseek-r1">👁 DeepSeek R1</option>
+            <option value="deepseek-v3">👁 DeepSeek V3</option>
           </optgroup>
           <optgroup label="🌀 Qwen">
-            <option value="qwen3.7-max">Qwen 3.7 Max</option>
-            <option value="qwen3.7-plus">Qwen 3.7 Plus</option>
-            <option value="qwen3-max-2026-01-23">Qwen 3 Max</option>
-            <option value="qwen3-235b-a22b">Qwen 3 235B</option>
-            <option value="qwen3-vl-30b-a3b-thinking">Qwen 3 VL Thinking</option>
+            <option value="qwen3.7-max">👁 Qwen 3.7 Max</option>
+            <option value="qwen3.7-plus">👁 Qwen 3.7 Plus</option>
+            <option value="qwen3-max-2026-01-23">👁 Qwen 3 Max Thinking</option>
+            <option value="qwen3-235b-a22b">👁 Qwen 3 235B</option>
+            <option value="qwen3-vl-30b-a3b-thinking">👁 Qwen 3 Thinking</option>
           </optgroup>
           <optgroup label="🔍 Perplexity">
-            <option value="sonar-pro">Sonar Pro</option>
-            <option value="sonar">Sonar</option>
-            <option value="sonar-deep-research">Sonar Deep Research</option>
+            <option value="sonar-pro">👁 Sonar Pro</option>
+            <option value="sonar">👁 Sonar</option>
+            <option value="sonar-deep-research">👁 Sonar Deep Research</option>
           </optgroup>
         </select>
       </div>
@@ -1111,6 +1167,48 @@ async function loadModels() {
   try {
     const res = await fetch('/api/chat/models');
     const data = await res.json();
+
+    // Dynamically rebuild model dropdown from API data
+    if (data.models && Array.isArray(data.models)) {
+      const sel = document.getElementById('modelSelect');
+      if (sel) {
+        const currentValue = sel.value;
+        const groupLabels = {
+          claude: '⭐ Claude Sonnet (Direkomendasikan)',
+          chatgpt: '💬 ChatGPT',
+          gemini: '✨ Gemini',
+          grok: '💡 Grok',
+          deepseek: '🐉 DeepSeek',
+          qwen: '🌀 Qwen',
+          perplexity: '🔍 Perplexity'
+        };
+        const groups = {};
+        data.models.forEach(m => {
+          const g = m.group || 'other';
+          if (!groups[g]) groups[g] = [];
+          groups[g].push(m);
+        });
+        sel.innerHTML = '';
+        Object.keys(groups).forEach(g => {
+          const optgroup = document.createElement('optgroup');
+          optgroup.label = groupLabels[g] || g;
+          groups[g].forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            const visionIcon = m.vision ? '👁 ' : '';
+            opt.textContent = visionIcon + m.label;
+            if (m.default) opt.selected = true;
+            optgroup.appendChild(opt);
+          });
+          sel.appendChild(optgroup);
+        });
+        // Restore previous selection if still available
+        if (currentValue && sel.querySelector(`option[value="${currentValue}"]`)) {
+          sel.value = currentValue;
+        }
+      }
+    }
+
     // Update pool status
     if (data.poolStatus) {
       const badge = document.getElementById('poolBadge');
@@ -1229,7 +1327,26 @@ function getModelBadgeGroup(model) {
   if (m.startsWith('claude') || m.includes('fable')) return 'claude';
   if (m.startsWith('gpt') || m.startsWith('chatgpt')) return 'chatgpt';
   if (m.startsWith('grok')) return 'grok';
+  if (m.startsWith('deepseek')) return 'deepseek';
+  if (m.startsWith('qwen')) return 'qwen';
+  if (m.startsWith('sonar')) return 'perplexity';
   return 'other';
+}
+
+function getModelEmoji(model) {
+  const m = (model || '').toLowerCase();
+  if (m.startsWith('gemini')) return '✨ Gemini';
+  if (m.startsWith('claude-fable')) return '🧚 Claude Fable';
+  if (m.startsWith('claude-sonnet-5')) return '🌟 Claude Sonnet 5';
+  if (m.startsWith('claude-opus')) return '🧠 Claude Opus';
+  if (m.startsWith('claude')) return '🤖 Claude';
+  if (m.startsWith('gpt-5.6')) return '🔥 GPT-5.6';
+  if (m.startsWith('gpt')) return '💬 ChatGPT';
+  if (m.startsWith('grok')) return '💡 Grok';
+  if (m.startsWith('deepseek')) return '🐉 DeepSeek';
+  if (m.startsWith('qwen')) return '🌀 Qwen';
+  if (m.startsWith('sonar')) return '🔍 Perplexity';
+  return '🤖 AI';
 }
 
 function renderSessionsList() {
@@ -1246,6 +1363,9 @@ function renderSessionsList() {
     else if (group === 'claude') label = 'C';
     else if (group === 'chatgpt') label = 'GP';
     else if (group === 'grok') label = 'GR';
+    else if (group === 'deepseek') label = 'DS';
+    else if (group === 'qwen') label = 'Q';
+    else if (group === 'perplexity') label = 'P';
 
     const date = new Date(s.updatedAt || s.createdAt);
     const dateStr = isToday(date) ? formatTime(date) : formatDate(date);
@@ -1347,7 +1467,7 @@ function startPollingSession(sessionId) {
   const typingIndicator = document.getElementById('typingIndicator');
   const typingLabel = document.getElementById('typingLabel');
   const model = document.getElementById('modelSelect').value;
-  typingLabel.textContent = `${model.startsWith('gemini') ? '🌟 Gemini' : '🤖 Claude'} sedang menjawab...`;
+  typingLabel.textContent = `${getModelEmoji(model)} sedang menjawab...`;
   typingIndicator.classList.add('visible');
   scrollToBottom();
 
@@ -1658,7 +1778,7 @@ async function saveEditMessage(index) {
   
   const typingIndicator = document.getElementById('typingIndicator');
   const typingLabel = document.getElementById('typingLabel');
-  typingLabel.textContent = `${model.startsWith('gemini') ? '🌟 Gemini' : '🤖 Claude'} sedang menjawab...`;
+  typingLabel.textContent = `${getModelEmoji(model)} sedang menjawab...`;
   typingIndicator.classList.add('visible');
   scrollToBottom();
   
@@ -1749,7 +1869,7 @@ async function sendMessage() {
   // Show typing indicator
   const typingIndicator = document.getElementById('typingIndicator');
   const typingLabel = document.getElementById('typingLabel');
-  typingLabel.textContent = `${model.startsWith('gemini') ? '🌟 Gemini' : '🤖 Claude'} sedang menjawab...`;
+  typingLabel.textContent = `${getModelEmoji(model)} sedang menjawab...`;
   typingIndicator.classList.add('visible');
   scrollToBottom();
 

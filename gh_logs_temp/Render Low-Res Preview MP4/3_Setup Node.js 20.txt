@@ -1,0 +1,26 @@
+﻿2026-06-14T14:05:57.1625485Z ##[group]Run actions/setup-node@v4
+2026-06-14T14:05:57.1626545Z with:
+2026-06-14T14:05:57.1627275Z   node-version: 20
+2026-06-14T14:05:57.1628062Z   cache: npm
+2026-06-14T14:05:57.1628793Z   always-auth: false
+2026-06-14T14:05:57.1629582Z   check-latest: false
+2026-06-14T14:05:57.1641235Z   token: ***
+2026-06-14T14:05:57.1641947Z ##[endgroup]
+2026-06-14T14:05:57.3528699Z Attempting to download 20...
+2026-06-14T14:05:57.7576422Z Acquiring 20.20.2 - x64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-linux-x64.tar.gz
+2026-06-14T14:05:58.0832894Z Extracting ...
+2026-06-14T14:05:58.0936178Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/43ffe617-8e73-40f6-b4fc-dfd87e952401 -f /home/runner/work/_temp/8ee64e71-2813-48d8-924a-270fc3d9dfdc
+2026-06-14T14:05:59.1791543Z Adding to the cache ...
+2026-06-14T14:06:01.2314310Z ##[group]Environment details
+2026-06-14T14:06:01.4488288Z node: v20.20.2
+2026-06-14T14:06:01.4489207Z npm: 10.8.2
+2026-06-14T14:06:01.4489443Z yarn: 1.22.22
+2026-06-14T14:06:01.4490059Z ##[endgroup]
+2026-06-14T14:06:01.4512952Z [command]/opt/hostedtoolcache/node/20.20.2/x64/bin/npm config get cache
+2026-06-14T14:06:01.5541869Z /home/runner/.npm
+2026-06-14T14:06:01.6310811Z Cache hit for: node-cache-Linux-x64-npm-00cbea26b99df68fb0667000149916ac13ec70b802b26c8b76e90a4da78e8ecd
+2026-06-14T14:06:02.1261717Z Received 99383403 of 99383403 (100.0%), 216.9 MBs/sec
+2026-06-14T14:06:02.1262662Z Cache Size: ~95 MB (99383403 B)
+2026-06-14T14:06:02.1295731Z [command]/usr/bin/tar -xf /home/runner/work/_temp/c1e2210c-6bd6-4b05-bba4-7720b685992c/cache.tzst -P -C /home/runner/work/master-stock-generator/master-stock-generator --use-compress-program unzstd
+2026-06-14T14:06:02.3647873Z Cache restored successfully
+2026-06-14T14:06:02.3703383Z Cache restored from key: node-cache-Linux-x64-npm-00cbea26b99df68fb0667000149916ac13ec70b802b26c8b76e90a4da78e8ecd

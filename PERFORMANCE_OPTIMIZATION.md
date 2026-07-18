@@ -1,7 +1,8 @@
 /**
  * Performance Optimization Recommendations
- * 
+ *
  * This document outlines optimization strategies for the Master Stock Generator pipeline.
+ * Last Updated: 2026-07-17
  */
 
 ## 1. AI Response Caching (✅ IMPLEMENTED)
@@ -259,20 +260,70 @@ app.get("/api/health", (req, res) => {
 |-------------|--------|--------|-----------|
 | AI Response Cache | ✅ Done | High | Low |
 | Retry Logic | ✅ Done | Medium | Low |
+| Write Throttling | ✅ Done | High | Low |
+| Parallel SEO | ✅ Done | Low | Low |
+| Health Check Endpoint | ✅ Done | Low | Low |
+| Dynamic Model Loading | ✅ Done | Medium | Low |
 | Batch Similar Renders | 🔄 Recommend | Medium | Medium |
 | Progressive Rendering | 🔄 Recommend | High | Medium |
-| Parallel SEO | 🔄 Recommend | Low | Low |
 | Database Optimization | 🔄 Recommend | High | Medium-High |
 | Asset Cleanup | 🔄 Recommend | Medium | Low |
-| Monitoring | 🔄 Recommend | Low | Low |
 
 **Quick Wins** (implement next):
-1. Write throttling for JSON database (5 min)
-2. Parallel SEO generation (10 min)
-3. Health check endpoint (10 min)
-4. Local preview rendering (30 min)
+1. ✅ Write throttling (DONE)
+2. ✅ Parallel SEO generation (DONE)
+3. ✅ Health check endpoint (DONE)
+4. ⏳ Local preview rendering (30 min)
 
 **Long-term** (for scale):
 1. Migrate to SQLite when items > 500
 2. Implement batch rendering by config groups
 3. Asset archival strategy
+
+---
+
+## Recent Optimizations (July 2026)
+
+### Dynamic Model Loading
+
+**Status**: ✅ IMPLEMENTED
+
+Chat dropdowns now fetch models dynamically from `/api/chat/models` instead of hardcoding. This means:
+- Future model additions automatically appear in UI
+- No need to update HTML files when adding models
+- Vision icons (👁) added automatically based on model capabilities
+
+**Implementation**:
+```javascript
+// In loadModels() and loadWidgetModels()
+async function loadModels() {
+  const res = await fetch('/api/chat/models');
+  const data = await res.json();
+  if (data.models && Array.isArray(data.models)) {
+    // Rebuild dropdown dynamically
+    const visionIcon = m.vision ? '👁 ' : '';
+    opt.textContent = visionIcon + m.label;
+  }
+}
+```
+
+**Benefits**:
+- 🔄 Auto-updates when server.js changes
+- 🎯 Single source of truth (server.js)
+- 👁 Vision support indicators
+- 📉 Less maintenance overhead
+
+### Model Provider Mapping
+
+**Status**: ✅ IMPLEMENTED
+
+`getAiName()` function in `syntx-bot.js` correctly maps all 42 models to their providers:
+- `claude-*` → claude
+- `gpt-*` → chatgpt
+- `gemini-*` → gemini
+- `grok-*` → grok
+- `deepseek-*` → deepseek
+- `qwen-*` → qwen
+- `perplexity-*` → perplexity
+
+This ensures chat messages are routed to the correct Syntx.ai backend.

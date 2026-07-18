@@ -78,12 +78,16 @@ Anda harus mengonfigurasi autentikasi otomatis menggunakan **Personal Access Tok
    GITHUB_TOKEN=ghp_YOUR_GITHUB_TOKEN_HERE
    GITHUB_USERNAME=zulmorang15-dot
    GITHUB_REPO=master-stock-generator
-   SYNTX_BASE_EMAIL=l.imh.en.c.e@gmail.com
+   SYNTX_BASE_EMAIL=your_email@gmail.com
    SYNTX_EMAIL_INDEX=9
-   NINEROUTER_API_KEY=sk-58855e86be5b47cc-vpjqco-9f60aa28
+   NINEROUTER_API_KEY=your_9router_key
    NINEROUTER_BASE_URL=http://localhost:20128/v1
-   NINEROUTER_MODEL=gratisan
    ```
+
+   **Catatan:**
+   - `SYNTX_BASE_EMAIL` dan `SYNTX_EMAIL_INDEX` digunakan untuk rotasi akun Syntx.ai
+   - Sistem akan otomatis generate email variasi (email+1, email+2, dst) berdasarkan index
+   - `NINEROUTER_*` opsional, hanya diperlukan jika ingin menggunakan 9Router sebagai fallback
 
 ---
 
@@ -132,4 +136,34 @@ Secara default, aplikasi berjalan di port `5000`. Jika Anda ingin membuka dashbo
 ### Jika Menggunakan Cloud (AWS / Azure / GCP / Alibaba Cloud):
 Pastikan Anda juga menambahkan aturan inbound (Inbound Port Rule) pada *Security Group* atau *Firewall Control Panel* layanan cloud Anda untuk mengizinkan trafik masuk ke port `5000`.
 
-Akses dashboard Anda di browser melalui: `http://IP_RDP_ANDA:5000/dashboard`
+Akses dashboard Anda di browser melalui:
+- **Dashboard Utama**: `http://IP_RDP_ANDA:5000/dashboard`
+- **AI Chat System**: `http://IP_RDP_ANDA:5000/chat`
+- **Health Check**: `http://IP_RDP_ANDA:5000/api/health`
+
+---
+
+## 📝 Catatan Penting
+
+### AI Chat System
+Sistem chat mendukung 42 model AI dari 7 provider:
+- Claude (5 model): Opus 4.8, Sonnet 5, Fable 5, dll
+- ChatGPT (6 model): GPT-5.6, GPT-5.4, GPT-5.3, dll
+- Gemini (4 model): Gemini 3 Pro/Flash, Gemini 2.5 Pro/Flash
+- Grok (4 model): Grok 4.5, Grok 4, dll
+- DeepSeek (3 model): Chat, Reasoner, Pro
+- Qwen (15 model): Berbagai ukuran dari 0.6B hingga Max
+- Perplexity (5 model): Sonar series
+
+Semua model mendukung upload gambar (vision) 👁
+
+### Syntx.ai Integration
+- Sistem otomatis login dan rotasi akun Syntx.ai
+- Support OTP verification untuk 2FA
+- Cek status login: `GET /api/syntx-status`
+- Manual login: `POST /api/syntx-login`
+
+### File Penting
+- `chat-history.json` - Riwayat sesi chat (auto-created)
+- `syntx-accounts.json` - Kredensial akun Syntx.ai (auto-created)
+- `public/chat-uploads/` - Upload gambar untuk chat vision

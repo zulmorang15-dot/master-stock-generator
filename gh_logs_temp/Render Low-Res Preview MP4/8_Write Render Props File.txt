@@ -1,0 +1,26 @@
+﻿2026-06-14T14:06:29.1161029Z ##[group]Run node -e "
+2026-06-14T14:06:29.1161329Z [36;1mnode -e "[0m
+2026-06-14T14:06:29.1161566Z [36;1m  const props = {[0m
+2026-06-14T14:06:29.1161966Z [36;1m    durationInFrames: parseInt(process.env.DURATION) || 150,[0m
+2026-06-14T14:06:29.1162575Z [36;1m    fps: parseInt(process.env.FPS) || 30,[0m
+2026-06-14T14:06:29.1162938Z [36;1m    judul: process.env.JUDUL || 'Stock Video',[0m
+2026-06-14T14:06:29.1163363Z [36;1m    keywords: process.env.KEYWORDS || 'motion, abstract, loop'[0m
+2026-06-14T14:06:29.1163718Z [36;1m  };[0m
+2026-06-14T14:06:29.1164094Z [36;1m  require('fs').writeFileSync('temp-props.json', JSON.stringify(props, null, 2));[0m
+2026-06-14T14:06:29.1164541Z [36;1m"[0m
+2026-06-14T14:06:29.1164758Z [36;1mecho "=== Props being used ==="[0m
+2026-06-14T14:06:29.1165047Z [36;1mcat temp-props.json[0m
+2026-06-14T14:06:29.1196979Z shell: /usr/bin/bash -e {0}
+2026-06-14T14:06:29.1197250Z env:
+2026-06-14T14:06:29.1197552Z   JUDUL: Futuristic Esports End Screen With Smooth Animation Overlay
+2026-06-14T14:06:29.1199041Z   KEYWORDS: endscreen, esports, gaming, subscribe, frame, placeholder, overlay, holographic, cyber, futuristic, neon, blue, cyan, glowing, interface, hud, circle, ring, scanner, sweep, energy, motion, animated, smooth, fluid, modern, digital, technology, sci, fi, luxury, premium, broadcast, streamer, channel, video, promo, social, media, website, presentation, marketing, template, asset, background, 4k
+2026-06-14T14:06:29.1200582Z   DURATION: 1200
+2026-06-14T14:06:29.1200792Z   FPS: 60
+2026-06-14T14:06:29.1200999Z ##[endgroup]
+2026-06-14T14:06:29.1481513Z === Props being used ===
+2026-06-14T14:06:29.1491739Z {
+2026-06-14T14:06:29.1492314Z   "durationInFrames": 1200,
+2026-06-14T14:06:29.1492606Z   "fps": 60,
+2026-06-14T14:06:29.1492995Z   "judul": "Futuristic Esports End Screen With Smooth Animation Overlay",
+2026-06-14T14:06:29.1494714Z   "keywords": "endscreen, esports, gaming, subscribe, frame, placeholder, overlay, holographic, cyber, futuristic, neon, blue, cyan, glowing, interface, hud, circle, ring, scanner, sweep, energy, motion, animated, smooth, fluid, modern, digital, technology, sci, fi, luxury, premium, broadcast, streamer, channel, video, promo, social, media, website, presentation, marketing, template, asset, background, 4k"
+2026-06-14T14:06:29.1497171Z }

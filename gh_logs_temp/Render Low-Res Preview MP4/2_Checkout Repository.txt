@@ -1,0 +1,89 @@
+﻿2026-06-14T14:05:56.6318607Z ##[group]Run actions/checkout@v4
+2026-06-14T14:05:56.6319435Z with:
+2026-06-14T14:05:56.6319906Z   ref: b424163dac3c59f12179384e9453e3b5c6fa53b5
+2026-06-14T14:05:56.6320579Z   repository: zulmorang15-dot/master-stock-generator
+2026-06-14T14:05:56.6325740Z   token: ***
+2026-06-14T14:05:56.6326168Z   ssh-strict: true
+2026-06-14T14:05:56.6326600Z   ssh-user: git
+2026-06-14T14:05:56.6327040Z   persist-credentials: true
+2026-06-14T14:05:56.6327512Z   clean: true
+2026-06-14T14:05:56.6327940Z   sparse-checkout-cone-mode: true
+2026-06-14T14:05:56.6328450Z   fetch-depth: 1
+2026-06-14T14:05:56.6328869Z   fetch-tags: false
+2026-06-14T14:05:56.6329309Z   show-progress: true
+2026-06-14T14:05:56.6329747Z   lfs: false
+2026-06-14T14:05:56.6330156Z   submodules: false
+2026-06-14T14:05:56.6330599Z   set-safe-directory: true
+2026-06-14T14:05:56.6331290Z ##[endgroup]
+2026-06-14T14:05:56.7441601Z Syncing repository: zulmorang15-dot/master-stock-generator
+2026-06-14T14:05:56.7444426Z ##[group]Getting Git version info
+2026-06-14T14:05:56.7445426Z Working directory is '/home/runner/work/master-stock-generator/master-stock-generator'
+2026-06-14T14:05:56.7446602Z [command]/usr/bin/git version
+2026-06-14T14:05:56.7517889Z git version 2.54.0
+2026-06-14T14:05:56.7542839Z ##[endgroup]
+2026-06-14T14:05:56.7557168Z Temporarily overriding HOME='/home/runner/work/_temp/eba3f122-bf44-491e-9ef5-0f115380c1d6' before making global git config changes
+2026-06-14T14:05:56.7558559Z Adding repository directory to the temporary git global config as a safe directory
+2026-06-14T14:05:56.7570641Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/master-stock-generator/master-stock-generator
+2026-06-14T14:05:56.7615632Z Deleting the contents of '/home/runner/work/master-stock-generator/master-stock-generator'
+2026-06-14T14:05:56.7621007Z ##[group]Initializing the repository
+2026-06-14T14:05:56.7626226Z [command]/usr/bin/git init /home/runner/work/master-stock-generator/master-stock-generator
+2026-06-14T14:05:56.7720881Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-06-14T14:05:56.7723394Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-06-14T14:05:56.7724945Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-06-14T14:05:56.7725804Z hint: call:
+2026-06-14T14:05:56.7726309Z hint:
+2026-06-14T14:05:56.7726929Z hint: 	git config --global init.defaultBranch <name>
+2026-06-14T14:05:56.7727644Z hint:
+2026-06-14T14:05:56.7728317Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-06-14T14:05:56.7729351Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-06-14T14:05:56.7730175Z hint:
+2026-06-14T14:05:56.7730682Z hint: 	git branch -m <name>
+2026-06-14T14:05:56.7731254Z hint:
+2026-06-14T14:05:56.7732278Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-06-14T14:05:56.7733768Z Initialized empty Git repository in /home/runner/work/master-stock-generator/master-stock-generator/.git/
+2026-06-14T14:05:56.7745963Z [command]/usr/bin/git remote add origin https://github.com/zulmorang15-dot/master-stock-generator
+2026-06-14T14:05:56.7787949Z ##[endgroup]
+2026-06-14T14:05:56.7788752Z ##[group]Disabling automatic garbage collection
+2026-06-14T14:05:56.7792349Z [command]/usr/bin/git config --local gc.auto 0
+2026-06-14T14:05:56.7823023Z ##[endgroup]
+2026-06-14T14:05:56.7823785Z ##[group]Setting up auth
+2026-06-14T14:05:56.7829871Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-06-14T14:05:56.7863940Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-06-14T14:05:56.8199612Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-06-14T14:05:56.8237499Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-06-14T14:05:56.8506237Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-06-14T14:05:56.8559373Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-06-14T14:05:56.8799973Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-06-14T14:05:56.8836547Z ##[endgroup]
+2026-06-14T14:05:56.8837985Z ##[group]Fetching the repository
+2026-06-14T14:05:56.8847056Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin b424163dac3c59f12179384e9453e3b5c6fa53b5
+2026-06-14T14:05:57.0985697Z From https://github.com/zulmorang15-dot/master-stock-generator
+2026-06-14T14:05:57.0987213Z  * branch            b424163dac3c59f12179384e9453e3b5c6fa53b5 -> FETCH_HEAD
+2026-06-14T14:05:57.1024144Z ##[endgroup]
+2026-06-14T14:05:57.1025407Z ##[group]Determining the checkout info
+2026-06-14T14:05:57.1027150Z ##[endgroup]
+2026-06-14T14:05:57.1032665Z [command]/usr/bin/git sparse-checkout disable
+2026-06-14T14:05:57.1079285Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-06-14T14:05:57.1110670Z ##[group]Checking out the ref
+2026-06-14T14:05:57.1115545Z [command]/usr/bin/git checkout --progress --force b424163dac3c59f12179384e9453e3b5c6fa53b5
+2026-06-14T14:05:57.1205171Z Note: switching to 'b424163dac3c59f12179384e9453e3b5c6fa53b5'.
+2026-06-14T14:05:57.1206854Z 
+2026-06-14T14:05:57.1207980Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-06-14T14:05:57.1209158Z changes and commit them, and you can discard any commits you make in this
+2026-06-14T14:05:57.1211079Z state without impacting any branches by switching back to a branch.
+2026-06-14T14:05:57.1212355Z 
+2026-06-14T14:05:57.1213105Z If you want to create a new branch to retain commits you create, you may
+2026-06-14T14:05:57.1214758Z do so (now or later) by using -c with the switch command. Example:
+2026-06-14T14:05:57.1215793Z 
+2026-06-14T14:05:57.1216207Z   git switch -c <new-branch-name>
+2026-06-14T14:05:57.1216904Z 
+2026-06-14T14:05:57.1217303Z Or undo this operation with:
+2026-06-14T14:05:57.1217963Z 
+2026-06-14T14:05:57.1218293Z   git switch -
+2026-06-14T14:05:57.1218805Z 
+2026-06-14T14:05:57.1219610Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-06-14T14:05:57.1220958Z 
+2026-06-14T14:05:57.1221488Z HEAD is now at b424163 Render Preview: motion_143
+2026-06-14T14:05:57.1225219Z ##[endgroup]
+2026-06-14T14:05:57.1323190Z [command]/usr/bin/git log -1 --format=%H
+2026-06-14T14:05:57.1324288Z b424163dac3c59f12179384e9453e3b5c6fa53b5

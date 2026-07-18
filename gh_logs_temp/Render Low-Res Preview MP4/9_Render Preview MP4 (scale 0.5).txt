@@ -1,0 +1,111 @@
+﻿2026-06-14T14:06:29.1543557Z ##[group]Run echo "=== Rendering preview for composition: motion_143 ==="
+2026-06-14T14:06:29.1544121Z [36;1mecho "=== Rendering preview for composition: motion_143 ==="[0m
+2026-06-14T14:06:29.1544721Z [36;1mxvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npx remotion render Composition \[0m
+2026-06-14T14:06:29.1545244Z [36;1m  "out/motion_143-preview.mp4" \[0m
+2026-06-14T14:06:29.1545558Z [36;1m  --props=temp-props.json \[0m
+2026-06-14T14:06:29.1545846Z [36;1m  --codec=h264 \[0m
+2026-06-14T14:06:29.1546090Z [36;1m  --scale=0.5 \[0m
+2026-06-14T14:06:29.1546329Z [36;1m  --gl=swangle \[0m
+2026-06-14T14:06:29.1546556Z [36;1m  --muted \[0m
+2026-06-14T14:06:29.1546785Z [36;1m  --log=verbose[0m
+2026-06-14T14:06:29.1580866Z shell: /usr/bin/bash -e {0}
+2026-06-14T14:06:29.1581156Z ##[endgroup]
+2026-06-14T14:06:29.1637267Z === Rendering preview for composition: motion_143 ===
+2026-06-14T14:06:32.0815945Z [90mRemotion root directory:[39m [90m/home/runner/work/master-stock-generator/master-stock-generator[39m
+2026-06-14T14:06:32.0817929Z [90mApplied configuration from /home/runner/work/master-stock-generator/master-stock-generator/remotion.config.ts.[39m
+2026-06-14T14:06:32.0825345Z [90mChecking if[39m [90mComposition[39m [90mis the entry file[39m
+2026-06-14T14:06:32.0829764Z [90mSelected[39m [90m/home/runner/work/master-stock-generator/master-stock-generator/src/index.ts[39m [90mas the entry point because file exists and is a common entry point and no entry point was explicitly selected[39m
+2026-06-14T14:06:32.0858748Z [90m[90mEntry point = /home/runner/work/master-stock-generator/master-stock-generator/src/index.ts (common paths)[39m[90m[39m
+2026-06-14T14:06:32.0920440Z [90mDownloading Chrome Headless Shell https://www.remotion.dev/chrome-headless-shell[39m
+2026-06-14T14:06:32.0978254Z Downloading from: https://remotion.media/chromium-headless-shell-linux-x64-149.0.7790.0.zip?clear
+2026-06-14T14:06:32.2551091Z Getting Headless Shell - 9.5 Mb/91.9 Mb
+2026-06-14T14:06:32.3249186Z Getting Headless Shell - 19.1 Mb/91.9 Mb
+2026-06-14T14:06:32.3696949Z Getting Headless Shell - 28.6 Mb/91.9 Mb
+2026-06-14T14:06:32.4098801Z Getting Headless Shell - 38.2 Mb/91.9 Mb
+2026-06-14T14:06:32.4458690Z Getting Headless Shell - 47.7 Mb/91.9 Mb
+2026-06-14T14:06:32.4840761Z Getting Headless Shell - 57.3 Mb/91.9 Mb
+2026-06-14T14:06:32.5225343Z Getting Headless Shell - 66.8 Mb/91.9 Mb
+2026-06-14T14:06:32.5607872Z Getting Headless Shell - 76.4 Mb/91.9 Mb
+2026-06-14T14:06:32.5978358Z Getting Headless Shell - 85.9 Mb/91.9 Mb
+2026-06-14T14:06:32.6233068Z Got Headless Shell
+2026-06-14T14:06:34.3094901Z [90mEnsuring browser executable[39m
+2026-06-14T14:06:34.4159457Z [90mEnsured browser is available.[39m
+2026-06-14T14:06:34.4315297Z [40m openBrowser() [49m [90mOpening browser: gl = swangle, executable = /home/runner/work/master-stock-generator/master-stock-generator/node_modules/.remotion/chrome-headless-shell/linux64/chrome-headless-shell-linux64/chrome-headless-shell, enableMultiProcessOnLinux = true[39m
+2026-06-14T14:06:34.4366438Z [90mUsing setpriv --pdeathsig SIGKILL so the browser is killed if the Node parent process dies (Linux).[39m
+2026-06-14T14:06:34.6531509Z Bundling 6%
+2026-06-14T14:06:34.9336040Z Bundling 24%
+2026-06-14T14:06:35.7117228Z Bundling 38%
+2026-06-14T14:06:36.8859208Z Bundling 51%
+2026-06-14T14:06:36.8918535Z Bundling 65%
+2026-06-14T14:06:36.8930051Z Bundling 70%
+2026-06-14T14:06:37.0236498Z Bundling 75%
+2026-06-14T14:06:37.0680327Z Bundling 80%
+2026-06-14T14:06:37.0735634Z Bundling 85%
+2026-06-14T14:06:37.7806444Z Bundling 91%
+2026-06-14T14:06:38.1837579Z Bundling 98%
+2026-06-14T14:06:38.1851359Z Bundling 100%
+2026-06-14T14:06:39.2299231Z [90mBundling done in 4819ms[39m
+2026-06-14T14:06:39.2299940Z [90mCopying done in 0ms[39m
+2026-06-14T14:06:39.2300393Z Getting composition
+2026-06-14T14:06:39.2301182Z [90mBundled under[39m [90m/tmp/remotion-webpack-bundle-G9b127[39m
+2026-06-14T14:06:39.2302324Z ⚡️ Cached bundle. Subsequent renders will be faster.
+2026-06-14T14:06:39.2305481Z [90mCreated directory for temporary files[39m [90m/tmp/remotion-v4.0.473-assets2h7r6c8hfl[39m
+2026-06-14T14:06:39.4554635Z [40m compositor [49m [90mStarting Rust process. Max video cache size: 7007MB, max threads = 2[39m
+2026-06-14T14:06:39.7265108Z [40m Tab 0, delayRender() [49m [90m[90m"Loading root component - See https://remotion.dev/docs/troubleshooting/loading-root-component if you experience a timeout" handle was cleared after 0ms[39m[90m[39m
+2026-06-14T14:06:39.7492308Z [40m Tab 0, delayRender() [49m [90m[90m"Waiting for root component to load - See https://remotion.dev/docs/troubleshooting/loading-root-component if you experience a timeout" handle was cleared after 17ms[39m[90m[39m
+2026-06-14T14:06:39.7598416Z [40m selectComposition() [49m [90mRunning calculateMetadata()...[39m
+2026-06-14T14:06:39.7619157Z [40m Tab 0, delayRender() [49m [90m[90m"Running the calculateMetadata() function for composition Composition" handle was cleared after 0ms[39m[90m[39m
+2026-06-14T14:06:39.7624250Z [40m selectComposition() [49m [90mcalculateMetadata() took 3ms[39m
+2026-06-14T14:06:39.7656948Z [90mComposition = Composition (Passed as argument)[39m
+2026-06-14T14:06:39.7668525Z [90mCodec = h264 (from --codec flag)[39m
+2026-06-14T14:06:39.7669463Z [90mOutput = out/motion_143-preview.mp4[39m
+2026-06-14T14:06:39.7670224Z [90mConcurrency = 2x[39m
+2026-06-14T14:06:39.7707494Z [40m renderMedia() [49m [90mFree memory:[39m [90m14704627712[39m [90mEstimated usage parallel encoding[39m [90m2073600000[39m
+2026-06-14T14:06:39.7709226Z [40m renderMedia() [49m [90mUsing concurrency:[39m [90m2[39m
+2026-06-14T14:06:39.7710618Z [40m renderMedia() [49m [90mdelayRender() timeout:[39m [90m30000[39m
+2026-06-14T14:06:39.7712255Z [40m renderMedia() [49m [90mCodec supports parallel rendering:[39m [90mtrue[39m
+2026-06-14T14:06:39.7713619Z [40m renderMedia() [49m [90mParallel encoding is enabled.[39m
+2026-06-14T14:06:39.7714976Z [40m renderMedia() [49m [90mRendering frames 0-1199[39m
+2026-06-14T14:06:39.7758580Z [40m stitchFramesToVideo() [49m [90mEncoder: libx264, hardware accelerated: false[39m
+2026-06-14T14:06:39.7759976Z [40m prespawnFfmpeg() [49m [90mGenerated FFMPEG command:[39m
+2026-06-14T14:06:39.7763240Z [40m prespawnFfmpeg() [49m [90m-r,60 -f,image2pipe -s,960x540 -vcodec,mjpeg -i,- -c:v,libx264 -pix_fmt,yuv420p -video_track_timescale,90000 -crf,18 -y /tmp/react-motion-renderRrb3Se/pre-encode.mp4[39m
+2026-06-14T14:06:39.7983782Z Rendered 0/1200
+2026-06-14T14:06:39.8099716Z [40m chrome [49m [31mgpu/command_buffer/service/shared_image/shared_image_manager.cc:253: SharedImageManager::ProduceSkia: Trying to Produce a Skia representation from a non-existent mailbox.[39m
+2026-06-14T14:06:40.1058965Z [40m Tab 0, delayRender() [49m [90m[90m"Loading root component - See https://remotion.dev/docs/troubleshooting/loading-root-component if you experience a timeout" handle was cleared after 0ms[39m[90m[39m
+2026-06-14T14:06:40.1150865Z [40m Tab 1, delayRender() [49m [90m[90m"Loading root component - See https://remotion.dev/docs/troubleshooting/loading-root-component if you experience a timeout" handle was cleared after 1ms[39m[90m[39m
+2026-06-14T14:06:40.1161284Z [40m Tab 0, delayRender() [49m [90m[90m"Waiting for root component to load - See https://remotion.dev/docs/troubleshooting/loading-root-component if you experience a timeout" handle was cleared after 3ms[39m[90m[39m
+2026-06-14T14:06:40.1487122Z [40m Tab 1, delayRender() [49m [90m[90m"Waiting for root component to load - See https://remotion.dev/docs/troubleshooting/loading-root-component if you experience a timeout" handle was cleared after 24ms[39m[90m[39m
+2026-06-14T14:06:40.1623039Z [40m Tab 0, delayRender() [49m [90m[90m"Waiting for Composition "Composition"" handle was cleared after 32ms[39m[90m[39m
+2026-06-14T14:06:42.1622482Z 
+2026-06-14T14:06:42.1960852Z [31mAn error occurred while rendering frame 0:[39m
+2026-06-14T14:06:42.1963934Z [31m[41m[37m Error [39m[31m[49m[39m [31mMinified React error #130; visit https://react.dev/errors/130?args[]=object&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.[39m
+2026-06-14T14:06:42.1966088Z 
+2026-06-14T14:06:42.1966806Z at [4mnode_modules/react-dom/cjs/react-dom-client.production.js:2598[24m
+2026-06-14T14:06:42.1967694Z [90m2596[39m │ [90m      break a;[39m
+2026-06-14T14:06:42.1968286Z [90m2597[39m │ [90m  }[39m
+2026-06-14T14:06:42.1968776Z 2598 │ fiberTag = 29;
+2026-06-14T14:06:42.1969368Z [90m2599[39m │ [90mpendingProps = Error([39m
+2026-06-14T14:06:42.1970499Z [90m2600[39m │ [90m  formatProdErrorMessage(130, null === type ? "null" : typeof type, "")[39m
+2026-06-14T14:06:42.1971352Z [90m2601[39m │ [90m);[39m
+2026-06-14T14:06:42.1971626Z 
+2026-06-14T14:06:42.1972806Z [90mat reconcileChildFibersImpl [94m(node_modules/react-dom/cjs/react-dom-client.production.js:3855)[39m[90m[39m
+2026-06-14T14:06:42.1974335Z [90mat [94m(node_modules/react-dom/cjs/react-dom-client.production.js:3963)[39m[90m[39m
+2026-06-14T14:06:42.1975666Z [90mat reconcileChildren [94m(node_modules/react-dom/cjs/react-dom-client.production.js:6117)[39m[90m[39m
+2026-06-14T14:06:42.1977170Z [90mat updateFunctionComponent [94m(node_modules/react-dom/cjs/react-dom-client.production.js:6512)[39m[90m[39m
+2026-06-14T14:06:42.1978651Z [90mat beginWork [94m(node_modules/react-dom/cjs/react-dom-client.production.js:7472)[39m[90m[39m
+2026-06-14T14:06:42.1980054Z [90mat performUnitOfWork [94m(node_modules/react-dom/cjs/react-dom-client.production.js:11304)[39m[90m[39m
+2026-06-14T14:06:42.1981442Z [90mat workLoopSync [94m(node_modules/react-dom/cjs/react-dom-client.production.js:11181)[39m[90m[39m
+2026-06-14T14:06:42.1983092Z [90mat renderRootSync [94m(node_modules/react-dom/cjs/react-dom-client.production.js:11162)[39m[90m[39m
+2026-06-14T14:06:42.1984560Z [90mat performWorkOnRoot [94m(node_modules/react-dom/cjs/react-dom-client.production.js:10727)[39m[90m[39m
+2026-06-14T14:06:42.1986240Z [90mat performWorkOnRootViaSchedulerTask [94m(node_modules/react-dom/cjs/react-dom-client.production.js:12077)[39m[90m[39m
+2026-06-14T14:06:42.1987843Z [90mat performWorkUntilDeadline [94m(node_modules/scheduler/cjs/scheduler.production.js:150)[39m[90m[39m
+2026-06-14T14:06:42.1988720Z [90mCleaning up...[39m
+2026-06-14T14:06:42.2004797Z [90mCleanup job "Delete /tmp/remotion-webpack-bundle-G9b127" done[39m
+2026-06-14T14:06:42.2005656Z [90mCleanup job "Cleanup bundle" done[39m
+2026-06-14T14:06:42.2007086Z [90mReceived SIGTERM signal. Killing browser process[39m
+2026-06-14T14:06:42.2012596Z [90mTrying to kill browser process group -4074[39m
+2026-06-14T14:06:42.2051481Z [90mCleanup job "Closing browser instance" done[39m
+2026-06-14T14:06:42.2061058Z [90mCleanup job "Close server" done[39m
+2026-06-14T14:06:42.2061932Z [90mCleanup job "Delete /tmp/react-motion-renderRrb3Se" done[39m
+2026-06-14T14:06:42.2063439Z [90mCleanup done in 9ms[39m
+2026-06-14T14:06:42.2574467Z ##[error]Process completed with exit code 1.

@@ -81,7 +81,7 @@
     }
     .header-sub { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
     /* ── MAIN LAYOUT ───────────────────────────── */
-    .main { max-width: 1200px; margin: 0 auto; padding: 36px 24px 60px; }
+    .main { max-width: 1440px; margin: 0 auto; padding: 36px 24px 60px; }
     /* ── INPUT CARD ────────────────────────────── */
     .input-card {
       background: var(--bg2);
@@ -1173,6 +1173,356 @@
     .queue-toggle-icon.collapsed { transform: rotate(-90deg); }
     @keyframes queuePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     .queue-pulse { animation: queuePulse 1.5s ease-in-out infinite; }
+
+    /* ── PIPELINE CONTROL ROOM ─────────────────── */
+    :root { --panel-shadow: 0 18px 50px rgba(0,0,0,.24); --panel-shadow-hover: 0 24px 64px rgba(0,0,0,.34); --signal-line: rgba(56,189,248,.32); --surface-glass: rgba(13,20,36,.82); }
+    body.light-mode { --panel-shadow: 0 18px 45px rgba(15,23,42,.10); --panel-shadow-hover: 0 22px 56px rgba(15,23,42,.16); --signal-line: rgba(2,132,199,.28); --surface-glass: rgba(255,255,255,.86); }
+    button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+    .workflow-shell { display:grid; gap:16px; }
+    .workflow-rail { display:grid; grid-template-columns:repeat(4,1fr); gap:0; overflow:hidden; background:var(--surface-glass); border:1px solid var(--border); border-radius:16px; box-shadow:var(--panel-shadow); }
+    .workflow-rail__step { position:relative; padding:17px 18px 16px 56px; min-height:76px; border-right:1px solid var(--border); }
+    .workflow-rail__step:last-child { border-right:0; }
+    .workflow-rail__number { position:absolute; left:17px; top:18px; width:28px; height:28px; display:grid; place-items:center; border:1px solid var(--signal-line); border-radius:50%; color:var(--cyan); font:700 11px 'JetBrains Mono',monospace; }
+    .workflow-rail__label { display:block; color:var(--text); font-size:13px; font-weight:800; letter-spacing:.02em; }
+    .workflow-rail__hint { display:block; margin-top:5px; color:var(--text-dim); font-size:11px; line-height:1.35; }
+    .workflow-stage { position:relative; background:var(--surface-glass); border:1px solid var(--border); border-radius:16px; box-shadow:var(--panel-shadow); overflow:hidden; }
+    .workflow-stage::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:linear-gradient(var(--cyan),rgba(56,189,248,.05)); }
+    .workflow-stage--assets::before { background:linear-gradient(var(--green),rgba(16,185,129,.05)); }
+    .stage-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:20px 24px 0; }
+    .stage-kicker { color:var(--cyan); font:700 10px 'JetBrains Mono',monospace; letter-spacing:.16em; text-transform:uppercase; }
+    .stage-title { margin-top:5px; color:var(--text); font-size:20px; font-weight:800; letter-spacing:-.025em; }
+    .stage-copy { max-width:520px; margin-top:5px; color:var(--text-dim); font-size:12px; line-height:1.55; }
+    .workflow-stage .input-card { margin:0; padding:20px 24px 24px; background:transparent; border:0; border-radius:0; box-shadow:none; }
+    .workflow-stage .input-card::before { display:none; }
+
+    /* ── WORKSPACE: SIDEBAR LEFT + ASSETS RIGHT ──── */
+    .workspace-layout {
+      display:grid;
+      grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+      gap:16px;
+      align-items:start;
+    }
+    .workspace-sidebar {
+      position:sticky;
+      top:16px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      max-height:calc(100vh - 32px);
+      overflow:hidden;
+    }
+    .workspace-sidebar .workflow-stage {
+      display:flex;
+      flex-direction:column;
+      max-height:calc(100vh - 32px);
+      overflow:hidden;
+    }
+    .workspace-sidebar .stage-head {
+      padding:16px 16px 0;
+      flex-shrink:0;
+    }
+    .workspace-sidebar .stage-title { font-size:16px; }
+    .workspace-sidebar .stage-copy {
+      max-width:none;
+      font-size:11px;
+      margin-top:4px;
+      margin-bottom:0;
+    }
+    .workspace-main {
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:0;
+    }
+    .workspace-main .workflow-stage--assets {
+      min-height:calc(100vh - 140px);
+    }
+
+    /* Sidebar source card */
+    .sidebar-source {
+      display:flex;
+      flex-direction:column;
+      gap:0;
+      flex:1;
+      min-height:0;
+      overflow-y:auto;
+      border-top:1px solid var(--border);
+    }
+    .sidebar-source .input-card {
+      flex:0 0 auto;
+      display:flex;
+      flex-direction:column;
+      padding:14px 14px 12px;
+    }
+    .sidebar-source .input-tabs {
+      width:100%;
+      display:flex;
+      justify-content:stretch;
+      margin-bottom:12px;
+      padding:3px;
+      border-bottom:0;
+      gap:0;
+    }
+    .sidebar-source .tab-btn {
+      flex:1;
+      text-align:center;
+      font-size:11px;
+      padding:7px 8px;
+      white-space:nowrap;
+    }
+    .sidebar-source .tab-content { display:none; }
+    .sidebar-source .tab-content.active { display:flex; flex-direction:column; }
+    .sidebar-source .drop-zone {
+      padding:18px 12px;
+      min-height:140px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      border-radius:10px;
+      background:linear-gradient(135deg,rgba(56,189,248,.055),rgba(168,85,247,.025));
+    }
+    .sidebar-source .drop-icon { font-size:28px; margin-bottom:6px; }
+    .sidebar-source .drop-title { font-size:13px; }
+    .sidebar-source .drop-sub { font-size:11px; margin-bottom:12px; }
+    .sidebar-source .btn-browse { padding:7px 14px; font-size:12px; }
+    .sidebar-source .file-list { flex-direction:column; flex-wrap:nowrap; gap:6px; margin-top:12px; }
+    .sidebar-source .file-item { width:100%; padding:7px 10px; border-radius:8px; animation:none; }
+    .sidebar-source .file-name { max-width:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }
+    .sidebar-source .code-editor-textarea {
+      min-height:140px;
+      max-height:200px;
+      font-size:11px;
+      padding:10px;
+      resize:vertical;
+    }
+    .sidebar-source .input-text-field {
+      font-size:12px;
+      padding:8px 10px;
+      margin-bottom:8px;
+    }
+    .sidebar-source .btn-generate {
+      width:100%;
+      min-width:0;
+      margin-top:12px;
+      padding:12px 14px;
+      font-size:13px;
+      letter-spacing:.8px;
+    }
+
+    /* Compact queue monitor in sidebar */
+    .sidebar-monitor {
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      padding:0 14px 14px;
+      flex-shrink:0;
+    }
+    .monitor-card {
+      background:rgba(0,0,0,.16);
+      border:1px solid var(--border);
+      border-radius:10px;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+    .monitor-card--queue { min-height:100px; max-height:220px; }
+    .sidebar-monitor .pipeline-pulse {
+      padding:0;
+      border:0;
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+    .sidebar-monitor .queue-panel {
+      margin:0;
+      border:0;
+      border-radius:0;
+      background:transparent;
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+    .sidebar-monitor .queue-header {
+      padding:8px 10px;
+      cursor:pointer;
+      background:rgba(56,189,248,.04);
+      border-bottom:1px solid var(--border);
+    }
+    .sidebar-monitor .queue-title { font-size:12px; gap:6px; }
+    .sidebar-monitor .queue-stats-bar {
+      margin:0;
+      padding:8px 10px;
+      background:rgba(0,0,0,.12);
+      border-bottom:1px solid var(--border);
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      font-size:10px;
+    }
+    .sidebar-monitor .queue-stats-bar span,
+    .sidebar-monitor .queue-badge { border-radius:999px; }
+    .sidebar-monitor .queue-body {
+      margin:0;
+      border-radius:0;
+      flex:1;
+      max-height:160px;
+      min-height:50px;
+      overflow-y:auto;
+    }
+
+    .input-tabs { display:inline-flex; width:auto; padding:4px; border-radius:10px; background:var(--bg3); }
+    .tab-btn { border-radius:7px; }
+    .tab-btn.active { box-shadow:0 4px 14px rgba(56,189,248,.16); }
+    .drop-zone { padding:28px; border-radius:12px; background:linear-gradient(135deg,rgba(56,189,248,.055),rgba(168,85,247,.025)); }
+    .drop-icon { font-size:36px; margin-bottom:9px; }
+    .drop-title { font-size:16px; }
+    .file-list { flex-direction:row; flex-wrap:wrap; gap:7px; }
+    .file-item { width:auto; padding:7px 10px; border-radius:999px; animation:none; }
+    .file-name { max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .btn-generate { width:auto; min-width:250px; margin-top:20px; padding:13px 20px; letter-spacing:1px; }
+    .log-panel { margin:0 24px 24px; border-radius:12px; }
+    .pipeline-pulse { padding:16px 24px; border-top:1px solid var(--border); }
+    .queue-panel { margin:0; border:0; border-radius:0; background:transparent; }
+    .queue-header { padding:0; cursor:pointer; }
+    .queue-stats-bar { margin:13px 0 0; padding:0; background:transparent; border:0; display:flex; gap:10px; flex-wrap:wrap; }
+    .queue-stats-bar span, .queue-badge { border-radius:999px; }
+    .queue-body { margin-top:12px; border-radius:10px; }
+    .asset-stage-content { padding:20px 24px 24px; }
+    .workflow-stage--assets .results-header { margin:0 0 18px; }
+    .asset-grid { display:grid; gap:14px; }
+    .asset-card { position:relative; overflow:hidden; padding:18px; border:1px solid var(--border); border-radius:13px; background:linear-gradient(140deg,rgba(19,29,48,.78),rgba(13,20,36,.9)); box-shadow:0 10px 28px rgba(0,0,0,.12); }
+    .asset-card[data-state="ready"] { border-left:3px solid var(--green); }
+    .asset-card[data-state="working"] { border-left:3px solid var(--purple); }
+    .asset-card[data-state="queued"] { border-left:3px solid var(--amber); }
+    .asset-card[data-state="failed"] { border-left:3px solid var(--red); }
+    .asset-card__header { display:flex; align-items:flex-start; gap:10px; }
+    .asset-card__number { color:var(--text-dim); font:700 11px 'JetBrains Mono',monospace; padding-top:5px; }
+    .asset-card__name { flex:1; min-width:0; color:var(--cyan); font:700 12px 'JetBrains Mono',monospace; overflow-wrap:anywhere; padding-top:5px; }
+    .asset-card__meta { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
+    .asset-card__rail { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin:16px 0; }
+    .asset-step { padding:7px 9px; border:1px solid var(--border); border-radius:7px; color:var(--text-dim); font-size:10px; font-weight:700; }
+    .asset-step.active { background:var(--cyan-dim); border-color:var(--cyan); color:var(--cyan); }
+    .asset-step.done { background:var(--green-dim); border-color:rgba(16,185,129,.35); color:var(--green); }
+    .asset-card__body { display:grid; grid-template-columns:minmax(260px,1.35fr) minmax(150px,.72fr) minmax(220px,1fr); gap:12px; align-items:start; }
+    .asset-section-label { margin:0 0 7px; color:var(--text-dim); font:700 10px 'JetBrains Mono',monospace; letter-spacing:.09em; text-transform:uppercase; }
+    .asset-section-label--compact { margin:0 0 5px; font-size:9px; letter-spacing:.07em; }
+    .asset-preview { min-height:190px; padding:8px; border:1px solid var(--border); border-radius:9px; background:rgba(0,0,0,.14); }
+    .asset-preview .preview-video { width:100% !important; max-width:none !important; height:160px !important; object-fit:cover; border-radius:6px; background:#000; }
+    .asset-preview .btn-browse { margin-top:2px; padding:6px 8px !important; font-size:11px !important; }
+    .asset-preview__empty {
+      min-height:160px;
+      height:160px;
+      display:grid;
+      place-items:center;
+      text-align:center;
+      color:var(--text-dim);
+      font-size:11px;
+      border:1px dashed var(--border);
+      border-radius:6px;
+    }
+    .asset-settings {
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      min-height:0;
+      padding:7px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:rgba(0,0,0,.09);
+    }
+    .asset-settings .video-config {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:4px;
+    }
+    .asset-settings .video-config .select-input {
+      width:100% !important;
+      margin:0 !important;
+      font-size:10px;
+      padding:4px 5px;
+      min-height:0;
+      height:auto;
+      line-height:1.2;
+    }
+    .asset-settings__files {
+      display:flex;
+      flex-wrap:wrap;
+      gap:4px;
+    }
+    .asset-settings__files .btn-action,
+    .asset-settings__files .btn-code-link {
+      flex:1 1 68px;
+      text-align:center;
+      margin:0 !important;
+      font-size:9.5px;
+      padding:4px 5px;
+      line-height:1.2;
+      white-space:nowrap;
+    }
+    .asset-edit { display:grid; gap:12px; }
+    .asset-edit .edit-field { background:rgba(0,0,0,.09); border-color:var(--border); }
+    .asset-actions { margin-top:15px; padding-top:15px; border-top:1px solid var(--border); }
+    .asset-actions__primary { display:grid; grid-template-columns:minmax(150px,1fr) repeat(3,minmax(130px,1fr)); gap:8px; }
+    .asset-actions__primary .select-input, .asset-actions__primary .btn-action { width:100% !important; margin:0 !important; }
+    .asset-actions__log {
+      margin-top:12px;
+      padding:10px;
+      border:1px solid var(--border);
+      border-radius:8px;
+      background:rgba(0,0,0,.08);
+    }
+    .asset-actions__log .asset-log { margin:0; }
+    .asset-actions__log .mini-log-box {
+      height:126px !important;
+      min-height:126px !important;
+      max-height:126px !important;
+    }
+    .batch-bar { border-radius:10px; }
+    @media (hover:hover) { .asset-card:hover { border-color:var(--border-hover); box-shadow:var(--panel-shadow-hover); transform:translateY(-1px); } }
+    @media (max-width:1200px) {
+      .workspace-layout { grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); }
+    }
+    @media (max-width:1100px) {
+      .workspace-layout { grid-template-columns:1fr; }
+      .workspace-sidebar {
+        position:static;
+        max-height:none;
+        overflow:visible;
+      }
+      .workspace-sidebar .workflow-stage {
+        max-height:none;
+        overflow:visible;
+      }
+      .workspace-main .workflow-stage--assets { min-height:0; }
+      .asset-card__body { grid-template-columns:minmax(240px,1.2fr) minmax(150px,.8fr); }
+      .asset-edit { grid-column:1/-1; grid-template-columns:1fr 1fr; }
+    }
+    @media (max-width:768px) {
+      .main { padding:22px 14px 42px; }
+      .header { padding:16px; flex-wrap:wrap; }
+      .workflow-rail { grid-template-columns:1fr 1fr; }
+      .workflow-rail__step:nth-child(2) { border-right:0; }
+      .workflow-rail__step:nth-child(-n+2) { border-bottom:1px solid var(--border); }
+      .stage-head, .asset-stage-content { padding-left:16px; padding-right:16px; }
+      .workspace-sidebar .stage-head { padding-left:14px; padding-right:14px; }
+      .workflow-stage .input-card, .sidebar-source .input-card { padding-left:14px; padding-right:14px; }
+      .log-panel { margin-left:16px; margin-right:16px; }
+      .asset-card__body, .asset-edit, .asset-actions__primary { grid-template-columns:1fr; }
+      .asset-card__meta { justify-content:flex-start; }
+    }
+    @media (max-width:480px) {
+      .workflow-rail { grid-template-columns:1fr; }
+      .workflow-rail__step { border-right:0; border-bottom:1px solid var(--border); }
+      .workflow-rail__step:last-child { border-bottom:0; }
+      .stage-head { display:block; }
+      .btn-generate { width:100%; min-width:0; }
+      .asset-card { padding:13px; }
+      .asset-card__rail { grid-template-columns:1fr 1fr; }
+    }
+    @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; scroll-behavior:auto!important; } .asset-card:hover { transform:none; } }
   </style>
 </head>
 <body>
@@ -1210,75 +1560,94 @@
 </header>
 
 <main class="main">
-  <div id="generatorPanel" class="insights-panel active">
+  <div id="generatorPanel" class="insights-panel active workflow-shell">
+    <section class="workflow-rail" aria-label="Alur produksi aset">
+      <div class="workflow-rail__step"><span class="workflow-rail__number">01</span><span class="workflow-rail__label">Source</span><span class="workflow-rail__hint">Upload atau tempel HTML animasi.</span></div>
+      <div class="workflow-rail__step"><span class="workflow-rail__number">02</span><span class="workflow-rail__label">TSX & Preview</span><span class="workflow-rail__hint">AI mengonversi dan merender preview.</span></div>
+      <div class="workflow-rail__step"><span class="workflow-rail__number">03</span><span class="workflow-rail__label">Metadata</span><span class="workflow-rail__hint">Tinjau judul, keyword, dan kategori.</span></div>
+      <div class="workflow-rail__step"><span class="workflow-rail__number">04</span><span class="workflow-rail__label">4K Delivery</span><span class="workflow-rail__hint">Render ProRes dan ekspor metadata.</span></div>
+    </section>
 
-  <!-- ═══════════ INPUT CARD ═══════════ -->
-  <div class="input-card">
-    <!-- Input Tabs -->
-    <div class="input-tabs">
-      <button class="tab-btn active" id="tabUploadBtn" onclick="switchInputTab('upload')">📂 Upload File HTML</button>
-      <button class="tab-btn" id="tabPasteBtn" onclick="switchInputTab('paste')">✍ Paste Kode HTML</button>
-    </div>
+    <div class="workspace-layout">
+      <!-- ═══ LEFT SIDEBAR: Stage 01 Intake ═══ -->
+      <aside class="workspace-sidebar" aria-label="Stage 01 Intake sidebar">
+        <section class="workflow-stage" aria-labelledby="sourceStageTitle">
+          <div class="stage-head">
+            <div>
+              <div class="stage-kicker">Stage 01 · Intake</div>
+              <h2 class="stage-title" id="sourceStageTitle">Source material</h2>
+              <p class="stage-copy">Upload atau paste HTML, lalu generate ke antrean produksi.</p>
+            </div>
+          </div>
 
-    <!-- Tab Upload Content -->
-    <div class="tab-content active" id="tabUploadContent">
-      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <div class="drop-icon">📁</div>
-        <div class="drop-title">Drag & drop file .html ke sini</div>
-        <div class="drop-sub">Mendukung multi-file (maks. 10 file)</div>
-        <label class="btn-browse" onclick="event.stopPropagation()">
-          Pilih File HTML
-          <input type="file" id="fileInput" multiple accept=".html" hidden onchange="handleFileSelect(this.files)" />
-        </label>
-        <div class="file-list" id="fileList"></div>
+          <div class="sidebar-source">
+            <div class="input-card">
+              <div class="input-tabs" role="tablist" aria-label="Metode sumber HTML">
+                <button class="tab-btn active" id="tabUploadBtn" role="tab" aria-selected="true" aria-controls="tabUploadContent" onclick="switchInputTab('upload')">📂 Upload</button>
+                <button class="tab-btn" id="tabPasteBtn" role="tab" aria-selected="false" aria-controls="tabPasteContent" onclick="switchInputTab('paste')">✍ Paste</button>
+              </div>
+
+              <div class="tab-content active" id="tabUploadContent" role="tabpanel" aria-labelledby="tabUploadBtn">
+                <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                  <div class="drop-icon">📁</div>
+                  <div class="drop-title">Drag & drop .html</div>
+                  <div class="drop-sub">Multi-file (maks. 10)</div>
+                  <label class="btn-browse" onclick="event.stopPropagation()">
+                    Pilih File
+                    <input type="file" id="fileInput" multiple accept=".html" hidden onchange="handleFileSelect(this.files)" />
+                  </label>
+                  <div class="file-list" id="fileList"></div>
+                </div>
+              </div>
+
+              <div class="tab-content" id="tabPasteContent" role="tabpanel" aria-labelledby="tabPasteBtn">
+                <input type="text" class="input-text-field" id="pasteFileName" placeholder="Nama file / ID (opsional)" />
+                <textarea class="code-editor-textarea" id="pasteHtmlCode" placeholder="Tempel kode HTML di sini..." oninput="checkPasteInput()"></textarea>
+              </div>
+
+              <button class="btn-generate" id="btnGenerate" onclick="startGenerate()" disabled>
+                ⚡ GENERATE
+              </button>
+            </div>
+
+            <div class="sidebar-monitor">
+              <div class="monitor-card monitor-card--queue">
+                <div class="pipeline-pulse">
+                  <div class="queue-panel" id="queuePanel">
+                    <div class="queue-header" onclick="toggleQueuePanel()" role="button" tabindex="0" aria-expanded="true" aria-controls="queueBody" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleQueuePanel()}">
+                      <div class="queue-title">
+                        <span>⏳</span>
+                        <span>Queue Status</span>
+                        <span class="queue-badges" id="queueBadges" role="status" aria-live="polite"></span>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:9px; color:var(--text-dim);" id="queueLastUpdate">5s</span>
+                        <span class="queue-toggle-icon" id="queueToggleIcon">▼</span>
+                      </div>
+                    </div>
+                    <div class="queue-stats-bar" id="queueStatsBar"></div>
+                    <div class="queue-body" id="queueBody">
+                      <div class="queue-empty" id="queueEmpty">Loading...</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <!-- ═══ RIGHT MAIN: Production Assets ═══ -->
+      <div class="workspace-main">
+    <section class="workflow-stage workflow-stage--assets" aria-labelledby="assetStageTitle">
+      <div class="stage-head">
+        <div>
+          <div class="stage-kicker">Stages 02—04 · Production</div>
+          <h2 class="stage-title" id="assetStageTitle">Production assets</h2>
+          <p class="stage-copy">Pantau status, tinjau metadata, lalu kirim aset siap ke render 4K.</p>
+        </div>
       </div>
-    </div>
-
-    <!-- Tab Paste Content -->
-    <div class="tab-content" id="tabPasteContent">
-      <input type="text" class="input-text-field" id="pasteFileName" placeholder="Nama file / ID unik kustom (misal: glowing_button) — opsional" />
-      <textarea class="code-editor-textarea" id="pasteHtmlCode" placeholder="Tempelkan (paste) kode HTML lengkap Anda di sini..." oninput="checkPasteInput()"></textarea>
-    </div>
-
-
-
-    <!-- Generate Button -->
-    <button class="btn-generate" id="btnGenerate" onclick="startGenerate()" disabled>
-      ⚡ &nbsp;GENERATE ASSET
-    </button>
-  </div>
-
-  <!-- ═══════════ LOG TERMINAL ═══════════ -->
-  <div class="log-panel" id="logPanel" style="display:none">
-    <div class="log-header">
-      <div class="log-title">
-        <div class="log-dot" id="logDot"></div>
-        📡 Live Process Log
-      </div>
-      <span class="log-status" id="logStatus">Memproses...</span>
-    </div>
-    <div class="log-body" id="logBody"></div>
-  </div>
-
-  <!-- ═══════════ QUEUE STATUS PANEL ═══════════ -->
-  <div class="queue-panel" id="queuePanel">
-    <div class="queue-header" onclick="toggleQueuePanel()">
-      <div class="queue-title">
-        <span>⏳</span>
-        <span>Queue & Processing Status</span>
-        <span class="queue-badges" id="queueBadges"></span>
-      </div>
-      <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-size:10px; color:var(--text-dim);" id="queueLastUpdate">Auto-refresh 5s</span>
-        <span class="queue-toggle-icon" id="queueToggleIcon">▼</span>
-      </div>
-    </div>
-    <div class="queue-stats-bar" id="queueStatsBar"></div>
-    <div class="queue-body" id="queueBody">
-      <div class="queue-empty" id="queueEmpty">Loading queue status...</div>
-    </div>
-  </div>
-
+      <div class="asset-stage-content">
   <!-- ═══════════ RESULTS ═══════════ -->
   <div>
     <div class="results-header">
@@ -1430,10 +1799,14 @@
       <div class="empty-state">
         <div class="empty-icon">🎞</div>
         <div class="empty-text">Belum ada hasil</div>
-        <div class="empty-sub">Upload file HTML di atas dan tekan Generate Asset</div>
+        <div class="empty-sub">Upload file HTML di sidebar kiri dan tekan Generate</div>
       </div>
     </div>
   </div>
+      </div>
+    </section>
+      </div><!-- End workspace-main -->
+    </div><!-- End workspace-layout -->
 </div><!-- End of generatorPanel -->
 
   <!-- ═══════════ GOOGLE TRENDS & ADOBE STOCK EXPLORER PANEL ═══════════ -->
@@ -2294,23 +2667,13 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const el = document.getElementById('fileList');
     if (selectedFiles.length === 0) { el.innerHTML = ''; return; }
     el.innerHTML = selectedFiles.map((f, i) => `
-      <div class="file-item">
+      <div class="file-item" title="${escHtml(f.name)}">
         <span>📄</span>
-        <span class="file-name">${f.name}</span>
+        <span class="file-name">${escHtml(f.name)}</span>
         <span class="file-size">${(f.size / 1024).toFixed(1)} KB</span>
-        <button class="file-remove" onclick="removeFile(${i})" title="Hapus">✕</button>
+        <button class="file-remove" onclick="removeFile(${i})" title="Hapus ${escHtml(f.name)}" aria-label="Hapus ${escHtml(f.name)}">✕</button>
       </div>`).join('');
   }
-
-  function updateGenerateBtn() {
-    const btn = document.getElementById('btnGenerate');
-    btn.disabled = selectedFiles.length === 0 || isGenerating;
-    if (isGenerating) btn.textContent = '⏳  Memproses...';
-    else if (selectedFiles.length === 0) btn.textContent = '⚡  GENERATE ASSET';
-    else btn.innerHTML = `⚡ &nbsp;GENERATE ASSET &nbsp;<span style="opacity:0.7;font-weight:400">(${selectedFiles.length} file)</span>`;
-  }
-
-  // ═══════════════════════════════════════════
 
   // ═══════════════════════════════════════════
   // GENERATE
@@ -2320,10 +2683,16 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 
   function switchInputTab(tab) {
     currentInputTab = tab;
-    document.getElementById('tabUploadBtn').classList.toggle('active', tab === 'upload');
-    document.getElementById('tabPasteBtn').classList.toggle('active', tab === 'paste');
-    document.getElementById('tabUploadContent').classList.toggle('active', tab === 'upload');
-    document.getElementById('tabPasteContent').classList.toggle('active', tab === 'paste');
+    const uploadTab = document.getElementById('tabUploadBtn');
+    const pasteTab = document.getElementById('tabPasteBtn');
+    const uploadPanel = document.getElementById('tabUploadContent');
+    const pastePanel = document.getElementById('tabPasteContent');
+    uploadTab.classList.toggle('active', tab === 'upload');
+    pasteTab.classList.toggle('active', tab === 'paste');
+    uploadTab.setAttribute('aria-selected', String(tab === 'upload'));
+    pasteTab.setAttribute('aria-selected', String(tab === 'paste'));
+    uploadPanel.classList.toggle('active', tab === 'upload');
+    pastePanel.classList.toggle('active', tab === 'paste');
     updateGenerateBtn();
   }
 
@@ -2335,14 +2704,14 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const btn = document.getElementById('btnGenerate');
     if (currentInputTab === 'upload') {
       btn.disabled = selectedFiles.length === 0 || isGenerating;
-      if (isGenerating) btn.textContent = '⏳  Memproses...';
-      else if (selectedFiles.length === 0) btn.textContent = '⚡  GENERATE ASSET';
-      else btn.innerHTML = `⚡ &nbsp;GENERATE ASSET &nbsp;<span style="opacity:0.7;font-weight:400">(${selectedFiles.length} file)</span>`;
+      if (isGenerating) btn.textContent = '⏳ Memproses source...';
+      else if (selectedFiles.length === 0) btn.textContent = 'Generate asset';
+      else btn.innerHTML = `Generate ${selectedFiles.length} asset <span style="opacity:.7; font-weight:500;">(${selectedFiles.length}/10 source)</span>`;
     } else {
       const code = document.getElementById('pasteHtmlCode').value.trim();
       btn.disabled = !code || isGenerating;
-      if (isGenerating) btn.textContent = '⏳  Memproses...';
-      else btn.textContent = '⚡  GENERATE FROM PASTE';
+      if (isGenerating) btn.textContent = '⏳ Memproses source...';
+      else btn.textContent = 'Generate dari HTML';
     }
   }
 
@@ -2888,11 +3257,15 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   function renderTable(items) {
     const container = document.getElementById('resultsContainer');
     if (!items || items.length === 0) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🎞</div><div class="empty-text">Belum ada hasil</div><div class="empty-sub">Upload atau Paste kode HTML di atas dan tekan Generate Asset</div></div>`;
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🎞</div>
+          <div class="empty-text">Belum ada aset produksi</div>
+          <div class="empty-sub">Tambahkan HTML pada stage Source untuk mulai membuat preview dan metadata.</div>
+        </div>`;
       return;
     }
 
-    // Sort newest first
     const sorted = [...items].reverse();
     const totalItems = sorted.length;
     const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
@@ -2900,67 +3273,39 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     if (currentPage < 1) currentPage = 1;
 
     const startIdx = (currentPage - 1) * itemsPerPage;
-    const endIdx = startIdx + itemsPerPage;
-    const paginatedItems = sorted.slice(startIdx, endIdx);
+    const paginatedItems = sorted.slice(startIdx, startIdx + itemsPerPage);
 
     let paginationHtml = '';
     if (totalPages > 1) {
-      paginationHtml = `
-        <div class="pagination-container" style="display:flex; justify-content:center; align-items:center; gap:6px; margin: 20px 0; user-select: none;">
-          <button class="toggle-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})" style="padding:5px 10px; font-size:12px;">« Prev</button>
-      `;
-      for (let p = 1; p <= totalPages; p++) {
-        if (p === currentPage) {
-          paginationHtml += `<button class="toggle-btn active" style="padding:5px 10px; font-size:12px; font-weight:bold;">${p}</button>`;
-        } else {
-          paginationHtml += `<button class="toggle-btn" onclick="changePage(${p})" style="padding:5px 10px; font-size:12px;">${p}</button>`;
-        }
+      paginationHtml = `<div class="pagination-container" style="display:flex; justify-content:center; align-items:center; gap:6px; margin:20px 0; user-select:none;">
+        <button class="toggle-btn" ${currentPage === 1 ? 'disabled' : ''} onclick="changePage(${currentPage - 1})" style="padding:5px 10px; font-size:12px;">« Prev</button>`;
+      for (let page = 1; page <= totalPages; page++) {
+        paginationHtml += page === currentPage
+          ? `<button class="toggle-btn active" style="padding:5px 10px; font-size:12px; font-weight:bold;">${page}</button>`
+          : `<button class="toggle-btn" onclick="changePage(${page})" style="padding:5px 10px; font-size:12px;">${page}</button>`;
       }
-      paginationHtml += `
-          <button class="toggle-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})" style="padding:5px 10px; font-size:12px;">Next »</button>
-        </div>
-      `;
+      paginationHtml += `<button class="toggle-btn" ${currentPage === totalPages ? 'disabled' : ''} onclick="changePage(${currentPage + 1})" style="padding:5px 10px; font-size:12px;">Next »</button></div>`;
     }
 
     container.innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              ${batchModeActive ? '<th style="width:36px"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="accent-color: var(--purple); width: 16px; height: 16px; cursor: pointer;" /></th>' : ''}
-              <th style="width:44px">No</th>
-              <th style="width:180px">Preview Video</th>
-              <th style="width:320px">Log & Status Proses</th>
-              <th>Rekomendasi Keywords</th>
-              <th style="width:170px">Aksi & AI</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${paginatedItems.map((item, i) => renderRow(item, startIdx + i + 1)).join('')}
-          </tbody>
-        </table>
-      </div>
-      ${paginationHtml}
-    `;
+      ${batchModeActive ? `<div class="asset-grid-toolbar"><label style="display:inline-flex; align-items:center; gap:8px; color:var(--text-mid); font-size:12px; font-weight:700;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" style="accent-color:var(--purple); width:16px; height:16px; cursor:pointer;" /> Pilih semua aset pada halaman ini</label></div>` : ''}
+      <div class="asset-grid">${paginatedItems.map((item, index) => renderRow(item, startIdx + index + 1)).join('')}</div>
+      ${paginationHtml}`;
 
-    // Attach change listeners for editable fields
     paginatedItems.forEach(item => {
       const titleEl = document.getElementById(`title_${item.id}`);
-      const kwEl = document.getElementById(`kw_${item.id}`);
+      const keywordsEl = document.getElementById(`kw_${item.id}`);
       if (titleEl) titleEl.addEventListener('blur', () => saveField(item.id, 'judul', titleEl.value));
-      if (kwEl) kwEl.addEventListener('blur', () => saveField(item.id, 'keywords', kwEl.value));
-      
-      // Auto-scroll log box ke bawah saat pertama kali render
+      if (keywordsEl) keywordsEl.addEventListener('blur', () => saveField(item.id, 'keywords', keywordsEl.value));
+
       const logBox = document.getElementById(`logbox_${item.id}`);
       if (logBox) logBox.scrollTop = logBox.scrollHeight;
     });
 
     if (batchModeActive) {
       const selectAllCb = document.getElementById('selectAllCheckbox');
-      if (selectAllCb) {
-        const checkboxes = Array.from(document.querySelectorAll('.row-checkbox:not(:disabled)'));
-        selectAllCb.checked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
-      }
+      const checkboxes = Array.from(document.querySelectorAll('.row-checkbox:not(:disabled)'));
+      if (selectAllCb) selectAllCb.checked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
     }
   }
 
@@ -2969,13 +3314,43 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     loadResults();
   }
 
+  function getAssetWorkflow(item) {
+    const status = item.statusConvertTsx || 'queued';
+    const render4k = item.statusRender4k;
+    const hasMetadata = Boolean(item.judul && item.judul.trim());
+    const failed = status === 'failed' || status === 'cancelled' || render4k === 'failed';
+    const busy = status === 'processing-tsx' || status === 'processing-preview' || render4k === 'processing' || Boolean(activeSeoGenerations[item.id]);
+    const queued = status === 'queued' || render4k === 'queued';
+
+    let current = 0;
+    if (item.outputPath4k || render4k === 'success') current = 4;
+    else if (render4k === 'queued' || render4k === 'processing' || hasMetadata) current = 3;
+    else if (item.previewUrl || status === 'success' || Boolean(activeSeoGenerations[item.id])) current = 2;
+    else if (status === 'processing-tsx' || status === 'processing-preview') current = 1;
+
+    let cardState = 'ready';
+    if (failed) cardState = 'failed';
+    else if (busy) cardState = 'working';
+    else if (queued || current === 0) cardState = 'queued';
+
+    return { current, cardState };
+  }
+
+  function renderAssetRail(item) {
+    const { current } = getAssetWorkflow(item);
+    const steps = ['Source', 'Preview', 'Metadata', '4K Delivery'];
+    return `<div class="asset-card__rail" aria-label="Tahap produksi aset">
+      ${steps.map((label, index) => `<span class="asset-step ${index < current ? 'done' : ''} ${index === current && current < steps.length ? 'active' : ''}">${index + 1}. ${label}</span>`).join('')}
+    </div>`;
+  }
+
   function renderLogCell(item) {
     let statusBadge = '';
     const status = item.statusConvertTsx || 'queued';
     const isSeoRunning = !!activeSeoGenerations[item.id];
-    
+
     if (isSeoRunning) {
-      statusBadge = `<span class="status-badge badge-converting"><span class="spin">⏳</span> AI SEO...</span>`;
+      statusBadge = `<span class="status-badge badge-converting"><span class="spin">⏳</span> AI Metadata</span>`;
     } else if (status === 'queued') {
       statusBadge = `<span class="status-badge badge-queued"><span class="spin">⏳</span> Antrean TSX</span>`;
     } else if (status === 'processing-tsx') {
@@ -2983,256 +3358,98 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     } else if (status === 'processing-preview') {
       statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render Preview</span>`;
     } else if (status === 'success') {
-      if (item.statusRender4k === 'queued') {
-        statusBadge = `<span class="status-badge badge-queued"><span class="spin">⏳</span> Antrean 4K</span>`;
-      } else if (item.statusRender4k === 'processing') {
-        statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render 4K...</span>`;
-      } else if (item.statusRender4k === 'success') {
-        statusBadge = `<span class="status-badge badge-success">✅ Selesai 4K</span>`;
-      } else if (item.statusRender4k === 'failed') {
-        statusBadge = `<span class="status-badge badge-error">❌ Gagal 4K</span>`;
-      } else {
-        statusBadge = `<span class="status-badge badge-success">✅ Preview Siap</span>`;
-      }
+      if (item.statusRender4k === 'queued') statusBadge = `<span class="status-badge badge-queued"><span class="spin">⏳</span> Antrean 4K</span>`;
+      else if (item.statusRender4k === 'processing') statusBadge = `<span class="status-badge badge-rendering"><span class="spin">☁</span> Render 4K</span>`;
+      else if (item.statusRender4k === 'success') statusBadge = `<span class="status-badge badge-success">✅ Selesai 4K</span>`;
+      else if (item.statusRender4k === 'failed') statusBadge = `<span class="status-badge badge-error">❌ Gagal 4K</span>`;
+      else statusBadge = `<span class="status-badge badge-success">✅ Preview siap</span>`;
     } else if (status === 'failed') {
       statusBadge = `<span class="status-badge badge-error">❌ Gagal TSX/Preview</span>`;
     } else if (status === 'cancelled') {
       statusBadge = `<span class="status-badge badge-cancelled">🚫 Dibatalkan</span>`;
     } else if (status === 'waiting') {
-      statusBadge = `<span class="status-badge badge-queued" style="background:rgba(100,100,100,0.12);color:#94a3b8;border:1px solid rgba(100,100,100,0.2)">⏸ Menunggu SEO</span>`;
+      statusBadge = `<span class="status-badge badge-queued">⏸ Menunggu proses</span>`;
     } else if (status === 'waiting-otp') {
-      statusBadge = `<span class="status-badge badge-queued" style="background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.35);"><span class="spin">🔑</span> Menunggu OTP</span>`;
+      statusBadge = `<span class="status-badge badge-queued"><span class="spin">🔑</span> Menunggu OTP</span>`;
     } else if (status === 'waiting-preview') {
-      statusBadge = `<span class="status-badge badge-queued" style="background:rgba(124,58,237,0.12);color:var(--purple);border:1px solid rgba(124,58,237,0.25);">⏸ Menunggu Preview</span>`;
+      statusBadge = `<span class="status-badge badge-queued">⏸ Menunggu preview</span>`;
     }
 
-    const logs = item.logs || [];
-    const logsHtml = logs.map(log => {
-      let msgClass = '';
-      if (log.type === 'error') msgClass = 'error';
-      else if (log.type === 'success') msgClass = 'success';
-      else if (log.type === 'warning') msgClass = 'warning';
-      return `<div class="mini-log-line">
-        <span class="mini-log-time">${log.time || ''}</span>
-        <span class="mini-log-msg ${msgClass}">${escHtml(log.message || '')}</span>
-      </div>`;
+    const logsHtml = (item.logs || []).map(log => {
+      const msgClass = log.type === 'error' ? 'error' : log.type === 'success' ? 'success' : log.type === 'warning' ? 'warning' : '';
+      return `<div class="mini-log-line"><span class="mini-log-time">${log.time || ''}</span><span class="mini-log-msg ${msgClass}">${escHtml(log.message || '')}</span></div>`;
     }).join('');
 
-    const logBoxId = `logbox_${item.id}`;
-    
-    let otpForm = '';
-    if (status === 'waiting-otp') {
-      otpForm = `
-        <div style="margin-top:8px; padding:8px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:6px; max-width:100%;">
-          <div style="font-size:11px; color:var(--amber); font-weight:600; margin-bottom:4px;">🔑 Masukkan OTP Syntx.ai:</div>
-          <div style="font-size:10px; color:var(--text-dim); margin-bottom:6px; word-break:break-all;">Kirim ke: <a href="https://www.emailnator.com/mailbox/#${escHtml(item.otpEmail || '')}" target="_blank" style="color:var(--cyan); font-weight:bold; text-decoration:underline; font-family:monospace;">${escHtml(item.otpEmail || '')}</a></div>
-          <div style="display:flex; gap:4px;">
-            <input type="text" id="otp_input_${item.id}" placeholder="6-digit" class="select-input" style="padding:4px 8px; font-size:11px; height:auto; text-align:center; font-family:monospace; font-weight:bold; width:80px;" maxlength="6" />
-            <button class="btn-action" onclick="submitOtp('${item.id}')" style="padding:4px 10px; font-size:11px; margin:0; line-height:1.3; width:auto; background:var(--amber); border:1px solid var(--amber); color:#000; font-weight:600; border-radius:6px; cursor:pointer;">Kirim</button>
-          </div>
-        </div>
-      `;
-    }
+    const otpForm = status === 'waiting-otp' ? `
+      <div style="margin-top:8px; padding:8px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.2); border-radius:6px;">
+        <div style="font-size:11px; color:var(--amber); font-weight:600; margin-bottom:4px;">🔑 Masukkan OTP Syntx.ai</div>
+        <div style="font-size:10px; color:var(--text-dim); margin-bottom:6px; word-break:break-all;">Kirim ke: <a href="https://www.emailnator.com/mailbox/#${escHtml(item.otpEmail || '')}" target="_blank" style="color:var(--cyan); font-weight:bold; text-decoration:underline; font-family:monospace;">${escHtml(item.otpEmail || '')}</a></div>
+        <div style="display:flex; gap:4px;"><input type="text" id="otp_input_${item.id}" placeholder="6-digit" class="select-input" style="padding:4px 8px; font-size:11px; height:auto; text-align:center; font-family:monospace; font-weight:bold; width:80px;" maxlength="6" /><button class="btn-action" onclick="submitOtp('${item.id}')" style="padding:4px 10px; font-size:11px; margin:0; width:auto; background:var(--amber); border:1px solid var(--amber); color:#000;">Kirim</button></div>
+      </div>` : '';
 
-    return `
-      <div>
-        <div style="margin-bottom:6px;">${statusBadge}</div>
-        <div class="mini-log-box" id="${logBoxId}" style="height: 140px; min-height: 140px; max-height: 140px;">
-          ${logsHtml || '<div style="color:var(--text-dim);font-size:10px;">Belum ada log.</div>'}
-        </div>
-        ${otpForm}
-      </div>
-    `;
+    return `<div class="asset-log"><div style="margin-bottom:8px;">${statusBadge}</div><div class="mini-log-box" id="logbox_${item.id}" aria-live="polite">${logsHtml || '<div style="color:var(--text-dim);font-size:10px;">Belum ada log.</div>'}</div>${otpForm}</div>`;
   }
 
   function renderRow(item, no) {
-    const previewCell = renderPreviewCell(item);
-    const logCell = renderLogCell(item);
-    const actsCell = renderActionsCell(item);
-    const canBatch4k = !!(item.promptCode);
-
-    const checkboxCell = batchModeActive
-      ? `<td rowspan="3" style="text-align:center;vertical-align:middle; border-bottom:4px solid var(--border-hover);"><input type="checkbox" class="row-checkbox" data-id="${item.id}" ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" /></td>`
-      : '';
-
-    let rowBg = 'rgba(56,189,248,0.02)'; // default background
-    let statusBadge = '';
-    
-    if (item.statusConvertTsx === 'queued') {
-      rowBg = 'rgba(245, 158, 11, 0.08)'; // subtle amber
-      statusBadge = `<span class="status-badge" style="background:rgba(245,158,11,0.12); color:#f59e0b; border:1px solid rgba(245,158,11,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">⏳ Di Antrean</span>`;
-    } else if (item.statusConvertTsx === 'processing-tsx') {
-      rowBg = 'rgba(168, 85, 247, 0.1)'; // subtle purple
-      statusBadge = `<span class="status-badge" style="background:rgba(168,85,247,0.12); color:#c084fc; border:1px solid rgba(168,85,247,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">⚙️ Mengonversi TSX...</span>`;
-    } else if (item.statusConvertTsx === 'processing-preview') {
-      rowBg = 'rgba(6, 182, 212, 0.1)'; // subtle cyan
-      statusBadge = `<span class="status-badge" style="background:rgba(6,182,212,0.12); color:#22d3ee; border:1px solid rgba(6,182,212,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">🎬 Merender Preview...</span>`;
-    } else if (item.previewUrl) {
-      rowBg = 'rgba(16, 185, 129, 0.08)'; // subtle emerald green
-      statusBadge = `<span class="status-badge" style="background:rgba(16,185,129,0.12); color:#34d399; border:1px solid rgba(16,185,129,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">✅ Selesai Preview</span>`;
-    } else if (item.statusConvertTsx === 'failed') {
-      rowBg = 'rgba(239, 68, 68, 0.08)'; // subtle red
-      statusBadge = `<span class="status-badge" style="background:rgba(239,68,68,0.12); color:#f87171; border:1px solid rgba(239,68,68,0.25); font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; margin-left:8px; display:inline-flex; align-items:center; gap:4px; vertical-align:middle; text-transform:none; letter-spacing:normal;">❌ Gagal</span>`;
-    }
+    const { cardState } = getAssetWorkflow(item);
+    const uploadStatus = `<select class="select-input" aria-label="Status upload" onchange="saveField('${item.id}', 'uploadStatus', this.value)" title="Status upload" style="padding:3px 7px; font-size:10px; height:auto; margin:0;"><option value="belum_upload" ${item.uploadStatus !== 'upload' ? 'selected' : ''}>Belum upload</option><option value="upload" ${item.uploadStatus === 'upload' ? 'selected' : ''}>Sudah upload</option></select>`;
+    const categoryControls = renderCategoryControls(item);
+    const checkbox = batchModeActive ? `<input type="checkbox" class="row-checkbox asset-checkbox" data-id="${item.id}" ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" aria-label="Pilih ${escHtml(item.fileName || item.id)} untuk batch" style="accent-color:var(--purple); width:16px; height:16px; cursor:pointer;" />` : '';
 
     return `
-      <!-- Baris 1: No, Nama File, Aksi -->
-      <tr id="row_1_${item.id}" style="background: ${rowBg} !important;">
-        ${checkboxCell}
-        <td class="td-no" rowspan="3" style="text-align:center; vertical-align:middle; font-weight:700; border-bottom:4px solid var(--border-hover); border-right:1px solid var(--border);">${no}</td>
-        <td colspan="3" style="font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--cyan); font-weight:700; padding:10px 14px; border-bottom:2px solid var(--border); vertical-align:middle;">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
-            <div style="display:flex; align-items:center; gap:4px; flex-wrap:wrap;">
-              <span>📄 ${escHtml(item.fileName || item.id)}</span>
-              ${statusBadge}
-            </div>
-            
-            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-              <!-- Row 1: Kategori & Status Upload -->
-              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-                <!-- Dropdown upload status (catatan saya) -->
-                <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0;" onchange="saveField('${item.id}', 'uploadStatus', this.value)" title="Status Upload / Catatan Saya">
-                  <option value="belum_upload" ${item.uploadStatus !== 'upload' ? 'selected' : ''}>❌ Belum Upload</option>
-                  <option value="upload" ${item.uploadStatus === 'upload' ? 'selected' : ''}>✅ Sudah Upload</option>
-                </select>
-
-                <!-- Dropdown Adobe Stock Category -->
-                <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(168,85,247,0.4);" onchange="saveField('${item.id}', 'adobeCategory', this.value)" title="Kategori Adobe Stock">
-                  <option value="">Kategori Adobe...</option>
-                  <option value="1" ${item.adobeCategory === '1' ? 'selected' : ''}>1. Animals</option>
-                  <option value="2" ${item.adobeCategory === '2' ? 'selected' : ''}>2. Buildings & Architecture</option>
-                  <option value="3" ${item.adobeCategory === '3' ? 'selected' : ''}>3. Business</option>
-                  <option value="4" ${item.adobeCategory === '4' ? 'selected' : ''}>4. Drinks</option>
-                  <option value="5" ${item.adobeCategory === '5' ? 'selected' : ''}>5. The Environment</option>
-                  <option value="6" ${item.adobeCategory === '6' ? 'selected' : ''}>6. States of Mind</option>
-                  <option value="7" ${item.adobeCategory === '7' ? 'selected' : ''}>7. Food</option>
-                  <option value="8" ${item.adobeCategory === '8' ? 'selected' : ''}>8. Graphic Resources</option>
-                  <option value="9" ${item.adobeCategory === '9' ? 'selected' : ''}>9. Hobbies & Leisure</option>
-                  <option value="10" ${item.adobeCategory === '10' ? 'selected' : ''}>10. Industry</option>
-                  <option value="11" ${item.adobeCategory === '11' ? 'selected' : ''}>11. Landscape</option>
-                  <option value="12" ${item.adobeCategory === '12' ? 'selected' : ''}>12. Lifestyle</option>
-                  <option value="13" ${item.adobeCategory === '13' ? 'selected' : ''}>13. People</option>
-                  <option value="14" ${item.adobeCategory === '14' ? 'selected' : ''}>14. Plants & Flowers</option>
-                  <option value="15" ${item.adobeCategory === '15' ? 'selected' : ''}>15. Culture & Religion</option>
-                  <option value="16" ${item.adobeCategory === '16' ? 'selected' : ''}>16. Science</option>
-                  <option value="17" ${item.adobeCategory === '17' ? 'selected' : ''}>17. Social Issues</option>
-                  <option value="18" ${item.adobeCategory === '18' ? 'selected' : ''}>18. Sports</option>
-                  <option value="19" ${item.adobeCategory === '19' ? 'selected' : ''}>19. Technology</option>
-                  <option value="20" ${item.adobeCategory === '20' ? 'selected' : ''}>20. Transport</option>
-                  <option value="21" ${item.adobeCategory === '21' ? 'selected' : ''}>21. Travel</option>
-                </select>
-
-                <!-- Dropdown Shutterstock Category 1 -->
-                <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory', this.value)" title="Kategori Shutterstock 1">
-                  <option value="">Kategori Shutter 1...</option>
-                  <option value="Animals/Wildlife" ${item.shutterstockCategory === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
-                  <option value="Arts" ${item.shutterstockCategory === 'Arts' ? 'selected' : ''}>Arts</option>
-                  <option value="Backgrounds/Textures" ${item.shutterstockCategory === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
-                  <option value="Buildings/Landmarks" ${item.shutterstockCategory === 'Buildings/Landmarks' ? 'selected' : ''}>Buildings/Landmarks</option>
-                  <option value="Business/Finance" ${item.shutterstockCategory === 'Business/Finance' ? 'selected' : ''}>Business/Finance</option>
-                  <option value="Education" ${item.shutterstockCategory === 'Education' ? 'selected' : ''}>Education</option>
-                  <option value="Food and drink" ${item.shutterstockCategory === 'Food and drink' ? 'selected' : ''}>Food and drink</option>
-                  <option value="Healthcare/Medical" ${item.shutterstockCategory === 'Healthcare/Medical' ? 'selected' : ''}>Healthcare/Medical</option>
-                  <option value="Holidays" ${item.shutterstockCategory === 'Holidays' ? 'selected' : ''}>Holidays</option>
-                  <option value="Industrial" ${item.shutterstockCategory === 'Industrial' ? 'selected' : ''}>Industrial</option>
-                  <option value="Nature" ${item.shutterstockCategory === 'Nature' ? 'selected' : ''}>Nature</option>
-                  <option value="Objects" ${item.shutterstockCategory === 'Objects' ? 'selected' : ''}>Objects</option>
-                  <option value="People" ${item.shutterstockCategory === 'People' ? 'selected' : ''}>People</option>
-                  <option value="Religion" ${item.shutterstockCategory === 'Religion' ? 'selected' : ''}>Religion</option>
-                  <option value="Science" ${item.shutterstockCategory === 'Science' ? 'selected' : ''}>Science</option>
-                  <option value="Signs/Symbols" ${item.shutterstockCategory === 'Signs/Symbols' ? 'selected' : ''}>Signs/Symbols</option>
-                  <option value="Sports/Recreation" ${item.shutterstockCategory === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
-                  <option value="Technology" ${item.shutterstockCategory === 'Technology' ? 'selected' : ''}>Technology</option>
-                  <option value="Transportation" ${item.shutterstockCategory === 'Transportation' ? 'selected' : ''}>Transportation</option>
-                </select>
-
-                <!-- Dropdown Shutterstock Category 2 -->
-                <select class="select-input" style="padding: 2px 6px; font-size: 11px; height: auto; font-weight: 600; width: auto; margin-bottom: 0; border-color: rgba(56,189,248,0.4);" onchange="saveField('${item.id}', 'shutterstockCategory2', this.value)" title="Kategori Shutterstock 2">
-                  <option value="">Kategori Shutter 2...</option>
-                  <option value="Animals/Wildlife" ${item.shutterstockCategory2 === 'Animals/Wildlife' ? 'selected' : ''}>Animals/Wildlife</option>
-                  <option value="Arts" ${item.shutterstockCategory2 === 'Arts' ? 'selected' : ''}>Arts</option>
-                  <option value="Backgrounds/Textures" ${item.shutterstockCategory2 === 'Backgrounds/Textures' ? 'selected' : ''}>Backgrounds/Textures</option>
-                  <option value="Buildings/Landmarks" ${item.shutterstockCategory2 === 'Buildings/Landmarks' ? 'selected' : ''}>Buildings/Landmarks</option>
-                  <option value="Business/Finance" ${item.shutterstockCategory2 === 'Business/Finance' ? 'selected' : ''}>Business/Finance</option>
-                  <option value="Education" ${item.shutterstockCategory2 === 'Education' ? 'selected' : ''}>Education</option>
-                  <option value="Food and drink" ${item.shutterstockCategory2 === 'Food and drink' ? 'selected' : ''}>Food and drink</option>
-                  <option value="Healthcare/Medical" ${item.shutterstockCategory2 === 'Healthcare/Medical' ? 'selected' : ''}>Healthcare/Medical</option>
-                  <option value="Holidays" ${item.shutterstockCategory2 === 'Holidays' ? 'selected' : ''}>Holidays</option>
-                  <option value="Industrial" ${item.shutterstockCategory2 === 'Industrial' ? 'selected' : ''}>Industrial</option>
-                  <option value="Nature" ${item.shutterstockCategory2 === 'Nature' ? 'selected' : ''}>Nature</option>
-                  <option value="Objects" ${item.shutterstockCategory2 === 'Objects' ? 'selected' : ''}>Objects</option>
-                  <option value="People" ${item.shutterstockCategory2 === 'People' ? 'selected' : ''}>People</option>
-                  <option value="Religion" ${item.shutterstockCategory2 === 'Religion' ? 'selected' : ''}>Religion</option>
-                  <option value="Science" ${item.shutterstockCategory2 === 'Science' ? 'selected' : ''}>Science</option>
-                  <option value="Signs/Symbols" ${item.shutterstockCategory2 === 'Signs/Symbols' ? 'selected' : ''}>Signs/Symbols</option>
-                  <option value="Sports/Recreation" ${item.shutterstockCategory2 === 'Sports/Recreation' ? 'selected' : ''}>Sports/Recreation</option>
-                  <option value="Technology" ${item.shutterstockCategory2 === 'Technology' ? 'selected' : ''}>Technology</option>
-                  <option value="Transportation" ${item.shutterstockCategory2 === 'Transportation' ? 'selected' : ''}>Transportation</option>
-                </select>
-              </div>
-              
-
-            </div>
+      <article class="asset-card" data-state="${cardState}" id="asset_${item.id}">
+        <div class="asset-card__header">
+          ${checkbox}
+          <span class="asset-card__number">${String(no).padStart(2, '0')}</span>
+          <div class="asset-card__name">${escHtml(item.fileName || item.id)}</div>
+          <div class="asset-card__meta">${uploadStatus}${categoryControls}</div>
+        </div>
+        ${renderAssetRail(item)}
+        <div class="asset-card__body">
+          <div><div class="asset-section-label">Preview</div><div class="asset-preview">${renderPreviewCell(item)}</div></div>
+          <div><div class="asset-section-label asset-section-label--compact">Settings · Files</div>${renderSettingsCell(item)}</div>
+          <div class="asset-edit">
+            <div><div class="asset-section-label">Judul stock</div><div class="edit-wrap"><textarea id="title_${item.id}" class="edit-field" placeholder="Belum ada judul video..." rows="2">${escHtml(item.judul || '')}</textarea><button class="btn-copy" aria-label="Salin judul" onclick="copyText(document.getElementById('title_${item.id}').value, this)">📋</button></div>${item.seoAiUsed ? `<div style="margin-top:5px; font-size:10px; color:var(--green);">✓ Metadata dibuat dengan ${escHtml(item.seoAiUsed === 'auto' ? 'Auto-Fallback' : item.seoAiUsed)}</div>` : ''}</div>
+            <div><div class="asset-section-label">Keywords</div><div class="edit-wrap"><textarea id="kw_${item.id}" class="edit-field" rows="4" placeholder="Belum ada keywords...">${escHtml(item.keywords || '')}</textarea><button class="btn-copy" aria-label="Salin keywords" onclick="copyText(document.getElementById('kw_${item.id}').value, this)">📋</button></div></div>
           </div>
-        </td>
-        <td rowspan="3" style="vertical-align:top; border-left:1px solid var(--border); border-bottom:4px solid var(--border-hover); padding:12px;">
-          ${actsCell}
-        </td>
-      </tr>
-      
-      <!-- Baris 2: Rekomendasi Judul -->
-      <tr id="row_2_${item.id}" style="background: ${rowBg} !important;">
-        <td colspan="3" style="padding:8px 14px; border-bottom:2px solid var(--border); vertical-align:middle;">
-          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:4px; letter-spacing:0.5px;">Rekomendasi Judul</div>
-          <div class="edit-wrap">
-            <textarea id="title_${item.id}" class="edit-field" placeholder="Belum ada judul video..." rows="2" style="width:100%; font-family:inherit; font-size:13px; line-height:1.4; padding:4px 6px;">${escHtml(item.judul||'')}</textarea>
-            <button class="btn-copy" onclick="copyText(document.getElementById('title_${item.id}').value, this)">📋</button>
-          </div>
-          ${item.seoAiUsed ? `<div style="margin-top:4px; font-size:9.5px; color:var(--green); display:flex; align-items:center; gap:3px;"><span>✅</span><span>Generate dengan AI: <strong>${item.seoAiUsed === 'auto' ? 'Auto-Fallback' : item.seoAiUsed === '9router' ? '9Router' : item.seoAiUsed === 'syntx-claude' ? 'Syntx Claude' : item.seoAiUsed === 'syntx-gemini' ? 'Syntx Gemini' : item.seoAiUsed}</strong></span></div>` : ''}
-        </td>
-      </tr>
-      
-      <!-- Baris 3: Preview, Log Proses, Keywords -->
-      <tr id="row_3_${item.id}" style="background: ${rowBg} !important; border-bottom:4px solid var(--border-hover);">
-        <!-- Preview Cell -->
-        <td class="preview-cell" style="width:180px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:4px solid var(--border-hover);">
-          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px; text-align:center;">Preview</div>
-          ${previewCell}
-        </td>
-        
-        <!-- Log Cell -->
-        <td style="width:320px; padding:10px; vertical-align:top; border-right:1px solid rgba(56,189,248,0.08); border-bottom:4px solid var(--border-hover);">
-          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px;">Log Proses</div>
-          ${logCell}
-        </td>
-        
-        <!-- Keywords Cell -->
-        <td style="padding:10px; vertical-align:top; border-bottom:4px solid var(--border-hover);">
-          <div style="font-size:10px; text-transform:uppercase; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:0.5px;">Rekomendasi Keywords</div>
-          <div class="edit-wrap">
-            <textarea id="kw_${item.id}" class="edit-field" rows="6" placeholder="Belum ada keywords..." style="padding:4px 6px; font-size:12px; line-height:1.4; height:140px; min-height:140px; max-height:140px;">${escHtml(item.keywords||'')}</textarea>
-            <button class="btn-copy" onclick="copyText(document.getElementById('kw_${item.id}').value, this)">📋</button>
-          </div>
-        </td>
-      </tr>
-    `;
+        </div>
+        ${renderActionsCell(item)}
+      </article>`;
+  }
+
+  function renderCategoryControls(item) {
+    const adobe = [['1','Animals'],['2','Buildings & Architecture'],['3','Business'],['4','Drinks'],['5','The Environment'],['6','States of Mind'],['7','Food'],['8','Graphic Resources'],['9','Hobbies & Leisure'],['10','Industry'],['11','Landscape'],['12','Lifestyle'],['13','People'],['14','Plants & Flowers'],['15','Culture & Religion'],['16','Science'],['17','Social Issues'],['18','Sports'],['19','Technology'],['20','Transport'],['21','Travel']];
+    const shutter = ['Animals/Wildlife','Arts','Backgrounds/Textures','Buildings/Landmarks','Business/Finance','Education','Food and drink','Healthcare/Medical','Holidays','Industrial','Nature','Objects','People','Religion','Science','Signs/Symbols','Sports/Recreation','Technology','Transportation'];
+    const makeOptions = (options, selected, placeholder) => `<option value="">${placeholder}</option>${options.map(option => { const value = Array.isArray(option) ? option[0] : option; const label = Array.isArray(option) ? `${option[0]}. ${option[1]}` : option; return `<option value="${value}" ${String(selected || '') === value ? 'selected' : ''}>${label}</option>`; }).join('')}`;
+    return `
+      <select class="select-input" aria-label="Kategori Adobe Stock" onchange="saveField('${item.id}', 'adobeCategory', this.value)" title="Kategori Adobe Stock" style="padding:3px 7px; font-size:10px; height:auto; margin:0;">${makeOptions(adobe, item.adobeCategory, 'Adobe category')}</select>
+      <select class="select-input" aria-label="Kategori Shutterstock utama" onchange="saveField('${item.id}', 'shutterstockCategory', this.value)" title="Kategori Shutterstock utama" style="padding:3px 7px; font-size:10px; height:auto; margin:0;">${makeOptions(shutter, item.shutterstockCategory, 'Shutterstock 1')}</select>
+      <select class="select-input" aria-label="Kategori Shutterstock kedua" onchange="saveField('${item.id}', 'shutterstockCategory2', this.value)" title="Kategori Shutterstock kedua" style="padding:3px 7px; font-size:10px; height:auto; margin:0;">${makeOptions(shutter, item.shutterstockCategory2, 'Shutterstock 2')}</select>`;
   }
 
   function renderPreviewCell(item) {
     if (item.previewUrl) {
-      const videoSrc = (item.previewUrl.startsWith("http://") || item.previewUrl.startsWith("https://"))
-        ? item.previewUrl
-        : `/api/preview-file/${item.id}`;
-      return `
-        <div style="display:flex; flex-direction:column; align-items:center; gap:8px; width:100%;">
-          <video class="preview-video" src="${videoSrc}#t=0.1" preload="none" controls muted loop playsinline style="width:100%; max-width:160px; height:90px; object-fit:cover; border-radius:6px; border:1px solid var(--border); background:#000;"></video>
-          <button class="btn-browse" onclick="openVideoModal('${videoSrc}')" style="padding:4px 8px; font-size:10px; border-color:var(--cyan); color:var(--cyan); background:var(--cyan-dim); width:100%; display:flex; align-items:center; justify-content:center; gap:4px; font-weight:600; border-radius:6px;">
-            🔍 Perbesar Preview
-          </button>
-        </div>
-      `;
+      const videoSrc = item.previewUrl.startsWith('http://') || item.previewUrl.startsWith('https://') ? item.previewUrl : `/api/preview-file/${item.id}`;
+      return `<div style="display:flex; flex-direction:column; gap:6px; width:100%;"><video class="preview-video" src="${videoSrc}#t=0.1" preload="none" controls muted loop playsinline></video><button class="btn-browse" aria-label="Buka preview ${escHtml(item.fileName || item.id)}" onclick="openVideoModal('${videoSrc}')" style="border-color:var(--cyan); color:var(--cyan); background:var(--cyan-dim); width:100%;">Perbesar preview</button></div>`;
     }
-    return `<div style="text-align:center; color:var(--text-dim); font-size:11px; padding:40px 0; border:1px dashed var(--border); border-radius:6px; background:rgba(0,0,0,0.1);">Menunggu Video</div>`;
+    return `<div class="asset-preview__empty">Menunggu preview</div>`;
+  }
+
+  function renderSettingsCell(item) {
+    const isTsxRunning = item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx';
+    const isPreviewRunning = item.statusConvertTsx === 'processing-preview';
+    const has4k = !!item.outputPath4k;
+    const videoConfig = `<div class="video-config"><select id="loop_${item.id}" class="select-input" onchange="saveField('${item.id}', 'loop', this.value === 'true')" title="Loop video"><option value="true" ${item.loop !== false ? 'selected' : ''}>Loop</option><option value="false" ${item.loop === false ? 'selected' : ''}>No loop</option></select><select id="transparent_${item.id}" class="select-input" onchange="saveField('${item.id}', 'transparent', this.value === 'true')" title="Transparansi"><option value="false" ${item.transparent !== true ? 'selected' : ''}>Solid</option><option value="true" ${item.transparent === true ? 'selected' : ''}>Alpha</option></select><select id="duration_${item.id}" class="select-input" onchange="updateRowDuration('${item.id}', Number(this.value))" title="Durasi"><option value="5" ${item.animationDuration === 5 ? 'selected' : ''}>5s</option><option value="8" ${item.animationDuration === 8 ? 'selected' : ''}>8s</option><option value="10" ${item.animationDuration === 10 || !item.animationDuration ? 'selected' : ''}>10s</option><option value="12" ${item.animationDuration === 12 ? 'selected' : ''}>12s</option><option value="15" ${item.animationDuration === 15 ? 'selected' : ''}>15s</option><option value="20" ${item.animationDuration === 20 ? 'selected' : ''}>20s</option><option value="30" ${item.animationDuration === 30 ? 'selected' : ''}>30s</option></select><select id="fps_${item.id}" class="select-input" onchange="updateRowFps('${item.id}', Number(this.value))" title="Frame rate"><option value="30" ${item.fps === 30 || !item.fps ? 'selected' : ''}>30fps</option><option value="60" ${item.fps === 60 ? 'selected' : ''}>60fps</option></select></div>`;
+    const fileLinks = [
+      has4k ? `<a href="/api/4k-file/${item.id}" class="btn-action btn-dl" style="text-decoration:none;" title="Download MOV">MOV</a>` : '',
+      has4k ? `<a href="/api/download-4k-zip/${item.id}" class="btn-action btn-dl" style="text-decoration:none;" title="Download ZIP">ZIP</a>` : '',
+      (isTsxRunning || isPreviewRunning) ? `<button class="btn-action btn-cancel" onclick="cancelTask('${item.id}')" title="Batalkan proses">Stop</button>` : '',
+      `<a class="btn-code-link" href="/saved-code/${item.id}.html" target="_blank" download="${item.id}.html" title="HTML source">HTML</a>`,
+      item.promptCode ? `<a class="btn-code-link" href="/saved-code/${item.id}.tsx" target="_blank" download="${item.id}.tsx" title="TSX file">TSX</a>` : '',
+      `<button class="btn-action btn-del" onclick="event.stopPropagation(); deleteItem('${item.id}', event)" title="Hapus aset">Hapus</button>`
+    ].filter(Boolean).join('');
+
+    return `<div class="asset-settings">${videoConfig}<div class="asset-settings__files">${fileLinks}</div></div>`;
   }
 
   function renderActionsCell(item) {
@@ -3241,109 +3458,17 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const isPreviewRunning = item.statusConvertTsx === 'processing-preview';
     const is4kRunning = item.statusRender4k === 'processing' || item.statusRender4k === 'queued';
     const isAnyRunning = isSeoRunning || isTsxRunning || isPreviewRunning || is4kRunning;
-
-    const aiSelect = `
-      <select id="ai_model_${item.id}" class="select-input" style="padding: 4px 8px; font-size: 11px; height: auto; font-weight: 600; width: 100%; margin-bottom: 8px;" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}>
-        <option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>🤖 Auto AI</option>
-        <option value="9router" ${item.aiModel === '9router' ? 'selected' : ''}>🤖 9Router (Combo)</option>
-        <option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>🎯 Syntx Claude 4.6</option>
-        <option value="syntx-chatgpt" ${item.aiModel === 'syntx-chatgpt' ? 'selected' : ''}>💬 Syntx ChatGPT 5.5</option>
-        <option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>✨ Syntx Gemini 3.5</option>
-        <option value="syntx-grok" ${item.aiModel === 'syntx-grok' ? 'selected' : ''}>💡 Syntx Grok 4.3</option>
-        <option value="syntx-deepseek" ${item.aiModel === 'syntx-deepseek' ? 'selected' : ''}>🐉 Syntx DeepSeek R1</option>
-        <option value="syntx-qwen" ${item.aiModel === 'syntx-qwen' ? 'selected' : ''}>🌀 Syntx Qwen 3.7</option>
-        <option value="syntx-perplexity" ${item.aiModel === 'syntx-perplexity' ? 'selected' : ''}>🔍 Syntx Perplexity</option>
-      </select>
-
-    `;
-
-    // Per-item video config selectors (auto-filled by AI analysis, editable by user)
-    const videoConfigRow = `
-      <div style="display:flex; align-items:center; gap:4px; padding: 2px 6px; margin-bottom:4px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 6px;">
-        <select id="loop_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="saveField('${item.id}', 'loop', this.value === 'true')" title="Loop Video">
-          <option value="true" ${item.loop !== false ? 'selected' : ''}>🔄 Loop</option>
-          <option value="false" ${item.loop === false ? 'selected' : ''}>➡ No-Loop</option>
-        </select>
-        <select id="transparent_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="saveField('${item.id}', 'transparent', this.value === 'true')" title="Background Transparency">
-          <option value="false" ${item.transparent !== true ? 'selected' : ''}>🎨 Solid</option>
-          <option value="true" ${item.transparent === true ? 'selected' : ''}>🏁 Trans</option>
-        </select>
-        <select id="duration_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="updateRowDuration('${item.id}', Number(this.value))" title="Durasi Video">
-          <option value="5" ${item.animationDuration === 5 ? 'selected' : ''}>5s</option>
-          <option value="8" ${item.animationDuration === 8 ? 'selected' : ''}>8s</option>
-          <option value="10" ${item.animationDuration === 10 || !item.animationDuration ? 'selected' : ''}>10s</option>
-          <option value="12" ${item.animationDuration === 12 ? 'selected' : ''}>12s</option>
-          <option value="15" ${item.animationDuration === 15 ? 'selected' : ''}>15s</option>
-          <option value="20" ${item.animationDuration === 20 ? 'selected' : ''}>20s</option>
-          <option value="30" ${item.animationDuration === 30 ? 'selected' : ''}>30s</option>
-        </select>
-        <select id="fps_${item.id}" class="select-input" style="padding: 1px 4px; font-size: 10px; height: auto; font-weight: 500; border-color: transparent; background: transparent; margin-bottom: 0;" onchange="updateRowFps('${item.id}', Number(this.value))" title="FPS Video">
-          <option value="30" ${item.fps === 30 || !item.fps ? 'selected' : ''}>30 FPS</option>
-          <option value="60" ${item.fps === 60 ? 'selected' : ''}>60 FPS</option>
-        </select>
-      </div>
-    `;
-    // Button 1: TSX & Preview (FIRST — must be done before SEO)
     const hasPreview = !!item.previewUrl;
-    const hasJudul = !!(item.judul && item.judul.trim());
-    let btnTsxPreviewText = hasPreview ? '⚙️ REGEN TSX & PREVIEW' : '⚙️ GEN TSX & PREVIEW';
-    if (isTsxRunning) btnTsxPreviewText = '⏳ Converting TSX...';
-    else if (isPreviewRunning) btnTsxPreviewText = '⏳ Rendering Preview...';
-    const btnTsxPreviewDisabled = isAnyRunning;
-    const btnTsxPreview = `<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${btnTsxPreviewDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:${btnTsxPreviewDisabled ? 'rgba(100,100,100,0.1)' : 'linear-gradient(135deg,rgba(56,189,248,0.15),rgba(168,85,247,0.15))'}; border:1px solid ${btnTsxPreviewDisabled ? 'rgba(100,100,100,0.2)' : 'rgba(56,189,248,0.35)'}; color:${btnTsxPreviewDisabled ? 'var(--text-dim)' : 'var(--cyan)'};">${btnTsxPreviewText}</button>`;
-
-    // Button 2: Judul (SEO) — requires preview to exist
-    let btnJudulText = hasJudul ? '✨ REGEN JUDUL' : '✨ GEN JUDUL';
-    if (isSeoRunning) btnJudulText = '⏳ Generating...';
-    const btnJudulDisabled = isAnyRunning || !hasPreview;
-    const btnJudul = `<button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${btnJudulDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btnJudulText}</button>`;
-
-    // Button 3: 4K — requires judul to exist
+    const hasTitle = !!(item.judul && item.judul.trim());
     const has4k = !!item.outputPath4k;
-    let btn4kText = has4k ? '🚀 REGEN 4K' : '🚀 GEN 4K';
-    if (is4kRunning) btn4kText = '⏳ Rendering 4K...';
-    const btn4kDisabled = isAnyRunning || !hasJudul;
-    const btn4k = `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${btn4kDisabled ? 'disabled' : ''} style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%;">${btn4kText}</button>`;
 
-    // Download 4K Direct MOV Button
-    const download4kBtn = has4k
-      ? `<a href="/api/4k-file/${item.id}" class="btn-action" style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; text-decoration:none; text-align:center; display:block; border-radius:6px; box-sizing:border-box;">📥 DOWNLOAD 4K (MOV)</a>`
-      : '';
+    const aiSelect = `<select id="ai_model_${item.id}" class="select-input" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}><option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>Auto AI</option><option value="9router" ${item.aiModel === '9router' ? 'selected' : ''}>9Router</option><option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>Syntx Claude</option><option value="syntx-chatgpt" ${item.aiModel === 'syntx-chatgpt' ? 'selected' : ''}>Syntx ChatGPT</option><option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>Syntx Gemini</option><option value="syntx-grok" ${item.aiModel === 'syntx-grok' ? 'selected' : ''}>Syntx Grok</option><option value="syntx-deepseek" ${item.aiModel === 'syntx-deepseek' ? 'selected' : ''}>Syntx DeepSeek</option><option value="syntx-qwen" ${item.aiModel === 'syntx-qwen' ? 'selected' : ''}>Syntx Qwen</option><option value="syntx-perplexity" ${item.aiModel === 'syntx-perplexity' ? 'selected' : ''}>Syntx Perplexity</option></select>`;
 
-    // Download 4K Zip Button
-    const downloadZipBtn = has4k
-      ? `<a href="/api/download-4k-zip/${item.id}" class="btn-action" style="margin:0; padding:6px 10px; font-size:11px; font-weight:bold; width:100%; background:linear-gradient(135deg, #6366f1, #4f46e5); border:none; color:#fff; text-decoration:none; text-align:center; display:block; border-radius:6px; box-sizing:border-box;">📥 DOWNLOAD 4K (ZIP)</a>`
-      : '';
+    const tsxText = isTsxRunning ? 'Converting TSX...' : isPreviewRunning ? 'Rendering preview...' : hasPreview ? 'Regen TSX & preview' : 'Generate TSX & preview';
+    const seoText = isSeoRunning ? 'Generating metadata...' : hasTitle ? 'Regen metadata' : 'Generate metadata';
+    const fourKText = is4kRunning ? 'Rendering 4K...' : has4k ? 'Regen 4K' : 'Generate 4K';
 
-    // Utility actions
-    const btnCancel = (isTsxRunning || isPreviewRunning)
-      ? `<button class="btn-action btn-cancel" onclick="cancelTask('${item.id}')" style="margin:0; padding:6px 10px; font-size:11px; width:100%;">🚫 Batal</button>`
-      : '';
-
-    const btnDel = `<button class="btn-action btn-del" onclick="event.stopPropagation(); deleteItem('${item.id}', event)" style="margin:0; padding:6px 10px; font-size:11px; width:100%;">🗑 Hapus</button>`;
-
-    const htmlCodeLink = `<a class="btn-code-link" href="/saved-code/${item.id}.html" target="_blank" download="${item.id}.html" style="font-size:10px; padding:3px 6px; flex:1; text-align:center; display:block;">🌐 HTML Asli</a>`;
-    const tsxCodeLink = (item.promptCode)
-      ? `<a class="btn-code-link" href="/saved-code/${item.id}.tsx" target="_blank" download="${item.id}.tsx" style="font-size:10px; padding:3px 6px; flex:1; text-align:center; display:block;">📦 TSX File</a>`
-      : '';
-
-    return `
-      <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
-        ${aiSelect}
-        ${videoConfigRow}
-        ${btnTsxPreview}
-        ${btnJudul}
-        ${btn4k}
-        ${download4kBtn}
-        ${downloadZipBtn}
-        ${btnCancel}
-        ${btnDel}
-        <div style="display:flex; gap:4px; width:100%; margin-top:4px;">
-          ${htmlCodeLink}
-          ${tsxCodeLink}
-        </div>
-      </div>
-    `;
+    return `<div class="asset-actions"><div class="asset-section-label">Next action</div><div class="asset-actions__primary">${aiSelect}<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${isAnyRunning ? 'disabled' : ''} style="background:rgba(56,189,248,.13); border:1px solid rgba(56,189,248,.35); color:var(--cyan);">${tsxText}</button><button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${isAnyRunning || !hasPreview ? 'disabled' : ''}>${seoText}</button><button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${isAnyRunning || !hasTitle ? 'disabled' : ''}>${fourKText}</button></div><div class="asset-actions__log"><div class="asset-section-label">Live status log</div>${renderLogCell(item)}</div></div>`;
   }
 
   async function trigger4K(id) {
@@ -4484,8 +4609,10 @@ Saran Tags/Keywords: ${tags}`;
     queuePanelCollapsed = !queuePanelCollapsed;
     const body = document.getElementById('queueBody');
     const icon = document.getElementById('queueToggleIcon');
+    const header = document.querySelector('#queuePanel .queue-header');
     if (body) body.classList.toggle('collapsed', queuePanelCollapsed);
     if (icon) icon.classList.toggle('collapsed', queuePanelCollapsed);
+    if (header) header.setAttribute('aria-expanded', String(!queuePanelCollapsed));
   }
 
   async function loadQueueStatus() {

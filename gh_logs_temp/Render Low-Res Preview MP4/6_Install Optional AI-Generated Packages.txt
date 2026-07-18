@@ -1,0 +1,16 @@
+﻿2026-06-14T14:06:27.5886240Z ##[group]Run npm install three gsap --no-save || true
+2026-06-14T14:06:27.5887003Z [36;1mnpm install three gsap --no-save || true[0m
+2026-06-14T14:06:27.5921438Z shell: /usr/bin/bash -e {0}
+2026-06-14T14:06:27.5921905Z ##[endgroup]
+2026-06-14T14:06:29.0488871Z 
+2026-06-14T14:06:29.0489532Z up to date, audited 431 packages in 1s
+2026-06-14T14:06:29.0489931Z 
+2026-06-14T14:06:29.0490199Z 111 packages are looking for funding
+2026-06-14T14:06:29.0490698Z   run `npm fund` for details
+2026-06-14T14:06:29.0858139Z 
+2026-06-14T14:06:29.0858819Z 7 vulnerabilities (2 low, 5 high)
+2026-06-14T14:06:29.0859187Z 
+2026-06-14T14:06:29.0859390Z To address all issues, run:
+2026-06-14T14:06:29.0859811Z   npm audit fix --force
+2026-06-14T14:06:29.0860062Z 
+2026-06-14T14:06:29.0860266Z Run `npm audit` for details.
