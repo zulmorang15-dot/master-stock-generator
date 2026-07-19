@@ -5604,7 +5604,7 @@ app.post("/api/trends/analyze", async (req, res) => {
 // Endpoint for AI HTML Compiler Chat Assistant (Smart Intent & Slash Commands)
 app.post("/api/compiler/chat", async (req, res) => {
   try {
-    const { prompt, currentCode, preferModel, mode = 'auto' } = req.body;
+    const { prompt, currentCode, preferModel, mode = 'auto', history = [] } = req.body;
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({ error: "Prompt tidak boleh kosong." });
     }
@@ -5616,6 +5616,12 @@ app.post("/api/compiler/chat", async (req, res) => {
       modeInstruction = "PERINTAH: PENGGUNA MEMINTA MENGEDIT / MEMPERBARUI ANIMASI YANG ADA. Gunakan kode HTML saat ini di bawah ini dan ubah/tambah sesuai instruksi pengguna.";
     }
 
+    let historyText = "";
+    if (Array.isArray(history) && history.length) {
+      historyText = "Riwayat Percakapan Sebelumnya Sesi Ini:\n" + 
+        history.map(item => `${item.role === 'user' ? 'Pengguna' : 'Asisten AI'}: ${item.content}`).join("\n") + "\n\n";
+    }
+
     const systemContext = `Anda adalah AI Creative Animation Code Generator & Assistant profesional untuk HTML/CSS/JS Remotion Stock Video (seperti v0.dev / Claude Artifacts).
 
 Tugas Anda:
@@ -5623,7 +5629,7 @@ ${modeInstruction || 'Analisis niat (intent) pesan pengguna (apakah percakapan b
 
 Aturan Respons:
 1. Jika ini percakapan biasa / sapaan / pertanyaan:
-   - Jawab secara ramah dan informatif dalam Bahasa Indonesia.
+   - Jawab secara ramah dan informatif dalam Bahasa Indonesia, nyambung dengan riwayat percakapan sebelumnya jika ada.
    - Atur "isCodeUpdate": false.
 
 2. Jika ini perintah MEMBUAT BARU atau MENGEDIT animasi HTML/CSS:
@@ -5639,9 +5645,9 @@ Format Wajib Respons (HANYA JSON MURNI TANPA MARKDOWN):
   "code": "<!DOCTYPE html>... (dokumen HTML lengkap jika isCodeUpdate === true, jika false isi string kosong)"
 }
 
-${currentCode && mode !== 'new' ? `Kode HTML animasi saat ini di Canvas/Preview:\n\`\`\`html\n${currentCode}\n\`\`\`\n` : ''}
+${historyText}${currentCode && mode !== 'new' ? `Kode HTML animasi saat ini di Canvas/Preview:\n\`\`\`html\n${currentCode}\n\`\`\`\n` : ''}
 
-Pesan Pengguna:
+Pesan Pengguna Terbaru:
 ${prompt}`;
 
     console.log(`🤖 [Compiler AI Chat] Mengolah prompt: "${prompt.slice(0, 50)}..." dengan model: ${preferModel || 'auto'}`);

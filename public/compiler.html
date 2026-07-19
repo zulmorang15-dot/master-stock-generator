@@ -795,6 +795,16 @@
         prompt = prompt.replace(/^\/(edit|tweak)\s+/i, '');
       }
 
+      // Collect recent conversation history from chat bubbles for multi-turn context
+      const chatBubbles = Array.from(document.querySelectorAll('#chatMessages .msg-bubble'));
+      const history = chatBubbles.slice(-8).map(el => {
+        const isUser = el.classList.contains('msg-user');
+        return {
+          role: isUser ? 'user' : 'assistant',
+          content: el.innerText.trim()
+        };
+      });
+
       appendMessage(input.value.trim(), true);
       input.value = '';
       btn.disabled = true;
@@ -810,7 +820,7 @@
         const resp = await fetch('/api/compiler/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, currentCode, preferModel, mode })
+          body: JSON.stringify({ prompt, currentCode, preferModel, mode, history })
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
