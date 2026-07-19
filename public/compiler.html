@@ -562,13 +562,18 @@
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
 
-        const newCode = data.code;
-        document.getElementById('compilerHtmlCode').value = newCode;
-        saveCompilerState();
-        runHtmlCompiler();
+        const resText = data.code || '';
+        const isHtml = resText.includes('<html') || resText.includes('<!DOCTYPE') || resText.includes('<style') || resText.includes('<div') || resText.includes('<script');
 
-        loadingBubble.innerHTML = '🎉 Kode animasi berhasil dibuat dan diperbarui di Live Preview!';
-        showToast('✨ Animasi berhasil di-generate!', 'success');
+        if (isHtml) {
+          document.getElementById('compilerHtmlCode').value = resText;
+          saveCompilerState();
+          runHtmlCompiler();
+          loadingBubble.innerHTML = '🎉 Kode animasi berhasil dibuat & diperbarui di Live Preview!';
+          showToast('✨ Animasi berhasil di-generate!', 'success');
+        } else {
+          loadingBubble.innerHTML = escHtml(resText || 'Halo! Silakan ketik perintah animasi yang ingin Anda buat.');
+        }
       } catch (err) {
         loadingBubble.innerHTML = `❌ Gagal: ${escHtml(err.message)}`;
         showToast('❌ Gagal meracik animasi: ' + err.message, 'error');

@@ -514,64 +514,73 @@ async function callAIWithFallback(prompt, options = {}) {
     }
   }
 
-  // Auto-fallback mode (default) — coba Syntx lalu 9Router
-  log("Memulai pencarian model otomatis dengan fallback (Syntx -> 9Router)...", "info");
+  // Auto-fallback mode: Coba Custom LLM Slot aktif -> 9Router -> Syntx
+  log("Memulai pencarian model otomatis dengan fallback (Custom LLM -> 9Router -> Syntx)...", "info");
 
-  // 1. Syntx.ai Claude
-  if (preferModel !== 'syntx-claude') {
-    try {
-      log("📡 [1/3] Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
-      const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
-      if (isValid(result, "Syntx Claude")) {
-        log("✅ Sukses menggunakan Syntx Claude!", "success");
-        return result;
-      }
-      log("⚠️ Syntx Claude: respons tidak valid, lanjut fallback...", "warning");
-    } catch (err) {
-      log(`⚠️ Syntx.ai Claude gagal: ${err.message?.substring(0, 150)}`, "warning");
-      errors.push({ provider: "syntx-claude", error: err.message });
-    }
-  }
-
-  // 2. Syntx.ai Gemini
-  if (preferModel !== 'syntx-gemini') {
-    try {
-      log("📡 [2/3] Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
-      const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
-      if (isValid(result, "Syntx Gemini")) {
-        log("✅ Sukses menggunakan Syntx Gemini!", "success");
-        return result;
-      }
-      log("⚠️ Syntx Gemini: respons tidak valid, lanjut fallback...", "warning");
-    } catch (err) {
-      log(`⚠️ Syntx.ai Gemini gagal: ${err.message?.substring(0, 150)}`, "warning");
-      errors.push({ provider: "syntx-gemini", error: err.message });
-    }
-  }
-
-  // 3. Coba 9Router
-  if (preferModel !== '9router') {
-    try {
-      if (NINEROUTER_API_KEY) {
-        log("📡 [3/3] Mencoba 9Router...", "info");
-        const result = await callNineRouter(prompt);
-        if (isValid(result, "9Router")) {
-          log("✅ Sukses menggunakan 9Router!", "success");
-          return result;
+  // 1. Coba Custom LLM Slots yang aktif
+  if (Array.isArray(customLlmProviders)) {
+    for (const slot of customLlmProviders) {
+      if (slot.enabled && slot.key && slot.key !== "TIDAK_ADA" && slot.key !== "kosong") {
+        try {
+          log(`📡 Mencoba ${slot.name || slot.id} (${slot.model})...`, "info");
+          const result = await callCustomLLMSlot(slot.id, prompt);
+          if (isValid(result, slot.name || slot.id)) {
+            log(`✅ Sukses menggunakan ${slot.name || slot.id}!`, "success");
+            return result;
+          }
+        } catch (err) {
+          log(`⚠️ ${slot.name || slot.id} gagal: ${err.message?.substring(0, 150)}`, "warning");
+          errors.push({ provider: slot.id, error: err.message });
         }
-        log("⚠️ 9Router: respons tidak valid");
-      } else {
-        log("⏩ Skip 9Router (API Key kosong)", "info");
       }
+    }
+  }
+
+  // 2. Coba 9Router
+  if (NINEROUTER_API_KEY || NINEROUTER_BASE_URL) {
+    try {
+      log("📡 Mencoba 9Router...", "info");
+      const result = await callNineRouter(prompt);
+      if (isValid(result, "9Router")) {
+        log("✅ Sukses menggunakan 9Router!", "success");
+        return result;
+      }
+      log("⚠️ 9Router: respons tidak valid");
     } catch (err) {
       log(`⚠️ 9Router gagal: ${err.message?.substring(0, 150)}`, "warning");
       errors.push({ provider: "9router", error: err.message });
     }
   }
 
+  // 3. Syntx.ai Claude
+  try {
+    log("📡 Mencoba Syntx.ai Claude Sonnet 4.5...", "info");
+    const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
+    if (isValid(result, "Syntx Claude")) {
+      log("✅ Sukses menggunakan Syntx Claude!", "success");
+      return result;
+    }
+  } catch (err) {
+    log(`⚠️ Syntx.ai Claude gagal: ${err.message?.substring(0, 150)}`, "warning");
+    errors.push({ provider: "syntx-claude", error: err.message });
+  }
+
+  // 4. Syntx.ai Gemini
+  try {
+    log("📡 Mencoba Syntx.ai Gemini 3.5 Flash...", "info");
+    const result = await syntxBot.callSyntx(prompt, 'gemini-3.5-flash', syntxOptions);
+    if (isValid(result, "Syntx Gemini")) {
+      log("✅ Sukses menggunakan Syntx Gemini!", "success");
+      return result;
+    }
+  } catch (err) {
+    log(`⚠️ Syntx.ai Gemini gagal: ${err.message?.substring(0, 150)}`, "warning");
+    errors.push({ provider: "syntx-gemini", error: err.message });
+  }
+
   // Semua gagal
   log(`❌ Semua provider AI gagal! Rincian error: ${JSON.stringify(errors)}`, "error");
-  throw new Error(`Semua provider AI gagal: ${JSON.stringify(errors)}`);
+  throw new Error(`Semua provider AI gagal. Silakan periksa koneksi atau aktifkan API Key di Modal 🔑 API Keys.`);
 }
 
 // Wrap callAIWithFallback with retry logic for production resilience
