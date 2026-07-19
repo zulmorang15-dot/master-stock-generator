@@ -115,14 +115,14 @@ jobs:
           RENDER_TIMEOUT: ${{ github.event.inputs.render_timeout }}
         run: |
           echo "=== Rendering 4K ProRes for composition: ${{ github.event.inputs.composition_id }} ==="
-          PIXEL_FORMAT="yuv422p10le"
-          PRORES_PROFILE=""
-          if [ "${{ github.event.inputs.transparent }}" = "true" ]; then
+          if [ "${{ github.event.inputs.prores_profile }}" = "4444" ] || [ "${{ github.event.inputs.transparent }}" = "true" ]; then
             PIXEL_FORMAT="yuva444p10le"
             PRORES_PROFILE="--prores-profile=4444"
-            echo "=== Transparent background requested. Using prores 4444 + yuva444p10le. ==="
+            echo "=== Selected: Apple ProRes 4444 (No. 2 - Alpha Transparan) + yuva444p10le ==="
           else
-            echo "=== Opaque background. Using prores 422 HQ (default) + yuv422p10le. ==="
+            PIXEL_FORMAT="yuv422p10le"
+            PRORES_PROFILE="--prores-profile=422hq"
+            echo "=== Selected: Apple ProRes 422 HQ (No. 3 - Background Hitam/Opaque) + yuv422p10le ==="
           fi
           TIMEOUT_MS=${RENDER_TIMEOUT:-120000}
           if [ "$HAS_THREEJS" = "true" ]; then
