@@ -55,10 +55,11 @@ Anda harus mengonfigurasi autentikasi otomatis menggunakan **Personal Access Tok
    ```bash
    git clone https://x-access-token:ghp_YOUR_TOKEN_HERE@github.com/zulmorang15-dot/master-stock-generator.git
    ```
-3. Konfigurasikan identitas Git di server:
+3. Konfigurasikan identitas Git dan Safe Directory di server (wajib agar git add/commit di background berjalan tanpa error):
    ```bash
    git config --global user.email "email-anda@example.com"
    git config --global user.name "Nama Anda"
+   git config --global --add safe.directory "*"
    ```
 
 ---
