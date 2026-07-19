@@ -1451,10 +1451,10 @@
     .asset-card[data-state="ready"] { border-left:3px solid var(--green); }
     .asset-card[data-state="working"] { border-left:3px solid var(--purple); }
     .asset-card[data-state="queued"] { border-left:3px solid var(--amber); }
-    .asset-card[data-state="failed"] { border-left:3px solid var(--red); }
-    .asset-card__header { display:flex; align-items:flex-start; gap:10px; }
-    .asset-card__number { color:var(--text-dim); font:700 11px 'JetBrains Mono',monospace; padding-top:5px; }
-    .asset-card__name { flex:1; min-width:0; color:var(--cyan); font:700 13px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; word-break:normal; writing-mode:horizontal-tb !important; padding-top:2px; }
+    .asset-card__header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; width:100%; }
+    .asset-card__title-row { display:flex; align-items:center; gap:8px; flex:1; min-width:200px; }
+    .asset-card__number { color:var(--text-dim); font:700 12px 'JetBrains Mono',monospace; flex-shrink:0; }
+    .asset-card__name { flex:1; min-width:0; color:var(--cyan); font:700 13px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; word-break:normal; writing-mode:horizontal-tb !important; }
     .asset-card__meta { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
     .asset-card__rail { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin:16px 0; }
     .asset-step { padding:7px 9px; border:1px solid var(--border); border-radius:7px; color:var(--text-dim); font-size:10px; font-weight:700; }
@@ -1610,6 +1610,10 @@
       .workflow-rail__hint { font-size: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
       .asset-card { padding: 12px !important; border-radius: 12px !important; }
+      .asset-card__header { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
+      .asset-card__title-row { width: 100% !important; flex: none !important; }
+      .asset-card__name { font-size: 13px !important; white-space: normal !important; word-break: break-word !important; overflow: visible !important; width: 100% !important; }
+      .asset-card__meta { justify-content: flex-start !important; width: 100% !important; }
       .asset-card__body { grid-template-columns: 1fr !important; gap: 12px !important; }
       .asset-preview { width: 100% !important; max-width: 100% !important; height: 200px !important; }
       .asset-preview .preview-video { height: 200px !important; }
@@ -3582,9 +3586,11 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     return `
       <article class="asset-card" data-state="${cardState}" id="asset_${item.id}">
         <div class="asset-card__header">
-          ${checkbox}
-          <span class="asset-card__number">${String(no).padStart(2, '0')}</span>
-          <div class="asset-card__name">${escHtml(item.fileName || item.id)}</div>
+          <div class="asset-card__title-row">
+            ${checkbox}
+            <span class="asset-card__number">#${String(no).padStart(2, '0')}</span>
+            <div class="asset-card__name" title="${escHtml(item.fileName || item.id)}">${escHtml(item.fileName || item.id)}</div>
+          </div>
           <div class="asset-card__meta">${uploadStatus}${categoryControls}</div>
         </div>
         ${renderAssetRail(item)}
