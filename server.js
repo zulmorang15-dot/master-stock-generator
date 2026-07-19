@@ -1200,7 +1200,7 @@ app.post("/api/save-item", (req, res) => {
     const index = items.findIndex(i => i.id === item.id);
     if (index !== -1) {
       // Track if user manually changed video config fields
-      const videoConfigFields = ['loop', 'transparent', 'animationDuration', 'fps'];
+      const videoConfigFields = ['loop', 'transparent', 'animationDuration', 'fps', 'addTransparentScene'];
       if (videoConfigFields.some(f => item[f] !== undefined)) {
         item._userSetVideoConfig = true;
       }
@@ -1333,7 +1333,8 @@ app.post("/api/render-preview", async (req, res) => {
     // 2. Tulis props sementara
     const props = {
       durationInFrames: Number(item.durationInFrames) || 150,
-      fps: Number(item.fps) || 30
+      fps: Number(item.fps) || 30,
+      addTransparentScene: item.addTransparentScene === true || item.addTransparentScene === 'true'
     };
     fs.writeFileSync(tempPropsFile, JSON.stringify(props));
 
@@ -1378,7 +1379,8 @@ app.post("/api/render-4k", async (req, res) => {
     // 2. Tulis props sementara
     const props = {
       durationInFrames: Number(item.durationInFrames) || 150,
-      fps: Number(item.fps) || 30
+      fps: Number(item.fps) || 30,
+      addTransparentScene: item.addTransparentScene === true || item.addTransparentScene === 'true'
     };
     fs.writeFileSync(tempPropsFile, JSON.stringify(props));
 
@@ -2540,22 +2542,53 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
     }
 
     // --- AUTOMATED TSX COMPILATION CHECK WITH AUTO-FIX RETRY ---
+    // Validate only the generated Composition.tsx (not the whole project) so
+    // unrelated Dashboard/Root errors don't block conversion, and so the AI
+    // receives actionable diagnostics even when tsc writes to stderr.
     const MAX_TSC_RETRIES = 2;
     let tscPass = false;
     let tscAttempt = 0;
+    const tscBin = path.join(__dirname, "node_modules", "typescript", "bin", "tsc");
+    const runCompositionTypecheck = () => {
+      // Prefer local tsc binary; fall back to npx. Quote paths for Windows spaces.
+      const cmd = fs.existsSync(tscBin)
+        ? `"${process.execPath}" "${tscBin}" --noEmit --pretty false --jsx react-jsx --esModuleInterop --skipLibCheck --strict --module commonjs --target ES2018 --moduleResolution node --lib es2018,dom src/Composition.tsx src/Root.tsx`
+        : `npx tsc --noEmit --pretty false --noUnusedLocals false --noUnusedParameters false`;
+      return execSync(cmd, {
+        cwd: __dirname,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+        shell: true,
+        env: process.env,
+      });
+    };
+    const extractTscErrors = (tscErr) => {
+      const chunks = [];
+      if (tscErr && tscErr.stdout != null) chunks.push(String(tscErr.stdout));
+      if (tscErr && tscErr.stderr != null) chunks.push(String(tscErr.stderr));
+      if (tscErr && tscErr.message) chunks.push(String(tscErr.message));
+      const errMsg = chunks.join("\n").trim();
+      const tsLines = errMsg
+        .split(/\r?\n/)
+        .filter((line) => /error TS\d+/.test(line) || /Composition\.tsx/.test(line))
+        .slice(0, 12)
+        .join("\n");
+      return { errMsg, formattedErrors: tsLines || errMsg.substring(0, 800) };
+    };
 
     while (!tscPass && tscAttempt <= MAX_TSC_RETRIES) {
       tscAttempt++;
       addTaskLog(itemId, `Pemeriksaan kompilasi TSX (percobaan ${tscAttempt}/${MAX_TSC_RETRIES + 1})...`, "info");
       fs.writeFileSync("src/Composition.tsx", tsxCode);
       try {
-        execSync("npx tsc --noEmit --noUnusedLocals false --noUnusedParameters false", { stdio: "pipe" });
+        runCompositionTypecheck();
         addTaskLog(itemId, "\u2705 Pemeriksaan kompilasi sukses! Kode valid.", "success");
         tscPass = true;
       } catch (tscErr) {
-        const errMsg = tscErr.stdout ? tscErr.stdout.toString() : tscErr.message;
-        const formattedErrors = errMsg.split('\n').filter(line => line.includes('error TS')).slice(0, 8).join('\n');
-        console.error(`TypeScript compilation attempt ${tscAttempt} failed:\n`, formattedErrors);
+        const { errMsg, formattedErrors } = extractTscErrors(tscErr);
+        console.error(`TypeScript compilation attempt ${tscAttempt} failed:\n`, formattedErrors || errMsg.substring(0, 500));
+        addTaskLog(itemId, `Detail error tsc: ${(formattedErrors || errMsg).substring(0, 400)}`, "warning");
 
         if (tscAttempt > MAX_TSC_RETRIES) {
           throw new Error(`TypeScript compilation failed after ${MAX_TSC_RETRIES + 1} attempts:\n${formattedErrors || errMsg.substring(0, 300)}`);
@@ -2563,7 +2596,7 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
 
         // Send errors back to AI for auto-fix
         addTaskLog(itemId, `\u26a0\ufe0f Kompilasi gagal, mengirim error ke AI untuk perbaikan otomatis...`, "warning");
-        const fixPrompt = `The following TypeScript code has compilation errors. Fix ALL errors and return the COMPLETE corrected TSX file (no explanation, no markdown, just the full corrected code):
+        const fixPrompt = `The following TypeScript/Remotion code has compilation errors. Fix ALL errors and return the COMPLETE corrected TSX file (no explanation, no markdown fences, just the full corrected code). Keep export default. Use only remotion + react APIs.
 
 ERRORS:
 ${formattedErrors}
@@ -2603,6 +2636,8 @@ ${tsxCode}`;
     // --- END OF AUTOMATED TSX COMPILATION CHECK ---
 
     item.promptCode = tsxCode;
+    // Stop after TSX conversion — preview is a separate manual step
+    item.statusConvertTsx = 'waiting-preview';
     saveOrUpdateItem(item);
 
     // Simpan file TSX lokal secara fisik di public/saved-code/<id>.tsx
@@ -2611,15 +2646,7 @@ ${tsxCode}`;
     addTaskLog(itemId, `File TSX disimpan secara lokal di /saved-code/${itemId}.tsx`, "info");
 
     addTaskLog(itemId, `Konversi HTML ke TSX berhasil! Kode disimpan di /saved-code/${itemId}.tsx`, "success");
-    
-    // Auto-trigger rendering preview immediately
-    addTaskLog(itemId, "Menjalankan render preview otomatis ke Cloud...", "info");
-    item.statusConvertTsx = 'processing-preview';
-    saveOrUpdateItem(item);
-
-    runPreviewRenderBackground(itemId).catch(err => {
-      console.error(`Error in auto runPreviewRenderBackground for ${itemId}:`, err);
-    });
+    addTaskLog(itemId, "TSX siap. Klik Render Preview untuk melanjutkan ke cloud render.", "info");
 
   } catch (err) {
     if (err.message === "Cancelled by user" || signal.aborted) {
@@ -2704,7 +2731,7 @@ async function waitForRenderSingle(id, renderType, signal) {
   throw new Error("Timeout rendering video di GitHub Actions.");
 }
 
-function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, animationDuration, fps }) {
+function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, animationDuration, fps, addTransparentScene }) {
   const targetFps = Number(fps) || 30;
   const durationFrames = (Number(animationDuration) || 10) * targetFps;
 
@@ -2721,6 +2748,7 @@ function enqueueTask({ id, fileName, htmlContent, loop, transparent, aiModel, an
     htmlPreview: htmlContent,
     loop: !!loop,
     transparent: !!transparent,
+    addTransparentScene: !!addTransparentScene,
     aiModel: aiModel,
     statusConvertTsx: 'waiting', // status awal menunggu
     statusRender4k: 'idle',
@@ -2798,7 +2826,8 @@ app.post("/api/trigger-github-render", async (req, res) => {
           judul: item.judul || "Stock Video",
           keywords: item.keywords || "motion, abstract, loop",
           has_threejs: ((item.promptCode || '').includes('THREE') || (item.promptCode || '').includes("getContext('2d')") || (item.promptCode || '').includes('shadowBlur')) ? 'true' : 'false',
-          transparent: String(item.transparent || false)
+          transparent: String(item.transparent || false),
+          add_transparent_scene: String(item.addTransparentScene === true || item.addTransparentScene === 'true')
         }
       },
       {
@@ -2919,6 +2948,7 @@ app.post("/api/retry-task/:id", (req, res) => {
   if (aiModel) item.aiModel = aiModel;
   if (req.body.loop !== undefined) item.loop = !!req.body.loop;
   if (req.body.transparent !== undefined) item.transparent = !!req.body.transparent;
+  if (req.body.addTransparentScene !== undefined) item.addTransparentScene = !!req.body.addTransparentScene;
   const targetFps = Number(fps) || item.fps || 30;
   item.fps = targetFps;
   if (animationDuration) {
@@ -3695,12 +3725,21 @@ app.post("/api/trigger-preview/:id", async (req, res) => {
       return res.status(400).json({ error: "Item tidak memiliki kode TSX untuk dirender" });
     }
 
-    if (item.statusConvertTsx === 'processing-preview') {
+    if (item.statusConvertTsx === 'processing-preview' || activePreviewRenders[id]) {
       return res.status(400).json({ error: "Render preview sedang berjalan" });
+    }
+    if (item.statusConvertTsx === 'processing-tsx' || item.statusConvertTsx === 'queued' || taskQueue.includes(id) || activeTasks.has(id)) {
+      return res.status(400).json({ error: "Konversi TSX masih berjalan" });
     }
 
     item.statusConvertTsx = 'processing-preview';
-    fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+    if (!item.logs) item.logs = [];
+    const timeStr = new Date().toLocaleTimeString('id-ID');
+    item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+    item.logs.push({ message: `☁️ Memicu Render Preview (manual)...`, type: "info", time: timeStr });
+    item.lastLogMessage = "Memulai render preview...";
+    saveOrUpdateItem(item);
+    if (!taskLogs[id]) taskLogs[id] = [...item.logs];
 
     // Jalankan background task asinkron
     runPreviewRenderBackground(id).catch(err => {
@@ -3989,6 +4028,72 @@ app.post("/api/syntx-test", async (req, res) => {
   }
 });
 
+// POST: Batch trigger Preview render untuk beberapa item sekaligus
+app.post("/api/batch-trigger-preview", async (req, res) => {
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "Parameter 'ids' harus berupa array ID yang valid" });
+  }
+
+  const results = [];
+  const dbPath = path.join(__dirname, "saved-items.json");
+  let items = [];
+  try {
+    const data = fs.readFileSync(dbPath, "utf-8");
+    items = JSON.parse(data);
+  } catch (e) {
+    return res.status(500).json({ error: "Gagal membaca database" });
+  }
+
+  const startedIds = [];
+  for (const id of ids) {
+    const item = items.find(i => i.id === id);
+    if (!item) {
+      results.push({ id, success: false, error: "Item tidak ditemukan" });
+      continue;
+    }
+    if (!item.promptCode) {
+      results.push({ id, success: false, error: "Kode TSX kosong — generate TSX dulu" });
+      continue;
+    }
+    if (item.statusConvertTsx === 'processing-preview' || activePreviewRenders[id]) {
+      results.push({ id, success: false, error: "Render preview sedang berjalan" });
+      continue;
+    }
+    if (item.statusConvertTsx === 'processing-tsx' || item.statusConvertTsx === 'queued' || taskQueue.includes(id) || activeTasks.has(id)) {
+      results.push({ id, success: false, error: "Konversi TSX masih berjalan" });
+      continue;
+    }
+
+    item.statusConvertTsx = 'processing-preview';
+    if (!item.logs) item.logs = [];
+    const timeStr = new Date().toLocaleTimeString('id-ID');
+    item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+    item.logs.push({ message: `📥 Ditambahkan ke batch Render Preview.`, type: "info", time: timeStr });
+    item.lastLogMessage = "Memulai render preview...";
+    if (!taskLogs[id]) taskLogs[id] = [...item.logs];
+
+    startedIds.push(id);
+    results.push({ id, success: true });
+  }
+
+  if (startedIds.length > 0) {
+    fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));
+    // Kick off preview renders sequentially via existing background helper
+    (async () => {
+      for (const id of startedIds) {
+        try {
+          await runPreviewRenderBackground(id);
+        } catch (err) {
+          console.error(`Error in batch preview for ${id}:`, err);
+        }
+      }
+    })();
+  }
+
+  res.json({ results, count: startedIds.length });
+});
+
 // POST: Batch trigger 4K render untuk beberapa item sekaligus
 app.post("/api/batch-trigger-4k", async (req, res) => {
   const { ids } = req.body;
@@ -4024,12 +4129,12 @@ app.post("/api/batch-trigger-4k", async (req, res) => {
 
     item.statusRender4k = 'queued';
     if (!item.logs) item.logs = [];
-    
+
     const timeStr = new Date().toLocaleTimeString('id-ID');
     item.logs.push({ message: `=================================`, type: "info", time: timeStr });
     item.logs.push({ message: `📥 Ditambahkan ke antrean Render 4K batch di server.`, type: "info", time: timeStr });
     item.lastLogMessage = "Mengantre untuk render 4K...";
-    
+
     render4kQueue.push(id);
     enqueuedIds.push(id);
     results.push({ id, success: true });
@@ -4099,6 +4204,7 @@ app.post("/api/start-task/:id", (req, res) => {
   delete item._userSetVideoConfig;
   if (req.body.loop !== undefined) item.loop = !!req.body.loop;
   if (req.body.transparent !== undefined) item.transparent = !!req.body.transparent;
+  if (req.body.addTransparentScene !== undefined) item.addTransparentScene = !!req.body.addTransparentScene;
   const targetFps = Number(fps) || item.fps || 30;
   item.fps = targetFps;
   if (animationDuration) {
@@ -4125,7 +4231,7 @@ app.post("/api/start-task/:id", (req, res) => {
   res.json({ success: true, id });
 });
 
-// POST: Mulai batch task TSX / Preview konversi secara sekuensial di server
+// POST: Mulai batch task konversi TSX saja (tanpa auto-preview) secara sekuensial di server
 app.post("/api/batch-start-tasks", (req, res) => {
   const { ids, aiModel, loop, transparent, fps, animationDuration } = req.body;
   if (!ids || !Array.isArray(ids)) {
@@ -4142,33 +4248,41 @@ app.post("/api/batch-start-tasks", (req, res) => {
     return res.status(500).json({ error: "Gagal membaca database" });
   }
 
+  const busyStatuses = new Set(['queued', 'processing-tsx', 'processing-preview']);
   let count = 0;
   ids.forEach(id => {
     const item = items.find(i => i.id === id);
-    if (item && item.statusConvertTsx === 'waiting' && !taskQueue.includes(id) && !activeTasks.has(id)) {
-      item.statusConvertTsx = 'queued';
-      if (aiModel) item.aiModel = aiModel;
-      
-      delete item._userSetVideoConfig;
-      if (loop !== undefined) item.loop = !!loop;
-      if (transparent !== undefined) item.transparent = !!transparent;
-      const targetFps = Number(fps) || item.fps || 30;
-      item.fps = targetFps;
-      if (animationDuration) {
-        item.animationDuration = Number(animationDuration);
-        item.durationInFrames = Number(animationDuration) * targetFps;
-      }
-      
-      if (!item.logs) item.logs = [];
-      const timeStr = new Date().toLocaleTimeString('id-ID');
-      item.logs.push({ message: `=================================`, type: "info", time: timeStr });
-      item.logs.push({ message: `▶ Memulai proses batch dengan AI: ${aiModel || 'auto'}`, type: "info", time: timeStr });
-      item.lastLogMessage = "Memulai proses batch...";
+    if (!item) return;
+    if (taskQueue.includes(id) || activeTasks.has(id) || busyStatuses.has(item.statusConvertTsx)) return;
 
-      taskLogs[id] = [...item.logs];
-      taskQueue.push(id);
-      count++;
+    const isFresh = item.statusConvertTsx === 'waiting';
+    item.statusConvertTsx = 'queued';
+    if (!isFresh) {
+      // Regen TSX: clear previous conversion artifacts
+      item.promptCode = '';
+      item.previewUrl = '';
     }
+    if (aiModel) item.aiModel = aiModel;
+
+    delete item._userSetVideoConfig;
+    if (loop !== undefined) item.loop = !!loop;
+    if (transparent !== undefined) item.transparent = !!transparent;
+    const targetFps = Number(fps) || item.fps || 30;
+    item.fps = targetFps;
+    if (animationDuration) {
+      item.animationDuration = Number(animationDuration);
+      item.durationInFrames = Number(animationDuration) * targetFps;
+    }
+
+    if (!item.logs) item.logs = [];
+    const timeStr = new Date().toLocaleTimeString('id-ID');
+    item.logs.push({ message: `=================================`, type: "info", time: timeStr });
+    item.logs.push({ message: `▶ Memulai batch Convert TSX dengan AI: ${aiModel || 'auto'}`, type: "info", time: timeStr });
+    item.lastLogMessage = "Memulai konversi TSX...";
+
+    taskLogs[id] = [...item.logs];
+    taskQueue.push(id);
+    count++;
   });
 
   if (count > 0) {
@@ -4176,7 +4290,7 @@ app.post("/api/batch-start-tasks", (req, res) => {
     processQueue();
   }
 
-  console.log(`📡 Batch start-tasks diproses: ${count} dari ${ids.length} item dimasukkan ke antrean.`);
+  console.log(`📡 Batch start-tasks (TSX only) diproses: ${count} dari ${ids.length} item dimasukkan ke antrean.`);
   res.json({ success: true, count });
 });
 

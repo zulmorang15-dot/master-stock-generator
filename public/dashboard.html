@@ -1452,6 +1452,24 @@
       flex-wrap:wrap;
       gap:4px;
     }
+    .asset-settings__toggle {
+      display:flex;
+      align-items:center;
+      gap:5px;
+      font-size:10px;
+      font-weight:600;
+      color:var(--text-dim);
+      cursor:pointer;
+      user-select:none;
+      padding:2px 1px;
+    }
+    .asset-settings__toggle input {
+      width:13px;
+      height:13px;
+      margin:0;
+      accent-color:var(--cyan);
+      cursor:pointer;
+    }
     .asset-settings__files .btn-action,
     .asset-settings__files .btn-code-link {
       flex:1 1 68px;
@@ -1563,9 +1581,10 @@
   <div id="generatorPanel" class="insights-panel active workflow-shell">
     <section class="workflow-rail" aria-label="Alur produksi aset">
       <div class="workflow-rail__step"><span class="workflow-rail__number">01</span><span class="workflow-rail__label">Source</span><span class="workflow-rail__hint">Upload atau tempel HTML animasi.</span></div>
-      <div class="workflow-rail__step"><span class="workflow-rail__number">02</span><span class="workflow-rail__label">TSX & Preview</span><span class="workflow-rail__hint">AI mengonversi dan merender preview.</span></div>
-      <div class="workflow-rail__step"><span class="workflow-rail__number">03</span><span class="workflow-rail__label">Metadata</span><span class="workflow-rail__hint">Tinjau judul, keyword, dan kategori.</span></div>
-      <div class="workflow-rail__step"><span class="workflow-rail__number">04</span><span class="workflow-rail__label">4K Delivery</span><span class="workflow-rail__hint">Render ProRes dan ekspor metadata.</span></div>
+      <div class="workflow-rail__step"><span class="workflow-rail__number">02</span><span class="workflow-rail__label">Convert TSX</span><span class="workflow-rail__hint">AI mengonversi HTML ke Remotion TSX.</span></div>
+      <div class="workflow-rail__step"><span class="workflow-rail__number">03</span><span class="workflow-rail__label">Render Preview</span><span class="workflow-rail__hint">Render preview MP4 di GitHub Actions.</span></div>
+      <div class="workflow-rail__step"><span class="workflow-rail__number">04</span><span class="workflow-rail__label">Metadata</span><span class="workflow-rail__hint">Tinjau judul, keyword, dan kategori.</span></div>
+      <div class="workflow-rail__step"><span class="workflow-rail__number">05</span><span class="workflow-rail__label">4K Delivery</span><span class="workflow-rail__hint">Render ProRes dan ekspor metadata.</span></div>
     </section>
 
     <div class="workspace-layout">
@@ -1778,7 +1797,8 @@
     <div class="batch-bar" id="batchBar" style="flex-wrap: wrap;">
       <span class="batch-count" id="batchCount">0 item dipilih</span>
       <button class="btn-batch-clear" onclick="clearBatchSelection()">✕ Batal Pilih</button>
-      <button class="btn-batch-tsx" id="btnBatchTsx" onclick="triggerBatchTsx()">⚙️ Gen TSX & Preview Terpilih</button>
+      <button class="btn-batch-tsx" id="btnBatchTsx" onclick="triggerBatchTsx()">⚙️ Gen TSX Terpilih</button>
+      <button class="btn-batch-preview" id="btnBatchPreview" onclick="triggerBatchPreview()">🎥 Gen Preview Terpilih</button>
       <button class="btn-batch-seo" id="btnBatchSeo" onclick="triggerBatchSEO()">✨ Gen Judul Terpilih</button>
       <button class="btn-batch-4k" id="btnBatch4k" onclick="triggerBatch4K()">🚀 Gen 4K Terpilih</button>
       <button class="btn-batch-download" id="btnBatchDownload" onclick="triggerBatchDownload()" style="background: linear-gradient(135deg, #10b981, #059669); border:none; color:#fff; padding:6px 12px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer;">📥 Batch Download (MOV)</button>
@@ -3010,6 +3030,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const countEl = document.getElementById('batchCount');
     const btnSeo = document.getElementById('btnBatchSeo');
     const btnTsx = document.getElementById('btnBatchTsx');
+    const btnPreview = document.getElementById('btnBatchPreview');
     const btn4k = document.getElementById('btnBatch4k');
     const btnDownload = document.getElementById('btnBatchDownload');
     const btnAdobeCsv = document.getElementById('btnBatchAdobeCsv');
@@ -3018,10 +3039,11 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const count = batchSelected.size;
     bar.classList.toggle('visible', count > 0 && batchModeActive);
     countEl.textContent = `${count} item dipilih`;
-    
+
     const disabled = count === 0;
     if (btnSeo) btnSeo.disabled = disabled;
     if (btnTsx) btnTsx.disabled = disabled;
+    if (btnPreview) btnPreview.disabled = disabled;
     if (btn4k) btn4k.disabled = disabled;
     if (btnDownload) btnDownload.disabled = disabled;
     if (btnAdobeCsv) btnAdobeCsv.disabled = disabled;
@@ -3152,13 +3174,13 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   async function triggerBatchTsx() {
     const ids = [...batchSelected];
     if (ids.length === 0) return;
-    if (!confirm(`Generate TSX & Preview untuk ${ids.length} item secara berurutan di server?`)) return;
-    
+    if (!confirm(`Generate TSX (tanpa preview) untuk ${ids.length} item secara berurutan di server?`)) return;
+
     const btn = document.getElementById('btnBatchTsx');
     const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = '⏳ Memproses...';
-    
+
     try {
       const resp = await fetch('/api/batch-start-tasks', {
         method: 'POST',
@@ -3167,12 +3189,45 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
-      
-      showToast(`🚀 ${data.count} item berhasil dimasukkan ke antrean konversi server! Anda dapat menutup tab ini sekarang.`, 'success');
+
+      showToast(`🚀 ${data.count} item dimasukkan ke antrean Convert TSX. Preview tidak dijalankan otomatis.`, 'success');
       clearBatchSelection();
       loadResults();
     } catch(err) {
       showToast('❌ Gagal memproses batch TSX: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+      updateBatchBar();
+    }
+  }
+
+  async function triggerBatchPreview() {
+    const ids = [...batchSelected];
+    if (ids.length === 0) return;
+    if (!confirm(`Render Preview untuk ${ids.length} item terpilih?\n\nHanya item yang sudah punya TSX yang akan diproses.`)) return;
+
+    const btn = document.getElementById('btnBatchPreview');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Memproses...';
+
+    try {
+      const resp = await fetch('/api/batch-trigger-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      const success = data.results?.filter(r => r.success).length || 0;
+      const failed = data.results?.filter(r => !r.success).length || 0;
+      showToast(`🎥 ${success} render preview dipicu${failed > 0 ? `, ${failed} dilewati` : ''}.`, success > 0 ? 'success' : 'error');
+      data.results?.forEach(r => { if (r.success) startTaskLogStream(r.id); });
+      clearBatchSelection();
+      loadResults();
+    } catch(err) {
+      showToast('❌ Gagal memproses batch Preview: ' + err.message, 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = originalText;
@@ -3318,15 +3373,20 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const status = item.statusConvertTsx || 'queued';
     const render4k = item.statusRender4k;
     const hasMetadata = Boolean(item.judul && item.judul.trim());
+    const hasTsx = Boolean(item.promptCode);
     const failed = status === 'failed' || status === 'cancelled' || render4k === 'failed';
     const busy = status === 'processing-tsx' || status === 'processing-preview' || render4k === 'processing' || Boolean(activeSeoGenerations[item.id]);
     const queued = status === 'queued' || render4k === 'queued';
 
+    // steps: Source(0), TSX(1), Preview(2), Metadata(3), 4K(4)
+    // current = index of active step; values >= steps.length means all done
     let current = 0;
-    if (item.outputPath4k || render4k === 'success') current = 4;
-    else if (render4k === 'queued' || render4k === 'processing' || hasMetadata) current = 3;
-    else if (item.previewUrl || status === 'success' || Boolean(activeSeoGenerations[item.id])) current = 2;
-    else if (status === 'processing-tsx' || status === 'processing-preview') current = 1;
+    if (item.outputPath4k || render4k === 'success') current = 5;
+    else if (render4k === 'queued' || render4k === 'processing' || hasMetadata) current = 4;
+    else if (item.previewUrl || status === 'success' || Boolean(activeSeoGenerations[item.id])) current = 3;
+    else if (status === 'processing-preview') current = 2;
+    else if (status === 'waiting-preview' || (hasTsx && status !== 'processing-tsx' && status !== 'queued')) current = 2;
+    else if (status === 'processing-tsx' || status === 'queued') current = 1;
 
     let cardState = 'ready';
     if (failed) cardState = 'failed';
@@ -3338,7 +3398,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 
   function renderAssetRail(item) {
     const { current } = getAssetWorkflow(item);
-    const steps = ['Source', 'Preview', 'Metadata', '4K Delivery'];
+    const steps = ['Source', 'TSX', 'Preview', 'Metadata', '4K'];
     return `<div class="asset-card__rail" aria-label="Tahap produksi aset">
       ${steps.map((label, index) => `<span class="asset-step ${index < current ? 'done' : ''} ${index === current && current < steps.length ? 'active' : ''}">${index + 1}. ${label}</span>`).join('')}
     </div>`;
@@ -3364,7 +3424,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       else if (item.statusRender4k === 'failed') statusBadge = `<span class="status-badge badge-error">❌ Gagal 4K</span>`;
       else statusBadge = `<span class="status-badge badge-success">✅ Preview siap</span>`;
     } else if (status === 'failed') {
-      statusBadge = `<span class="status-badge badge-error">❌ Gagal TSX/Preview</span>`;
+      statusBadge = `<span class="status-badge badge-error">❌ Gagal ${item.promptCode ? 'Preview' : 'TSX'}</span>`;
     } else if (status === 'cancelled') {
       statusBadge = `<span class="status-badge badge-cancelled">🚫 Dibatalkan</span>`;
     } else if (status === 'waiting') {
@@ -3372,7 +3432,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     } else if (status === 'waiting-otp') {
       statusBadge = `<span class="status-badge badge-queued"><span class="spin">🔑</span> Menunggu OTP</span>`;
     } else if (status === 'waiting-preview') {
-      statusBadge = `<span class="status-badge badge-queued">⏸ Menunggu preview</span>`;
+      statusBadge = `<span class="status-badge badge-success">✅ TSX siap · ⏸ Preview</span>`;
     }
 
     const logsHtml = (item.logs || []).map(log => {
@@ -3449,7 +3509,9 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       `<button class="btn-action btn-del" onclick="event.stopPropagation(); deleteItem('${item.id}', event)" title="Hapus aset">Hapus</button>`
     ].filter(Boolean).join('');
 
-    return `<div class="asset-settings">${videoConfig}<div class="asset-settings__files">${fileLinks}</div></div>`;
+    const transparentSceneToggle = `<label class="asset-settings__toggle" title="Tambah scene ke-2 dengan background transparan (durasi jadi 2x)"><input type="checkbox" id="addTransparentScene_${item.id}" ${item.addTransparentScene ? 'checked' : ''} onchange="saveField('${item.id}', 'addTransparentScene', this.checked)" /> Tambah scene transparan</label>`;
+
+    return `<div class="asset-settings">${videoConfig}${transparentSceneToggle}<div class="asset-settings__files">${fileLinks}</div></div>`;
   }
 
   function renderActionsCell(item) {
@@ -3458,17 +3520,20 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const isPreviewRunning = item.statusConvertTsx === 'processing-preview';
     const is4kRunning = item.statusRender4k === 'processing' || item.statusRender4k === 'queued';
     const isAnyRunning = isSeoRunning || isTsxRunning || isPreviewRunning || is4kRunning;
+    const hasTsx = !!item.promptCode;
     const hasPreview = !!item.previewUrl;
     const hasTitle = !!(item.judul && item.judul.trim());
     const has4k = !!item.outputPath4k;
+    const canPreview = hasTsx && !isTsxRunning && !isPreviewRunning;
 
     const aiSelect = `<select id="ai_model_${item.id}" class="select-input" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}><option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>Auto AI</option><option value="9router" ${item.aiModel === '9router' ? 'selected' : ''}>9Router</option><option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>Syntx Claude</option><option value="syntx-chatgpt" ${item.aiModel === 'syntx-chatgpt' ? 'selected' : ''}>Syntx ChatGPT</option><option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>Syntx Gemini</option><option value="syntx-grok" ${item.aiModel === 'syntx-grok' ? 'selected' : ''}>Syntx Grok</option><option value="syntx-deepseek" ${item.aiModel === 'syntx-deepseek' ? 'selected' : ''}>Syntx DeepSeek</option><option value="syntx-qwen" ${item.aiModel === 'syntx-qwen' ? 'selected' : ''}>Syntx Qwen</option><option value="syntx-perplexity" ${item.aiModel === 'syntx-perplexity' ? 'selected' : ''}>Syntx Perplexity</option></select>`;
 
-    const tsxText = isTsxRunning ? 'Converting TSX...' : isPreviewRunning ? 'Rendering preview...' : hasPreview ? 'Regen TSX & preview' : 'Generate TSX & preview';
+    const tsxText = isTsxRunning ? 'Converting TSX...' : hasTsx ? 'Regen TSX' : 'Generate TSX';
+    const previewText = isPreviewRunning ? 'Rendering preview...' : hasPreview ? 'Regen preview' : 'Render preview';
     const seoText = isSeoRunning ? 'Generating metadata...' : hasTitle ? 'Regen metadata' : 'Generate metadata';
     const fourKText = is4kRunning ? 'Rendering 4K...' : has4k ? 'Regen 4K' : 'Generate 4K';
 
-    return `<div class="asset-actions"><div class="asset-section-label">Next action</div><div class="asset-actions__primary">${aiSelect}<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${isAnyRunning ? 'disabled' : ''} style="background:rgba(56,189,248,.13); border:1px solid rgba(56,189,248,.35); color:var(--cyan);">${tsxText}</button><button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${isAnyRunning || !hasPreview ? 'disabled' : ''}>${seoText}</button><button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${isAnyRunning || !hasTitle ? 'disabled' : ''}>${fourKText}</button></div><div class="asset-actions__log"><div class="asset-section-label">Live status log</div>${renderLogCell(item)}</div></div>`;
+    return `<div class="asset-actions"><div class="asset-section-label">Next action</div><div class="asset-actions__primary">${aiSelect}<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${isAnyRunning ? 'disabled' : ''} style="background:rgba(56,189,248,.13); border:1px solid rgba(56,189,248,.35); color:var(--cyan);">${tsxText}</button><button class="btn-action" onclick="triggerPreview('${item.id}')" ${!canPreview || isSeoRunning || is4kRunning ? 'disabled' : ''} style="background:rgba(124,58,237,.13); border:1px solid rgba(124,58,237,.35); color:#a78bfa;">${previewText}</button><button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${isAnyRunning || !hasPreview ? 'disabled' : ''}>${seoText}</button><button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${isAnyRunning || !hasTitle ? 'disabled' : ''}>${fourKText}</button></div><div class="asset-actions__log"><div class="asset-section-label">Live status log</div>${renderLogCell(item)}</div></div>`;
   }
 
   async function trigger4K(id) {
@@ -3552,31 +3617,32 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const aiModel = document.getElementById(`ai_model_${id}`)?.value || 'auto';
     const loopVal = document.getElementById(`loop_${id}`)?.value === 'true';
     const transparentVal = document.getElementById(`transparent_${id}`)?.value === 'true';
+    const addTransparentSceneVal = document.getElementById(`addTransparentScene_${id}`)?.checked === true;
     const animationDuration = Number(document.getElementById(`duration_${id}`)?.value || 10);
     const animationFps = Number(document.getElementById(`fps_${id}`)?.value || 30);
 
     try {
       if (currentStatus === 'waiting') {
-        showToast('▶ Memulai Generate TSX dengan AI: ' + (aiModel === 'auto' ? 'Auto' : aiModel) + '...', 'info');
+        showToast('▶ Memulai Convert TSX dengan AI: ' + (aiModel === 'auto' ? 'Auto' : aiModel) + '...', 'info');
         const resp = await fetch(`/api/start-task/${id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal })
+          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal, addTransparentScene: addTransparentSceneVal })
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
-        showToast('🚀 Generate TSX dimulai!', 'success');
+        showToast('🚀 Convert TSX dimulai! Preview tidak dijalankan otomatis.', 'success');
       } else {
-        if (!confirm(`Regenerasi TSX untuk "${id}"?\n\nProses ini akan mengkonversi ulang HTML ke TSX Remotion dengan AI: ${aiModel}.`)) return;
+        if (!confirm(`Regenerasi TSX untuk "${id}"?\n\nHanya konversi HTML → TSX. Render preview harus dipicu manual setelahnya.\nAI: ${aiModel}.`)) return;
         showToast('⚙️ Memulai regenerasi TSX...', 'info');
         const resp = await fetch(`/api/retry-task/${id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal })
+          body: JSON.stringify({ aiModel, animationDuration, fps: animationFps, loop: loopVal, transparent: transparentVal, addTransparentScene: addTransparentSceneVal })
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
-        showToast('🔄 Regenerasi TSX dimulai!', 'success');
+        showToast('🔄 Regenerasi TSX dimulai! Preview tidak dijalankan otomatis.', 'success');
       }
 
       startTaskLogStream(id);
@@ -3588,13 +3654,14 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 
   async function triggerPreview(id) {
     try {
+      if (!confirm(`Render Preview untuk "${id}"?\n\nAkan git push + trigger GitHub Actions.`)) return;
       showToast('☁️ Memulai Render Preview di GitHub...', 'info');
       startTaskLogStream(id);
-      
+
       const resp = await fetch(`/api/trigger-preview/${id}`, { method: 'POST' });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
-      
+
       showToast('🚀 Render preview dipicu! Pantau di log box.', 'success');
       loadResults();
     } catch(err) {

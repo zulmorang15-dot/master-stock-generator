@@ -41,6 +41,11 @@ on:
         required: false
         default: 'false'
         type: string
+      add_transparent_scene:
+        description: 'If true, render a second half with transparent background (duration doubled)'
+        required: false
+        default: 'false'
+        type: string
 
 jobs:
   render-preview:
@@ -83,11 +88,13 @@ jobs:
           KEYWORDS: ${{ github.event.inputs.keywords }}
           DURATION: ${{ github.event.inputs.duration_frames }}
           FPS: ${{ github.event.inputs.fps }}
+          ADD_TRANSPARENT_SCENE: ${{ github.event.inputs.add_transparent_scene }}
         run: |
           node -e "
             const props = {
               durationInFrames: parseInt(process.env.DURATION) || 150,
               fps: parseInt(process.env.FPS) || 30,
+              addTransparentScene: process.env.ADD_TRANSPARENT_SCENE === 'true',
               judul: process.env.JUDUL || 'Stock Video',
               keywords: process.env.KEYWORDS || 'motion, abstract, loop'
             };
