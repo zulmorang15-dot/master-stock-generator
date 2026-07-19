@@ -63,6 +63,25 @@
     .nav-btn:hover { background: var(--bg3); color: var(--text); }
     .nav-btn.active { background: var(--purple-dim); border-color: var(--purple); color: #c084fc; }
 
+    header, .header { position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px); }
+    @media (max-width: 768px) {
+      header, .header { position: relative !important; top: auto !important; }
+      .studio-layout { grid-template-columns: 1fr; height: auto; padding: 12px; }
+    }
+
+    #aspectRatioWrapper.ratio-16-9 {
+      width: 100%;
+      max-width: 100%;
+      aspect-ratio: 16 / 9;
+      max-height: 100%;
+    }
+    #aspectRatioWrapper.ratio-9-16 {
+      height: 100%;
+      max-height: 100%;
+      aspect-ratio: 9 / 16;
+      max-width: 100%;
+    }
+
     .studio-layout {
       display: grid;
       grid-template-columns: 420px 1fr;
@@ -322,16 +341,23 @@
     <!-- RIGHT PANEL: LIVE PREVIEW & CODE EDITOR -->
     <div class="panel-card">
       <div class="preview-header">
-        <div class="tab-group">
-          <button class="tab-btn active" id="tabBtnPreview" onclick="switchPreviewTab('preview')">🖥️ Live Preview</button>
-          <button class="tab-btn" id="tabBtnCode" onclick="switchPreviewTab('code')">💻 Code Editor</button>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <div class="tab-group">
+            <button class="tab-btn active" id="tabBtnPreview" onclick="switchPreviewTab('preview')">🖥️ Live Preview</button>
+            <button class="tab-btn" id="tabBtnCode" onclick="switchPreviewTab('code')">💻 Code Editor</button>
+          </div>
+
+          <!-- Mandatory Aspect Ratio Selector (16:9 vs 9:16) -->
+          <div class="tab-group" style="background:var(--bg2); border:1px solid var(--border); padding:2px;">
+            <button class="tab-btn active" id="ratio169Btn" onclick="setPreviewAspectRatio('16:9')" title="Mandatory Rasio 16:9 Landscape">📺 16:9</button>
+            <button class="tab-btn" id="ratio916Btn" onclick="setPreviewAspectRatio('9:16')" title="Mandatory Rasio 9:16 Portrait Shorts/Reels">📱 9:16</button>
+          </div>
         </div>
 
-        <div style="display:flex; gap:8px; align-items:center;">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <button class="btn-refresh" onclick="runHtmlCompiler()" style="border-color:var(--green); color:var(--green); background:transparent;" title="Jalankan Ulang Animasi">▶ Run</button>
           <button class="btn-refresh" onclick="loadCompilerTemplate()" style="border-color:var(--cyan); color:var(--cyan); background:transparent;">📄 Template</button>
           <button class="btn-refresh" onclick="downloadCompiledHtml()" style="border-color:var(--purple); color:var(--purple); background:rgba(168,85,247,0.12);" title="Download File HTML">📥 Download HTML</button>
-          <button class="btn-refresh" onclick="clearCompilerEditor()" style="border-color:var(--red); color:var(--red); background:transparent;">🗑 Reset</button>
           <button class="btn-generate" onclick="sendCompiledHtmlToGenerator()" style="background:linear-gradient(135deg, var(--purple), #7c3aed); padding:8px 16px; margin:0;">
             🚀 KIRIM KE GENERATOR
           </button>
@@ -339,9 +365,11 @@
       </div>
 
       <div style="flex:1; position:relative; background:#000; overflow:hidden;">
-        <!-- Live Preview Iframe -->
-        <div id="previewContainer" style="width:100%; height:100%; display:flex;">
-          <iframe id="compilerPreviewIframe" style="width:100%; height:100%; border:none; background:#000;" sandbox="allow-scripts allow-same-origin"></iframe>
+        <!-- Live Preview Iframe Container dengan Mandatory Aspect Ratio (16:9 / 9:16) -->
+        <div id="previewContainer" style="width:100%; height:100%; display:flex; justify-content:center; align-items:center; background:#050810; padding:16px; box-sizing:border-box;">
+          <div id="aspectRatioWrapper" class="ratio-16-9" style="position:relative; background:#000; box-shadow:0 0 35px rgba(0,0,0,0.8); border:1px solid rgba(56,189,248,0.25); border-radius:10px; overflow:hidden; transition:all 0.3s ease;">
+            <iframe id="compilerPreviewIframe" style="width:100%; height:100%; border:none; background:#000;" sandbox="allow-scripts allow-same-origin"></iframe>
+          </div>
         </div>
 
         <!-- Code Editor Textarea -->
@@ -879,19 +907,53 @@
       if (iframe) iframe.srcdoc = code;
     }
 
+    function setPreviewAspectRatio(ratio) {
+      const wrapper = document.getElementById('aspectRatioWrapper');
+      const btn169 = document.getElementById('ratio169Btn');
+      const btn916 = document.getElementById('ratio916Btn');
+
+      if (ratio === '9:16') {
+        if (wrapper) {
+          wrapper.className = 'ratio-9-16';
+        }
+        if (btn169) btn169.classList.remove('active');
+        if (btn916) btn916.classList.add('active');
+      } else {
+        if (wrapper) {
+          wrapper.className = 'ratio-16-9';
+        }
+        if (btn169) btn169.classList.add('active');
+        if (btn916) btn916.classList.remove('active');
+      }
+      localStorage.setItem('compiler_aspect_ratio', ratio);
+    }
+
     function sendCompiledHtmlToGenerator() {
       const code = document.getElementById('compilerHtmlCode')?.value.trim() || '';
       if (!code) {
         showToast('⚠️ Kode HTML kosong!', 'warning');
         return;
       }
-      sessionStorage.setItem('pending_paste_html', code);
-      window.location.href = '/dashboard?mode=paste';
+
+      const ratio = localStorage.getItem('compiler_aspect_ratio') || '16:9';
+      const isConfirmed = confirm(`🚀 Apakah Anda yakin ingin mengimport kode animasi HTML ini (Rasio: ${ratio}) ke Dashboard Generator untuk dikonversi & dirender 4K?`);
+
+      if (isConfirmed) {
+        sessionStorage.setItem('pending_paste_html', code);
+        sessionStorage.setItem('pending_paste_ratio', ratio);
+        showToast('🚀 Mengalihkan ke Dashboard Generator...', 'success');
+        setTimeout(() => {
+          window.location.href = '/dashboard?mode=paste';
+        }, 300);
+      }
     }
 
     // Init page
     (function() {
       loadApiKeys();
+      const savedRatio = localStorage.getItem('compiler_aspect_ratio') || '16:9';
+      setPreviewAspectRatio(savedRatio);
+
       const savedCode = sessionStorage.getItem('compiler_html_code');
       const editor = document.getElementById('compilerHtmlCode');
       if (savedCode && editor) {
