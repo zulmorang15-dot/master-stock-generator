@@ -2409,7 +2409,8 @@ async function executeSingleTask(itemId) {
       // Jalankan callAI dengan pembatalan (abortable)
       let aiResponse = "";
       try {
-        aiResponse = await runAbortable(callAIWithFallback(seoPrompt, { preferModel: (!item.aiModel || item.aiModel === 'auto') ? '9router' : item.aiModel, signal, taskId: itemId }), signal);
+        const modelToUse = (item.aiModel && item.aiModel !== 'auto') ? item.aiModel : 'auto';
+        aiResponse = await runAbortable(callAIWithFallback(seoPrompt, { preferModel: modelToUse, signal, taskId: itemId }), signal);
       } catch (err) {
         throw new Error(`Gagal menghasilkan metadata SEO: ${err.message}`);
       }
@@ -3654,7 +3655,8 @@ async function executeSingleSeoTask(id, aiModel) {
     const cleanHtml = stripScripts(item.htmlPreview);
     const activeSeoPrompt = promptsData.seoPrompt.replace("{{HTML_CONTENT}}", cleanHtml);
 
-    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: (!aiModel || aiModel === 'auto') ? '9router' : aiModel, taskId: id });
+    const modelToUse = (aiModel && aiModel !== 'auto') ? aiModel : 'auto';
+    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: modelToUse, taskId: id });
     
     let jsonText = aiResponse.trim();
     if (jsonText.startsWith("```json")) {
@@ -3668,17 +3670,26 @@ async function executeSingleSeoTask(id, aiModel) {
         }
       }
     }
+    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
 
-    const seoResult = JSON.parse(jsonText);
-    item.judul = seoResult.title || item.judul;
-    item.keywords = seoResult.keywords || item.keywords;
-    
-    // Normalisasi keywords dan judul
+    let seoData = JSON.parse(jsonText);
     if (typeof sanitizeKeywordsAndTitle === 'function') {
-      const sanitized = sanitizeKeywordsAndTitle(item.judul, item.keywords);
-      item.judul = sanitized.title;
-      item.keywords = sanitized.keywords;
+      seoData = sanitizeKeywordsAndTitle(seoData);
     }
+
+    item.judul = seoData.judul || item.judul;
+    item.keywords = seoData.keywords || item.keywords;
+    item.deskripsi = seoData.deskripsi || item.deskripsi;
+    item.kategori = seoData.kategori || item.kategori;
+    
+    if (typeof normalizeCategories === 'function') {
+      const { adobeCat, shutterCat, shutterCat2 } = normalizeCategories(seoData);
+      item.adobeCategory = adobeCat;
+      item.shutterstockCategory = shutterCat;
+      item.shutterstockCategory2 = shutterCat2;
+    }
+
+    item.seoAiUsed = modelToUse;
 
     item.statusConvertTsx = 'waiting'; // Reset status TSX to waiting so they can build it
     const finishTime = new Date().toLocaleTimeString('id-ID');
@@ -4704,7 +4715,8 @@ app.post("/api/regenerate-seo/:id", async (req, res) => {
     const cleanHtml = stripScripts(item.htmlPreview);
     const activeSeoPrompt = promptsData.seoPrompt.replace("{{HTML_CONTENT}}", cleanHtml);
 
-    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: (!aiModel || aiModel === 'auto') ? '9router' : aiModel, taskId: id });
+    const modelToUse = (aiModel && aiModel !== 'auto') ? aiModel : 'auto';
+    const aiResponse = await callAIWithFallback(activeSeoPrompt, { preferModel: modelToUse, taskId: id });
     
     let jsonText = aiResponse.trim();
     if (jsonText.startsWith("```json")) {

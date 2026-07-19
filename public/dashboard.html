@@ -53,8 +53,31 @@
     body.light-mode .log-panel,
     body.light-mode .log-body { background: #f8fafc; border-color: rgba(2,132,199,0.2); }
     body.light-mode .code-editor-textarea { background: #f8fafc; color: #047857; border-color: rgba(2,132,199,0.25); }
-    body.light-mode .mini-log-box { background: rgba(0,0,0,0.04); }
+    body.light-mode .mini-log-box { background: #f8fafc; border-color: rgba(0,0,0,0.1); color: #334155; }
     body.light-mode .header { background: linear-gradient(180deg, rgba(2,132,199,0.06) 0%, transparent 100%); }
+
+
+
+    /* Status Badge Light Mode Colors */
+    body.light-mode .badge-success { background: #dcfce7 !important; color: #15803d !important; border: 1px solid #86efac !important; }
+    body.light-mode .badge-rendering { background: #e0f2fe !important; color: #0369a1 !important; border: 1px solid #7dd3fc !important; }
+    body.light-mode .badge-converting { background: #fef3c7 !important; color: #b45309 !important; border: 1px solid #fde68a !important; }
+    body.light-mode .badge-queued { background: #f1f5f9 !important; color: #475569 !important; border: 1px solid #cbd5e1 !important; }
+    body.light-mode .badge-error { background: #fee2e2 !important; color: #b91c1c !important; border: 1px solid #fca5a5 !important; }
+    body.light-mode .badge-cancelled { background: #f3f4f6 !important; color: #4b5563 !important; border: 1px solid #d1d5db !important; }
+
+    body.light-mode .asset-card__name { color: #0f172a; }
+    body.light-mode .asset-preview { background: #f8fafc; border-color: rgba(0,0,0,0.12); }
+    body.light-mode .edit-field { background: #ffffff; color: #0f172a; border-color: rgba(0,0,0,0.15); }
+    body.light-mode .select-input { background: #ffffff; color: #0f172a; border-color: rgba(0,0,0,0.15); }
+    body.light-mode .card-details-accordion { border-top-color: rgba(0,0,0,0.1) !important; }
+
+    /* Light mode modal popup */
+    body.light-mode #apiKeysModal > div {
+      background: #ffffff !important;
+      border-color: rgba(37,99,235,0.3) !important;
+      box-shadow: 0 25px 60px rgba(15,23,42,0.25) !important;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Inter', sans-serif;
@@ -1448,10 +1471,137 @@
     .asset-stage-content { padding:20px 24px 24px; }
     .workflow-stage--assets .results-header { margin:0 0 18px; }
     .asset-grid { display:grid; gap:16px; }
-    .asset-card { position:relative; overflow:hidden; padding:20px; border:1px solid var(--border-strong); border-radius:14px; background:linear-gradient(140deg,rgba(13,20,36,0.95),rgba(7,11,20,0.98)); box-shadow:0 10px 30px rgba(0,0,0,0.35); }
-    .asset-card[data-state="ready"] { border-left:4px solid var(--green); }
-    .asset-card[data-state="working"] { border-left:4px solid var(--purple); }
-    .asset-card[data-state="queued"] { border-left:4px solid var(--amber); }
+    .asset-card {
+      position: relative;
+      overflow: hidden;
+      padding: 20px;
+      border-width: 1px;
+      border-style: solid;
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .asset-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: transparent;
+    }
+    /* COMPLETED: Selesai 100% (Hijau Emerald) */
+    .asset-card[data-state="completed"] {
+      border-left: 6px solid #10b981;
+      border-color: rgba(16, 185, 129, 0.55);
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.22) 0%, rgba(8, 38, 27, 0.96) 35%, rgba(6, 16, 14, 0.98) 100%);
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.15), inset 0 1px 0 rgba(16, 185, 129, 0.3);
+    }
+    .asset-card[data-state="completed"]::before {
+      background: linear-gradient(90deg, #10b981, rgba(16, 185, 129, 0.2));
+    }
+
+    /* WORKING: Sedang Diproses AI / Render (Ungu Neon) */
+    .asset-card[data-state="working"] {
+      border-left: 6px solid #a855f7;
+      border-color: rgba(168, 85, 247, 0.6);
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.26) 0%, rgba(42, 16, 70, 0.96) 35%, rgba(14, 8, 28, 0.98) 100%);
+      box-shadow: 0 10px 30px rgba(168, 85, 247, 0.2), inset 0 1px 0 rgba(168, 85, 247, 0.3);
+    }
+    .asset-card[data-state="working"]::before {
+      background: linear-gradient(90deg, #a855f7, rgba(168, 85, 247, 0.2));
+    }
+
+    /* READY: Ready / Siap Step Selanjutnya (Cyan Blue) */
+    .asset-card[data-state="ready"] {
+      border-left: 6px solid #38bdf8;
+      border-color: rgba(56, 189, 248, 0.5);
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(12, 40, 62, 0.96) 35%, rgba(5, 16, 26, 0.98) 100%);
+      box-shadow: 0 10px 30px rgba(56, 189, 248, 0.12), inset 0 1px 0 rgba(56, 189, 248, 0.3);
+    }
+    .asset-card[data-state="ready"]::before {
+      background: linear-gradient(90deg, #38bdf8, rgba(56, 189, 248, 0.2));
+    }
+
+    /* QUEUED: Antrean / Menunggu (Kuning Amber) */
+    .asset-card[data-state="queued"] {
+      border-left: 6px solid #f59e0b;
+      border-color: rgba(245, 158, 11, 0.5);
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(48, 33, 10, 0.96) 35%, rgba(16, 12, 8, 0.98) 100%);
+      box-shadow: 0 10px 30px rgba(245, 158, 11, 0.12), inset 0 1px 0 rgba(245, 158, 11, 0.3);
+    }
+    .asset-card[data-state="queued"]::before {
+      background: linear-gradient(90deg, #f59e0b, rgba(245, 158, 11, 0.2));
+    }
+
+    /* FAILED: Error / Gagal (Merah) */
+    .asset-card[data-state="failed"] {
+      border-left: 6px solid #ef4444;
+      border-color: rgba(239, 68, 68, 0.6);
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.26) 0%, rgba(52, 12, 18, 0.96) 35%, rgba(20, 6, 8, 0.98) 100%);
+      box-shadow: 0 10px 30px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(239, 68, 68, 0.3);
+    }
+    .asset-card[data-state="failed"]::before {
+      background: linear-gradient(90deg, #ef4444, rgba(239, 68, 68, 0.2));
+    }
+
+    /* ── LIGHT MODE STYLING FOR PANELS & CARDS (VIBRANT DISTINCT COLORS) ── */
+    body.light-mode .asset-card {
+      background: #ffffff !important;
+      border-color: rgba(56, 100, 160, 0.3) !important;
+      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08) !important;
+    }
+    body.light-mode .asset-card[data-state="completed"] {
+      border-left: 6px solid #059669 !important;
+      border-color: #34d399 !important;
+      background: linear-gradient(135deg, #a7f3d0 0%, #dcfce7 45%, #f0fdf4 100%) !important;
+      box-shadow: 0 6px 24px rgba(5, 150, 105, 0.2) !important;
+    }
+    body.light-mode .asset-card[data-state="completed"]::before {
+      background: linear-gradient(90deg, #059669, #34d399) !important;
+    }
+
+    body.light-mode .asset-card[data-state="ready"] {
+      border-left: 6px solid #0284c7 !important;
+      border-color: #38bdf8 !important;
+      background: linear-gradient(135deg, #bae6fd 0%, #e0f2fe 45%, #f0f9ff 100%) !important;
+      box-shadow: 0 6px 24px rgba(2, 132, 199, 0.2) !important;
+    }
+    body.light-mode .asset-card[data-state="ready"]::before {
+      background: linear-gradient(90deg, #0284c7, #38bdf8) !important;
+    }
+
+    body.light-mode .asset-card[data-state="working"] {
+      border-left: 6px solid #7c3aed !important;
+      border-color: #c084fc !important;
+      background: linear-gradient(135deg, #ddd6fe 0%, #f3e8ff 45%, #faf5ff 100%) !important;
+      box-shadow: 0 6px 24px rgba(124, 58, 237, 0.2) !important;
+    }
+    body.light-mode .asset-card[data-state="working"]::before {
+      background: linear-gradient(90deg, #7c3aed, #c084fc) !important;
+    }
+
+    body.light-mode .asset-card[data-state="queued"] {
+      border-left: 6px solid #d97706 !important;
+      border-color: #fbbf24 !important;
+      background: linear-gradient(135deg, #fde68a 0%, #fef3c7 45%, #fffbeb 100%) !important;
+      box-shadow: 0 6px 24px rgba(217, 119, 6, 0.2) !important;
+    }
+    body.light-mode .asset-card[data-state="queued"]::before {
+      background: linear-gradient(90deg, #d97706, #fbbf24) !important;
+    }
+
+    body.light-mode .asset-card[data-state="failed"] {
+      border-left: 6px solid #dc2626 !important;
+      border-color: #f87171 !important;
+      background: linear-gradient(135deg, #fca5a5 0%, #fee2e2 45%, #fff1f1 100%) !important;
+      box-shadow: 0 6px 24px rgba(220, 38, 38, 0.2) !important;
+    }
+    body.light-mode .asset-card[data-state="failed"]::before {
+      background: linear-gradient(90deg, #dc2626, #f87171) !important;
+    }
+
+    body.light-mode .asset-card__name { color: #0f172a !important; text-shadow: none !important; }
+    body.light-mode .asset-section-label { color: #334155 !important; }
+    body.light-mode .asset-card__number { color: #475569 !important; }
     .asset-card__header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; width:100%; }
     .asset-card__title-row { display:flex; align-items:center; gap:8px; flex:1; min-width:200px; }
     .asset-card__number { color:var(--text-dim); font:700 12px 'JetBrains Mono',monospace; flex-shrink:0; }
@@ -1555,7 +1705,13 @@
       max-height:126px !important;
     }
     /* ── MOBILE & TABLET RESPONSIVENESS OPTIMIZATIONS ── */
-    @media (hover:hover) { .asset-card:hover { border-color:var(--border-hover); box-shadow:var(--panel-shadow-hover); transform:translateY(-1px); } }
+    @media (hover:hover) {
+      .asset-card[data-state="completed"]:hover { border-color: rgba(16, 185, 129, 0.6); box-shadow: 0 12px 35px rgba(16, 185, 129, 0.2); transform: translateY(-2px); }
+      .asset-card[data-state="ready"]:hover { border-color: rgba(56, 189, 248, 0.5); box-shadow: 0 12px 35px rgba(56, 189, 248, 0.16); transform: translateY(-2px); }
+      .asset-card[data-state="working"]:hover { border-color: rgba(168, 85, 247, 0.6); box-shadow: 0 12px 35px rgba(168, 85, 247, 0.22); transform: translateY(-2px); }
+      .asset-card[data-state="queued"]:hover { border-color: rgba(245, 158, 11, 0.5); box-shadow: 0 12px 35px rgba(245, 158, 11, 0.15); transform: translateY(-2px); }
+      .asset-card[data-state="failed"]:hover { border-color: rgba(239, 68, 68, 0.6); box-shadow: 0 12px 35px rgba(239, 68, 68, 0.22); transform: translateY(-2px); }
+    }
 
     @media (max-width:1200px) {
       .workspace-layout { grid-template-columns: 320px minmax(0, 1fr); }
@@ -1579,62 +1735,63 @@
 
     @media (max-width: 768px) {
       html, body { overflow-x: hidden; }
-      .main { padding: 14px 10px 40px !important; }
-      .header { padding: 12px 14px !important; flex-direction: column; align-items: stretch; gap: 12px; }
-      .header-title { font-size: 19px; }
+      .main { padding: 12px 8px 60px !important; }
+      .header { padding: 12px 14px !important; flex-direction: column; align-items: stretch; gap: 10px; }
+      .header-title { font-size: 18px; }
       .header-sub { font-size: 11px; }
-      .header-nav { width: 100%; justify-content: flex-start; overflow-x: auto; padding-bottom: 4px; gap: 6px; }
+      .header-nav { width: 100%; justify-content: flex-start; overflow-x: auto; padding-bottom: 6px; gap: 6px; }
       .nav-tab { padding: 8px 12px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
       
-      /* Mobile Collapsible Sidebar Accordion */
-      .workspace-layout.sidebar-collapsed .workspace-sidebar {
-        max-height: 52px !important;
-        overflow: hidden !important;
-        border-radius: 12px;
+      .results-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
       }
-      .workspace-layout.sidebar-collapsed .collapsed-sidebar-indicator {
+      .results-header > div {
+        width: 100% !important;
+        justify-content: space-between !important;
+        flex-wrap: wrap !important;
+      }
+
+      .toggle-group {
+        width: 100% !important;
         display: flex !important;
-        flex-direction: row !important;
-        justify-content: center !important;
-        align-items: center !important;
-        gap: 8px !important;
-        padding: 12px !important;
-        width: 100%;
       }
-      .workspace-layout.sidebar-collapsed .collapsed-sidebar-indicator span {
-        writing-mode: horizontal-tb !important;
+      .toggle-group .toggle-btn {
+        flex: 1 !important;
+        text-align: center !important;
+        padding: 8px 6px !important;
+        font-size: 11px !important;
       }
 
-      .workflow-rail { grid-template-columns: repeat(2, 1fr); border-radius: 12px; }
-      .workflow-rail__step { padding: 12px 12px 12px 44px; min-height: 58px; }
-      .workflow-rail__number { left: 10px; top: 12px; width: 24px; height: 24px; font-size: 10px; }
-      .workflow-rail__label { font-size: 12px; }
-      .workflow-rail__hint { font-size: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
-      .asset-card { padding: 12px !important; border-radius: 12px !important; }
-      .asset-card__header { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
-      .asset-card__title-row { width: 100% !important; flex: none !important; }
+      .asset-card { padding: 14px 12px !important; border-radius: 12px !important; }
+      .asset-card__header { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+      .asset-card__title-row { width: 100% !important; flex-wrap: wrap !important; gap: 8px !important; }
       .asset-card__name { font-size: 13px !important; white-space: normal !important; word-break: break-word !important; overflow: visible !important; width: 100% !important; }
-      .asset-card__meta { justify-content: flex-start !important; width: 100% !important; }
-      .asset-card__body { grid-template-columns: 1fr !important; gap: 12px !important; }
+      .asset-card__meta { justify-content: flex-start !important; width: 100% !important; flex-wrap: wrap !important; gap: 6px !important; }
+      .asset-card__body { grid-template-columns: 1fr !important; gap: 14px !important; }
       .asset-preview { width: 100% !important; max-width: 100% !important; height: auto !important; min-height: 180px !important; box-sizing: border-box !important; overflow: hidden !important; }
-      .asset-preview .preview-video { width: 100% !important; max-width: 100% !important; height: 180px !important; object-fit: cover !important; box-sizing: border-box !important; }
-      .asset-preview__empty { height: 170px !important; min-height: 170px !important; box-sizing: border-box !important; }
-
+      .asset-preview .preview-video, .asset-preview iframe { width: 100% !important; max-width: 100% !important; aspect-ratio: 16/9 !important; height: auto !important; object-fit: cover !important; box-sizing: border-box !important; }
+      
       .video-config { flex-wrap: wrap !important; gap: 6px !important; }
-      .video-config .select-input { flex: 1 1 120px !important; height: 36px !important; font-size: 12px !important; }
+      .video-config .select-input { flex: 1 1 calc(50% - 6px) !important; height: 38px !important; font-size: 12px !important; }
 
-      .asset-actions__primary { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) !important; gap: 8px !important; }
-      .asset-actions__primary .btn-action, .asset-actions__primary .select-input { min-height: 38px !important; font-size: 11px; }
+      .asset-actions__primary { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) !important; gap: 8px !important; }
+      .asset-actions__primary .btn-action, .asset-actions__primary .select-input { min-height: 40px !important; font-size: 11px !important; }
 
-      /* Mobile Modal adjustments */
-      #studioModal > div { width: 95vw !important; max-width: 95vw !important; height: 92vh !important; }
+      .batch-bar {
+        position: fixed !important;
+        bottom: 0 !important; left: 0 !important; right: 0 !important;
+        border-radius: 0 !important;
+        z-index: 9999 !important;
+        padding: 10px 14px !important;
+        background: rgba(13,20,36,0.98) !important;
+        border-top: 1px solid var(--purple) !important;
+        box-shadow: 0 -5px 25px rgba(0,0,0,0.7) !important;
+      }
     }
 
     @media (max-width: 480px) {
-      .workflow-rail { grid-template-columns: 1fr; }
-      .workflow-rail__step { border-right: 0; border-bottom: 1px solid var(--border); }
-      .workflow-rail__step:last-child { border-bottom: 0; }
       .video-config .select-input { flex: 1 1 100% !important; }
       .asset-actions__primary { grid-template-columns: 1fr !important; }
     }
@@ -1677,14 +1834,6 @@
 
 <main class="main">
   <div id="generatorPanel" class="insights-panel active workflow-shell">
-    <section class="workflow-rail" aria-label="Alur produksi aset">
-      <div class="workflow-rail__step"><span class="workflow-rail__number">01</span><span class="workflow-rail__label">Source</span><span class="workflow-rail__hint">Upload atau tempel HTML animasi.</span></div>
-      <div class="workflow-rail__step"><span class="workflow-rail__number">02</span><span class="workflow-rail__label">Convert TSX</span><span class="workflow-rail__hint">AI mengonversi HTML ke Remotion TSX.</span></div>
-      <div class="workflow-rail__step"><span class="workflow-rail__number">03</span><span class="workflow-rail__label">Render Preview</span><span class="workflow-rail__hint">Render preview MP4 di GitHub Actions.</span></div>
-      <div class="workflow-rail__step"><span class="workflow-rail__number">04</span><span class="workflow-rail__label">Metadata</span><span class="workflow-rail__hint">Tinjau judul, keyword, dan kategori.</span></div>
-      <div class="workflow-rail__step"><span class="workflow-rail__number">05</span><span class="workflow-rail__label">4K Delivery</span><span class="workflow-rail__hint">Render ProRes dan ekspor metadata.</span></div>
-    </section>
-
     <div class="workspace-layout">
       <!-- ═══ LEFT SIDEBAR: Stage 01 Intake ═══ -->
       <aside class="workspace-sidebar" aria-label="Stage 01 Intake sidebar">
@@ -1801,6 +1950,10 @@
             <option value="100">100 Baris</option>
           </select>
         </div>
+        <div class="toggle-group" style="display: inline-flex;">
+          <button class="toggle-btn active" id="viewModeDetail" onclick="setViewMode('detail')" title="Tampilan Detail (Lengkap)">📋 Detail</button>
+          <button class="toggle-btn" id="viewModeCompact" onclick="setViewMode('compact')" title="Tampilan Ramping (Thumbnail & Judul)">⚡ Ramping</button>
+        </div>
         <button class="btn-refresh" onclick="loadResults()">🔄 Refresh</button>
       </div>
     </div>
@@ -1828,75 +1981,7 @@
       </div>
     </div>
 
-    <!-- ═══════════ API KEYS PANEL ═══════════ -->
-    <div class="input-card" id="apiKeysPanel" style="display:none; border-color: var(--blue); background: rgba(59,130,246,0.03); margin-bottom: 20px;">
-      <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
-        🔑 Pengaturan API Keys AI & Layanan Pembantu
-      </h3>
-      <p style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">
-        Isi API Key untuk 9Router dan akun Syntx.ai di bawah ini. Kunci disimpan di file <code>.env</code> Anda.
-      </p>
-      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px; flex-wrap:wrap;">
-        <!-- 9Router Config -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">9Router API Key</label>
-          <input type="password" class="input-text-field" id="keyNinerouter" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="Kunci API 9Router..." />
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button class="btn-refresh" onclick="testApiKey('ninerouter')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
-            <span id="status_ninerouter" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
-          </div>
-        </div>
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">9Router Base URL</label>
-          <input type="text" class="input-text-field" id="keyNinerouterUrl" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="http://localhost:20128/v1" />
-        </div>
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">9Router Model Name</label>
-          <input type="text" class="input-text-field" id="keyNinerouterModel" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="9router" />
-        </div>
 
-        <!-- Syntx Base Email -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Syntx Base Email (Gmail)</label>
-          <input type="text" class="input-text-field" id="syntxBaseEmail" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="l.imh.en.c.e@gmail.com" />
-        </div>
-        <!-- Syntx Email Index -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">Syntx Email Index (Dot-Variant)</label>
-          <input type="number" class="input-text-field" id="syntxEmailIndex" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="0" min="0" />
-        </div>
-        <!-- GitHub Token -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub PAT Token (Workflow scope)</label>
-          <input type="password" class="input-text-field" id="githubToken" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="ghp_..." />
-        </div>
-        <!-- GitHub Username -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub Username</label>
-          <input type="text" class="input-text-field" id="githubUsername" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="zulmorang15-dot" />
-        </div>
-        <!-- GitHub Repository -->
-        <div>
-          <label class="option-label" style="display:block; margin-bottom:6px; font-weight: 600;">GitHub Repository</label>
-          <input type="text" class="input-text-field" id="githubRepo" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="master-stock-generator" />
-        </div>
-
-        <!-- Syntx Account Pool Status -->
-        <div style="grid-column: 1 / -1; margin-top: 10px; padding: 12px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <span style="font-size: 13px; font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 6px;">📋 Pool Akun Syntx.ai Cached</span>
-            <button class="btn-refresh" onclick="prewarmSyntxAccount()" id="btnPrewarmSyntx" style="padding: 4px 10px; font-size: 11px; border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim);">🔑 Tambah/Pre-warm Akun</button>
-          </div>
-          <div id="syntxPoolStatus" style="font-size: 12px; color: var(--text-dim);">
-            Loading status pool...
-          </div>
-        </div>
-      </div>
-      <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
-        <button class="btn-batch-clear" onclick="toggleApiKeysPanel()">Batal</button>
-        <button class="btn-batch-4k" onclick="saveApiKeys()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border:none; color:#fff;">💾 Simpan API Keys</button>
-      </div>
-    </div>
     <!-- Batch Action Bar -->
     <div class="batch-bar" id="batchBar" style="flex-wrap: wrap;">
       <span class="batch-count" id="batchCount">0 item dipilih</span>
@@ -2257,6 +2342,8 @@
   let itemsPerPage = 10;
   let cachedItems = [];
   let activeFilter = 'all';
+  let currentViewMode = localStorage.getItem('dashboard_viewMode') || 'detail';
+  let cardExpandedState = {};
 
   // ─── GOOGLE TRENDS & ADOBE STOCK EXPLORER STATE & FUNCTIONS ───
   let currentView = 'generator';
@@ -2378,6 +2465,7 @@
 
   // Restore sidebar collapse state on load
   document.addEventListener('DOMContentLoaded', () => {
+    if (typeof updateViewModeButtons === 'function') updateViewModeButtons();
     if (localStorage.getItem('sidebar_collapsed') === 'true') {
       const layout = document.querySelector('.workspace-layout');
       const btn = document.getElementById('btnToggleSidebar');
@@ -3521,6 +3609,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     let cardState = 'ready';
     if (failed) cardState = 'failed';
     else if (busy) cardState = 'working';
+    else if (current === 5) cardState = 'completed';
     else if (queued || current === 0) cardState = 'queued';
 
     return { current, cardState };
@@ -3534,11 +3623,38 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     </div>`;
   }
 
-  function renderLogCell(item) {
+  window.setViewMode = function(mode) {
+    currentViewMode = mode;
+    localStorage.setItem('dashboard_viewMode', mode);
+    cardExpandedState = {};
+    updateViewModeButtons();
+    applyFilterAndRender();
+  }
+
+  function updateViewModeButtons() {
+    const btnDetail = document.getElementById('viewModeDetail');
+    const btnCompact = document.getElementById('viewModeCompact');
+    if (btnDetail) btnDetail.classList.toggle('active', currentViewMode === 'detail');
+    if (btnCompact) btnCompact.classList.toggle('active', currentViewMode === 'compact');
+  }
+
+  window.toggleCardDetails = function(id) {
+    const detailsEl = document.getElementById(`details_${id}`);
+    const btnTextEl = document.getElementById(`btnDetailText_${id}`);
+    if (!detailsEl) return;
+    const isCurrentlyHidden = detailsEl.style.display === 'none' || !detailsEl.style.display;
+    const nextState = isCurrentlyHidden;
+    detailsEl.style.display = nextState ? 'block' : 'none';
+    cardExpandedState[id] = nextState;
+    if (btnTextEl) {
+      btnTextEl.textContent = nextState ? '🔼 Ringkas' : '🔽 Detail';
+    }
+  }
+
+  function getStatusBadgeHtml(item) {
     let statusBadge = '';
     const status = item.statusConvertTsx || 'queued';
     const isSeoRunning = !!activeSeoGenerations[item.id];
-
     if (isSeoRunning) {
       statusBadge = `<span class="status-badge badge-converting"><span class="spin">⏳</span> AI Metadata</span>`;
     } else if (status === 'queued') {
@@ -3564,7 +3680,75 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     } else if (status === 'waiting-preview') {
       statusBadge = `<span class="status-badge badge-success">✅ TSX siap · ⏸ Preview</span>`;
     }
+    return statusBadge;
+  }
 
+  function getQuickActionsHtml(item) {
+    const isSeoRunning = !!activeSeoGenerations[item.id];
+    const isTsxRunning = item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx';
+    const is4kRunning = item.statusRender4k === 'processing' || item.statusRender4k === 'queued';
+
+    const hasHtml = !!item.htmlPreview;
+    const hasTsx = !!item.promptCode;
+    const has4k = !!item.outputPath4k;
+
+    const actions = [];
+
+    // 1. Icon Convert/Regen TSX
+    if (hasHtml) {
+      actions.push(`<button class="btn-action" onclick="startConvertTsx('${item.id}')" ${isTsxRunning ? 'disabled' : ''} style="padding:4px 8px; font-size:12px; margin:0;" title="${hasTsx ? 'Regen TSX Code' : 'Generate TSX Code'}">${isTsxRunning ? '⏳' : '⚙️'}</button>`);
+    }
+
+    // 2. Icon Generate/Regen Metadata (SEO)
+    if (hasHtml) {
+      actions.push(`<button class="btn-action" onclick="regenerateSeoSingle('${item.id}')" ${isSeoRunning ? 'disabled' : ''} style="padding:4px 8px; font-size:12px; margin:0; border-color:var(--purple); color:var(--purple); background:rgba(168,85,247,0.12);" title="${item.judul ? 'Regen AI Metadata (SEO)' : 'Generate AI Metadata (SEO)'}">${isSeoRunning ? '⏳' : '✨'}</button>`);
+    }
+
+    // 3. Icon Remotion Studio Live
+    if (hasTsx) {
+      actions.push(`<button class="btn-action" onclick="openLiveStudio('${item.id}')" style="padding:4px 8px; font-size:12px; margin:0; background:rgba(16,185,129,.13); border:1px solid rgba(16,185,129,.35); color:#34d399;" title="Buka Remotion Live Studio">🎬</button>`);
+    }
+
+    // 4. Icon Render 4K
+    if (hasTsx) {
+      actions.push(`<button class="btn-action" onclick="startRender4k('${item.id}')" ${is4kRunning ? 'disabled' : ''} style="padding:4px 8px; font-size:12px; margin:0; border-color:var(--amber); color:var(--amber); background:rgba(245,158,11,0.12);" title="${has4k ? 'Regen 4K ProRes' : 'Generate 4K ProRes'}">${is4kRunning ? '⏳' : '🚀'}</button>`);
+    }
+
+    // 5. Icon Download MOV & ZIP
+    if (has4k) {
+      actions.push(`<a href="/api/4k-file/${item.id}" class="btn-action btn-dl" style="padding:4px 8px; font-size:12px; margin:0; text-decoration:none;" title="Download MOV 4K">🎥</a>`);
+      actions.push(`<a href="/api/download-4k-zip/${item.id}" class="btn-action btn-dl" style="padding:4px 8px; font-size:12px; margin:0; text-decoration:none;" title="Download ZIP ProRes">📦</a>`);
+    }
+
+    return actions.join('');
+  }
+
+  function renderCompactThumb(item) {
+    if (item.previewUrl) {
+      const videoSrc = item.previewUrl.startsWith('http://') || item.previewUrl.startsWith('https://') ? item.previewUrl : `/api/preview-file/${item.id}`;
+      return `<div onclick="openVideoModal('${videoSrc}')" title="Klik untuk perbesar video" style="width:84px; height:47px; border-radius:6px; overflow:hidden; border:1px solid var(--cyan); background:#000; cursor:pointer; flex-shrink:0; position:relative; display:grid; place-items:center; box-shadow:0 3px 10px rgba(0,0,0,0.6);">
+        <video src="${videoSrc}#t=0.1" preload="none" muted playsinline style="width:100%; height:100%; object-fit:cover; pointer-events:none;"></video>
+        <span style="position:absolute; bottom:2px; right:2px; font-size:9px; background:rgba(0,0,0,0.8); padding:1px 4px; border-radius:3px; color:#fff; font-weight:bold;">▶ MP4</span>
+      </div>`;
+    }
+    if (item.htmlPreview) {
+      const cleanHtmlDoc = item.htmlPreview.includes('<head>')
+        ? item.htmlPreview.replace('<head>', '<head><style>html,body{margin:0;padding:0;overflow:hidden;width:100%;height:100%;box-sizing:border-box;display:flex;justify-content:center;align-items:center;}</style>')
+        : `<style>html,body{margin:0;padding:0;overflow:hidden;width:100%;height:100%;box-sizing:border-box;display:flex;justify-content:center;align-items:center;}</style>${item.htmlPreview}`;
+      
+      return `<div onclick="toggleCardDetails('${item.id}')" title="Klik untuk buka detail proyek" style="width:84px; height:47px; border-radius:6px; overflow:hidden; border:1px solid rgba(56,189,248,0.5); background:#0a0a12; cursor:pointer; flex-shrink:0; position:relative; display:block; box-shadow:0 3px 10px rgba(0,0,0,0.6);">
+        <iframe srcdoc="${escHtml(cleanHtmlDoc)}" style="width:840px; height:470px; transform:scale(0.1); transform-origin:0 0; border:none; pointer-events:none; background:#0a0a12;" sandbox="allow-scripts allow-same-origin"></iframe>
+        <span style="position:absolute; bottom:2px; right:2px; font-size:8px; background:rgba(13,20,36,0.85); padding:1px 4px; border-radius:3px; color:var(--cyan); font-weight:bold; border:1px solid rgba(56,189,248,0.4);">HTML</span>
+      </div>`;
+    }
+    return `<div style="width:84px; height:47px; border-radius:6px; border:1px dashed var(--border); background:rgba(0,0,0,0.2); flex-shrink:0; display:grid; place-items:center; font-size:9px; color:var(--text-dim);">
+      No Media
+    </div>`;
+  }
+
+  function renderLogCell(item) {
+    const statusBadge = getStatusBadgeHtml(item);
+    const status = item.statusConvertTsx || 'queued';
     const logsHtml = (item.logs || []).map(log => {
       const msgClass = log.type === 'error' ? 'error' : log.type === 'success' ? 'success' : log.type === 'warning' ? 'warning' : '';
       return `<div class="mini-log-line"><span class="mini-log-time">${log.time || ''}</span><span class="mini-log-msg ${msgClass}">${escHtml(log.message || '')}</span></div>`;
@@ -3580,34 +3764,68 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     return `<div class="asset-log"><div style="margin-bottom:8px;">${statusBadge}</div><div class="mini-log-box" id="logbox_${item.id}" aria-live="polite">${logsHtml || '<div style="color:var(--text-dim);font-size:10px;">Belum ada log.</div>'}</div>${otpForm}</div>`;
   }
 
+
   function renderRow(item, no) {
     const { cardState } = getAssetWorkflow(item);
     const uploadStatus = `<select class="select-input" aria-label="Status upload" onchange="saveField('${item.id}', 'uploadStatus', this.value)" title="Status upload" style="padding:3px 7px; font-size:10px; height:auto; margin:0;"><option value="belum_upload" ${item.uploadStatus !== 'upload' ? 'selected' : ''}>Belum upload</option><option value="upload" ${item.uploadStatus === 'upload' ? 'selected' : ''}>Sudah upload</option></select>`;
     const categoryControls = renderCategoryControls(item);
     const checkbox = batchModeActive ? `<input type="checkbox" class="row-checkbox asset-checkbox" data-id="${item.id}" ${batchSelected.has(item.id) ? 'checked' : ''} onchange="toggleBatchItem('${item.id}', this.checked)" aria-label="Pilih ${escHtml(item.fileName || item.id)} untuk batch" style="accent-color:var(--purple); width:16px; height:16px; cursor:pointer;" />` : '';
 
+    const isExpanded = cardExpandedState[item.id] !== undefined 
+      ? cardExpandedState[item.id] 
+      : (currentViewMode === 'detail');
+
+    const statusBadge = getStatusBadgeHtml(item);
+    const quickActions = getQuickActionsHtml(item);
+    const compactThumb = renderCompactThumb(item);
+
+    // Dynamic Title: compact mode shows only SEO title (fallback to fileName), detail mode shows fileName + SEO title
+    let titleHtml = '';
+    if (currentViewMode === 'compact') {
+      const displayTitle = item.judul && item.judul.trim() ? item.judul : (item.fileName || item.id);
+      titleHtml = `<div class="asset-card__name" title="${escHtml(displayTitle)}" style="font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0;">${escHtml(displayTitle)}</div>`;
+    } else {
+      titleHtml = `<div style="display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;">
+          <div class="asset-card__name" title="${escHtml(item.fileName || item.id)}" style="font-weight:700; font-size:13px;">${escHtml(item.fileName || item.id)}</div>
+          ${item.judul ? `<div style="font-size:11px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escHtml(item.judul)}">${escHtml(item.judul)}</div>` : ''}
+        </div>`;
+    }
+
     return `
       <article class="asset-card" data-state="${cardState}" id="asset_${item.id}">
-        <div class="asset-card__header">
-          <div class="asset-card__title-row">
+        <div class="asset-card__header" style="align-items:center; gap:12px;">
+          <div class="asset-card__title-row" style="align-items:center; gap:10px; flex:1; min-width:200px;">
             ${checkbox}
             <span class="asset-card__number">#${String(no).padStart(2, '0')}</span>
-            <div class="asset-card__name" title="${escHtml(item.fileName || item.id)}">${escHtml(item.fileName || item.id)}</div>
+            ${compactThumb}
+            ${titleHtml}
+            <div style="flex-shrink:0;">${statusBadge}</div>
           </div>
-          <div class="asset-card__meta">${uploadStatus}${categoryControls}</div>
-        </div>
-        ${renderAssetRail(item)}
-        <div class="asset-card__body">
-          <div><div class="asset-section-label">Preview</div><div class="asset-preview">${renderPreviewCell(item)}</div></div>
-          <div><div class="asset-section-label asset-section-label--compact">Settings · Files</div>${renderSettingsCell(item)}</div>
-          <div class="asset-edit">
-            <div><div class="asset-section-label">Judul stock</div><div class="edit-wrap"><textarea id="title_${item.id}" class="edit-field" placeholder="Belum ada judul video..." rows="2">${escHtml(item.judul || '')}</textarea><button class="btn-copy" aria-label="Salin judul" onclick="copyText(document.getElementById('title_${item.id}').value, this)">📋</button></div>${item.seoAiUsed ? `<div style="margin-top:5px; font-size:10px; color:var(--green);">✓ Metadata dibuat dengan ${escHtml(item.seoAiUsed === 'auto' ? 'Auto-Fallback' : item.seoAiUsed)}</div>` : ''}</div>
-            <div><div class="asset-section-label">Keywords</div><div class="edit-wrap"><textarea id="kw_${item.id}" class="edit-field" rows="4" placeholder="Belum ada keywords...">${escHtml(item.keywords || '')}</textarea><button class="btn-copy" aria-label="Salin keywords" onclick="copyText(document.getElementById('kw_${item.id}').value, this)">📋</button></div></div>
+          <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:4px;">${quickActions}</div>
+            <div class="asset-card__meta" style="${currentViewMode === 'compact' && !isExpanded ? 'display:none;' : ''}">${uploadStatus}${categoryControls}</div>
+            <button class="btn-action" onclick="toggleCardDetails('${item.id}')" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color:var(--text); font-size:11px; padding:4px 10px; white-space:nowrap; margin:0;" title="Buka/Tutup Detail Proyek">
+              <span id="btnDetailText_${item.id}">${isExpanded ? '🔼 Ringkas' : '🔽 Detail'}</span>
+            </button>
           </div>
         </div>
-        ${renderActionsCell(item)}
+
+        <div id="details_${item.id}" class="card-details-accordion" style="display:${isExpanded ? 'block' : 'none'}; margin-top:14px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.08);">
+          ${renderAssetRail(item)}
+          <div class="asset-card__body">
+            <div><div class="asset-section-label">Preview</div><div class="asset-preview">${renderPreviewCell(item)}</div></div>
+            <div><div class="asset-section-label asset-section-label--compact">Settings · Files</div>${renderSettingsCell(item)}</div>
+            <div class="asset-edit">
+              <div><div class="asset-section-label">Judul stock</div><div class="edit-wrap"><textarea id="title_${item.id}" class="edit-field" placeholder="Belum ada judul video..." rows="2">${escHtml(item.judul || '')}</textarea><button class="btn-copy" aria-label="Salin judul" onclick="copyText(document.getElementById('title_${item.id}').value, this)">📋</button></div>${item.seoAiUsed ? `<div style="margin-top:5px; font-size:10px; color:var(--green);">✓ Metadata dibuat dengan ${escHtml(item.seoAiUsed === 'auto' ? 'Auto-Fallback' : item.seoAiUsed)}</div>` : ''}</div>
+              <div><div class="asset-section-label">Keywords</div><div class="edit-wrap"><textarea id="kw_${item.id}" class="edit-field" rows="4" placeholder="Belum ada keywords...">${escHtml(item.keywords || '')}</textarea><button class="btn-copy" aria-label="Salin keywords" onclick="copyText(document.getElementById('kw_${item.id}').value, this)">📋</button></div></div>
+            </div>
+          </div>
+          ${renderActionsCell(item)}
+        </div>
       </article>`;
   }
+
+
 
   function renderCategoryControls(item) {
     const adobe = [['1','Animals'],['2','Buildings & Architecture'],['3','Business'],['4','Drinks'],['5','The Environment'],['6','States of Mind'],['7','Food'],['8','Graphic Resources'],['9','Hobbies & Leisure'],['10','Industry'],['11','Landscape'],['12','Lifestyle'],['13','People'],['14','Plants & Flowers'],['15','Culture & Religion'],['16','Science'],['17','Social Issues'],['18','Sports'],['19','Technology'],['20','Transport'],['21','Travel']];
@@ -3622,11 +3840,11 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   function renderPreviewCell(item) {
     if (item.previewUrl) {
       const videoSrc = item.previewUrl.startsWith('http://') || item.previewUrl.startsWith('https://') ? item.previewUrl : `/api/preview-file/${item.id}`;
-      return `<div style="display:flex; flex-direction:column; gap:6px; width:100%;"><video class="preview-video" src="${videoSrc}#t=0.1" preload="none" controls muted loop playsinline></video><button class="btn-browse" aria-label="Buka preview ${escHtml(item.fileName || item.id)}" onclick="openVideoModal('${videoSrc}')" style="border-color:var(--cyan); color:var(--cyan); background:var(--cyan-dim); width:100%;">Perbesar preview</button></div>`;
+      return `<div style="display:flex; flex-direction:column; gap:6px; width:100%;"><video class="preview-video" src="${videoSrc}#t=0.1" preload="none" controls muted loop playsinline style="width:100%; aspect-ratio:16/9; height:auto; object-fit:cover; border-radius:6px; background:#000; display:block;"></video><button class="btn-browse" aria-label="Buka preview ${escHtml(item.fileName || item.id)}" onclick="openVideoModal('${videoSrc}')" style="border-color:var(--cyan); color:var(--cyan); background:var(--cyan-dim); width:100%;">Perbesar preview</button></div>`;
     }
     if (item.htmlPreview) {
       const studioBtn = item.promptCode ? `<button class="btn-browse" onclick="openLiveStudio('${item.id}')" style="border-color:#34d399; color:#34d399; background:rgba(16,185,129,0.15); width:100%; font-size:11px; padding:4px 8px; margin-top:2px;">🎬 Remotion Live Studio</button>` : '';
-      return `<div style="display:flex; flex-direction:column; gap:6px; width:100%;"><iframe srcdoc="${escHtml(item.htmlPreview)}" style="width:100%; height:110px; border:1px solid rgba(255,255,255,0.15); border-radius:6px; background:#0a0a12;" sandbox="allow-scripts allow-same-origin"></iframe>${studioBtn}</div>`;
+      return `<div style="display:flex; flex-direction:column; gap:6px; width:100%;"><iframe srcdoc="${escHtml(item.htmlPreview)}" style="width:100%; aspect-ratio:16/9; min-height:160px; height:auto; border:1px solid rgba(255,255,255,0.15); border-radius:6px; background:#0a0a12;" sandbox="allow-scripts allow-same-origin"></iframe>${studioBtn}</div>`;
     }
     return `<div class="asset-preview__empty">Menunggu preview</div>`;
   }
@@ -3656,6 +3874,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const isPreviewRunning = item.statusConvertTsx === 'processing-preview';
     const is4kRunning = item.statusRender4k === 'processing' || item.statusRender4k === 'queued';
     const isAnyRunning = isSeoRunning || isTsxRunning || isPreviewRunning || is4kRunning;
+    const hasHtml = !!item.htmlPreview;
     const hasTsx = !!item.promptCode;
     const hasPreview = !!item.previewUrl;
     const hasTitle = !!(item.judul && item.judul.trim());
@@ -3669,7 +3888,8 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const seoText = isSeoRunning ? 'Generating metadata...' : hasTitle ? 'Regen metadata' : 'Generate metadata';
     const fourKText = is4kRunning ? 'Rendering 4K...' : has4k ? 'Regen 4K' : 'Generate 4K';
 
-    return `<div class="asset-actions"><div class="asset-section-label">Next action</div><div class="asset-actions__primary">${aiSelect}<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${isAnyRunning ? 'disabled' : ''} style="background:rgba(56,189,248,.13); border:1px solid rgba(56,189,248,.35); color:var(--cyan);">${tsxText}</button><button class="btn-action" onclick="openLiveStudio('${item.id}')" ${!hasTsx ? 'disabled' : ''} style="background:rgba(16,185,129,.13); border:1px solid rgba(16,185,129,.35); color:#34d399;" title="Preview TSX Remotion secara live tanpa konversi MP4">🎬 Studio Live</button><button class="btn-action" onclick="triggerPreview('${item.id}')" ${!canPreview || isSeoRunning || is4kRunning ? 'disabled' : ''} style="background:rgba(124,58,237,.13); border:1px solid rgba(124,58,237,.35); color:#a78bfa;">${previewText}</button><button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${isAnyRunning || !hasPreview ? 'disabled' : ''}>${seoText}</button><button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${isAnyRunning || !hasTitle ? 'disabled' : ''}>${fourKText}</button></div><div class="asset-actions__log"><div class="asset-section-label">Live status log</div>${renderLogCell(item)}</div></div>`;
+    return `<div class="asset-actions"><div class="asset-section-label">Next action</div><div class="asset-actions__primary">${aiSelect}<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${isAnyRunning ? 'disabled' : ''} style="background:rgba(56,189,248,.13); border:1px solid rgba(56,189,248,.35); color:var(--cyan);">${tsxText}</button><button class="btn-action" onclick="openLiveStudio('${item.id}')" ${!hasTsx ? 'disabled' : ''} style="background:rgba(16,185,129,.13); border:1px solid rgba(16,185,129,.35); color:#34d399;" title="Preview TSX Remotion secara live tanpa konversi MP4">🎬 Studio Live</button><button class="btn-action" onclick="triggerPreview('${item.id}')" ${!canPreview || isSeoRunning || is4kRunning ? 'disabled' : ''} style="background:rgba(124,58,237,.13); border:1px solid rgba(124,58,237,.35); color:#a78bfa;">${previewText}</button><button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${isAnyRunning || !hasHtml ? 'disabled' : ''}>${seoText}</button><button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${isAnyRunning || !hasTitle ? 'disabled' : ''}>${fourKText}</button></div><div class="asset-actions__log"><div class="asset-section-label">Live status log</div>${renderLogCell(item)}</div></div>`;
+
   }
 
   async function openLiveStudio(id) {
@@ -3949,18 +4169,17 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   // ═══════════════════════════════════════════
   let syntxPollInterval = null;
   function toggleApiKeysPanel() {
-    const el = document.getElementById('apiKeysPanel');
-    const isHidden = el.style.display === 'none';
-    el.style.display = isHidden ? 'block' : 'none';
+    const el = document.getElementById('apiKeysModal');
+    if (!el) return;
+    const isHidden = el.style.display === 'none' || !el.style.display;
+    el.style.display = isHidden ? 'flex' : 'none';
     if (isHidden) {
       loadApiKeys();
       loadSyntxStatus();
-      // Reset statuses
       if (document.getElementById('status_ninerouter')) {
         document.getElementById('status_ninerouter').innerHTML = '';
       }
       
-      // Start polling every 10 seconds while open
       if (syntxPollInterval) clearInterval(syntxPollInterval);
       syntxPollInterval = setInterval(loadSyntxStatus, 10000);
     } else {
@@ -4196,11 +4415,15 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     modal.style.display = 'none';
   }
 
-  // Close modal when clicking outside the video container
+  // Close modal when clicking outside
   window.addEventListener('click', (e) => {
-    const modal = document.getElementById('videoModal');
-    if (e.target === modal) {
+    const videoModal = document.getElementById('videoModal');
+    if (e.target === videoModal) {
       closeVideoModal();
+    }
+    const apiModal = document.getElementById('apiKeysModal');
+    if (e.target === apiModal) {
+      toggleApiKeysPanel();
     }
   });
 
@@ -5019,6 +5242,89 @@ Saran Tags/Keywords: ${tags}`;
       </div>
     </div>
     <iframe id="studioIframe" style="width:100%; height:100%; border:none; background:#000;" allow="autoplay; fullscreen"></iframe>
+  </div>
+</div>
+
+<!-- Modal Pengaturan API Keys -->
+<div id="apiKeysModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(7, 11, 20, 0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center; padding:20px;">
+  <div style="width:100%; max-width:840px; max-height:88vh; background:rgba(15, 23, 42, 0.96); border:1px solid rgba(59,130,246,0.4); border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 60px rgba(0,0,0,0.85); animation: fadeIn 0.2s ease;">
+    <!-- Header -->
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:rgba(59,130,246,0.08); border-bottom:1px solid rgba(59,130,246,0.2);">
+      <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin:0; display:flex; align-items:center; gap:8px;">
+        🔑 Pengaturan API Keys AI & Layanan Pembantu
+      </h3>
+      <span style="cursor:pointer; font-size:24px; color:var(--text-dim); line-height:1; transition:color 0.2s;" onclick="toggleApiKeysPanel()" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text-dim)'">&times;</span>
+    </div>
+
+    <!-- Body (Scrollable) -->
+    <div style="padding:24px; overflow-y:auto; flex:1;">
+      <p style="font-size:12px; color:var(--text-dim); margin-top:0; margin-bottom:20px;">
+        Isi API Key untuk 9Router dan akun Syntx.ai di bawah ini. Kunci disimpan secara aman di file <code>.env</code> Anda.
+      </p>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px;">
+        <!-- 9Router Config -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router API Key</label>
+          <input type="password" class="input-text-field" id="keyNinerouter" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="Kunci API 9Router..." />
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('ninerouter')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <span id="status_ninerouter" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Base URL</label>
+          <input type="text" class="input-text-field" id="keyNinerouterUrl" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="http://localhost:20128/v1" />
+        </div>
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Model Name</label>
+          <input type="text" class="input-text-field" id="keyNinerouterModel" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="9router" />
+        </div>
+
+        <!-- Syntx Base Email -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">Syntx Base Email (Gmail)</label>
+          <input type="text" class="input-text-field" id="syntxBaseEmail" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="l.imh.en.c.e@gmail.com" />
+        </div>
+        <!-- Syntx Email Index -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">Syntx Email Index (Dot-Variant)</label>
+          <input type="number" class="input-text-field" id="syntxEmailIndex" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="0" min="0" />
+        </div>
+        <!-- GitHub Token -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">GitHub PAT Token (Workflow scope)</label>
+          <input type="password" class="input-text-field" id="githubToken" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="ghp_..." />
+        </div>
+        <!-- GitHub Username -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">GitHub Username</label>
+          <input type="text" class="input-text-field" id="githubUsername" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="zulmorang15-dot" />
+        </div>
+        <!-- GitHub Repository -->
+        <div>
+          <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">GitHub Repository</label>
+          <input type="text" class="input-text-field" id="githubRepo" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="master-stock-generator" />
+        </div>
+
+        <!-- Syntx Account Pool Status -->
+        <div style="grid-column: 1 / -1; margin-top: 10px; padding: 14px; background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.15); border-radius: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 13px; font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 6px;">📋 Pool Akun Syntx.ai Cached</span>
+            <button class="btn-refresh" onclick="prewarmSyntxAccount()" id="btnPrewarmSyntx" style="padding: 4px 10px; font-size: 11px; border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim);">🔑 Tambah/Pre-warm Akun</button>
+          </div>
+          <div id="syntxPoolStatus" style="font-size: 12px; color: var(--text-dim);">
+            Loading status pool...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:16px 24px; background:rgba(0,0,0,0.2); border-top:1px solid rgba(255,255,255,0.06); display:flex; justify-content:flex-end; gap:12px;">
+      <button class="btn-batch-clear" onclick="toggleApiKeysPanel()">Batal</button>
+      <button class="btn-batch-4k" onclick="saveApiKeys()" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border:none; color:#fff; padding:8px 20px;">💾 Simpan API Keys</button>
+    </div>
   </div>
 </div>
 

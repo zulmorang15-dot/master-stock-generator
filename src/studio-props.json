@@ -1,5 +1,5 @@
 {
-  "durationInFrames": 240,
-  "fps": 30,
+  "durationInFrames": 600,
+  "fps": 60,
   "addTransparentScene": false
 }
