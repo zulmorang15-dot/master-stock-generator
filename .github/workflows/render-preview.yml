@@ -160,12 +160,12 @@ jobs:
             -XMP-dc:Subject="$KEYWORDS_NORMALIZED" \
             out/$FILENAME
 
-      - name: Upload to x0.at Cloud
+      - name: Upload to Catbox Cloud
         id: upload_cloud
         run: |
-          echo "=== Uploading video to x0.at Cloud ==="
+          echo "=== Uploading video to Catbox Cloud ==="
           FILENAME="${{ github.event.inputs.composition_id }}-preview.mp4"
-          curl -s -F "file=@out/$FILENAME" https://x0.at/ > x0_res.txt
+          curl -s -F "reqtype=fileupload" -F "fileToUpload=@out/$FILENAME" https://catbox.moe/user/api.php > x0_res.txt
           cat x0_res.txt
           LINK=$(cat x0_res.txt | tr -d '\r\n')
           echo "Cloud Link: $LINK"
