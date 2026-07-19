@@ -81,7 +81,7 @@
     }
     .header-sub { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
     /* ── MAIN LAYOUT ───────────────────────────── */
-    .main { max-width: 1440px; margin: 0 auto; padding: 36px 24px 60px; }
+    .main { max-width: 100% !important; width: 100%; margin: 0; padding: 24px 24px 60px; box-sizing: border-box; }
     /* ── INPUT CARD ────────────────────────────── */
     .input-card {
       background: var(--bg2);
@@ -1198,9 +1198,13 @@
     /* ── WORKSPACE: SIDEBAR LEFT + ASSETS RIGHT ──── */
     .workspace-layout {
       display:grid;
-      grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+      grid-template-columns: 380px minmax(0, 1fr);
       gap:16px;
       align-items:start;
+      transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .workspace-layout.sidebar-collapsed {
+      grid-template-columns: 56px minmax(0, 1fr);
     }
     .workspace-sidebar {
       position:sticky;
@@ -1210,6 +1214,10 @@
       gap:12px;
       max-height:calc(100vh - 32px);
       overflow:hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .workspace-layout.sidebar-collapsed .workspace-sidebar {
+      width: 56px;
     }
     .workspace-sidebar .workflow-stage {
       display:flex;
@@ -1220,6 +1228,9 @@
     .workspace-sidebar .stage-head {
       padding:16px 16px 0;
       flex-shrink:0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
     }
     .workspace-sidebar .stage-title { font-size:16px; }
     .workspace-sidebar .stage-copy {
@@ -1227,6 +1238,49 @@
       font-size:11px;
       margin-top:4px;
       margin-bottom:0;
+    }
+
+    /* Collapsed Sidebar State Elements */
+    .workspace-layout.sidebar-collapsed .stage-title-group,
+    .workspace-layout.sidebar-collapsed .sidebar-source,
+    .workspace-layout.sidebar-collapsed .sidebar-monitor {
+      display: none !important;
+    }
+    .workspace-layout.sidebar-collapsed .stage-head {
+      padding: 14px 6px;
+      justify-content: center;
+    }
+    .btn-toggle-sidebar {
+      background: rgba(56,189,248,0.12);
+      border: 1px solid rgba(56,189,248,0.35);
+      color: var(--cyan);
+      border-radius: 8px;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: bold;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+    .btn-toggle-sidebar:hover {
+      background: rgba(56,189,248,0.25);
+      border-color: var(--cyan);
+      box-shadow: 0 0 10px rgba(56,189,248,0.3);
+    }
+    .collapsed-sidebar-indicator {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 0 24px;
+      cursor: pointer;
+    }
+    .workspace-layout.sidebar-collapsed .collapsed-sidebar-indicator {
+      display: flex !important;
     }
     .workspace-main {
       min-width:0;
@@ -1592,11 +1646,17 @@
       <aside class="workspace-sidebar" aria-label="Stage 01 Intake sidebar">
         <section class="workflow-stage" aria-labelledby="sourceStageTitle">
           <div class="stage-head">
-            <div>
+            <div class="stage-title-group">
               <div class="stage-kicker">Stage 01 · Intake</div>
               <h2 class="stage-title" id="sourceStageTitle">Source material</h2>
               <p class="stage-copy">Upload atau paste HTML, lalu generate ke antrean produksi.</p>
             </div>
+            <button id="btnToggleSidebar" class="btn-toggle-sidebar" onclick="toggleSidebar()" title="Sembunyikan Sidebar">◀</button>
+          </div>
+
+          <div class="collapsed-sidebar-indicator" onclick="toggleSidebar()" title="Klik untuk membuka Sidebar">
+            <span style="font-size: 20px;">📂</span>
+            <span style="writing-mode: vertical-rl; text-transform: uppercase; font-size: 11px; font-weight: 800; letter-spacing: 2px; color: var(--cyan);">INTAKE</span>
           </div>
 
           <div class="sidebar-source">
@@ -2258,6 +2318,32 @@
   }
 
 
+
+  function toggleSidebar() {
+    const layout = document.querySelector('.workspace-layout');
+    const btn = document.getElementById('btnToggleSidebar');
+    if (!layout) return;
+
+    const isCollapsed = layout.classList.toggle('sidebar-collapsed');
+    if (btn) {
+      btn.innerHTML = isCollapsed ? '▶' : '◀';
+      btn.title = isCollapsed ? 'Buka Sidebar (Expand)' : 'Sembunyikan Sidebar (Collapse)';
+    }
+    localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
+  }
+
+  // Restore sidebar collapse state on load
+  document.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('sidebar_collapsed') === 'true') {
+      const layout = document.querySelector('.workspace-layout');
+      const btn = document.getElementById('btnToggleSidebar');
+      if (layout) layout.classList.add('sidebar-collapsed');
+      if (btn) {
+        btn.innerHTML = '▶';
+        btn.title = 'Buka Sidebar (Expand)';
+      }
+    }
+  });
 
   const DEFAULT_TRENDS_PROMPT_TEMPLATE = `Kamu adalah pakar Creative Director SEO Microstock.
 Berikut adalah daftar kata kunci pencarian yang sedang tren hari ini di Google Trends dari beberapa negara:
