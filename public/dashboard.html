@@ -3145,7 +3145,12 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
   }
 
   function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return String(s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
   }
 
   // ═══════════════════════════════════════════
@@ -4468,7 +4473,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
 
   // ═══ HTML Preview Modal ═══
   function openHtmlModal(itemId) {
-    const item = allItems.find(i => i.id === itemId);
+    const item = cachedItems.find(i => i.id === itemId);
     if (!item || !item.htmlPreview) return;
     const modal = document.getElementById('htmlPreviewModal');
     const iframe = document.getElementById('modalHtmlFrame');
