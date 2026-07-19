@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trends & Stock Explorer | Master Stock Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #070b14;
+      --bg2: #0f172a;
+      --bg3: #1e293b;
+      --card-bg: rgba(15, 23, 42, 0.75);
+      --card-border: rgba(56, 189, 248, 0.15);
+      --card-hover: rgba(56, 189, 248, 0.25);
+      --text: #f8fafc;
+      --text-mid: #cbd5e1;
+      --text-dim: #64748b;
+      --cyan: #38bdf8;
+      --cyan-dim: rgba(56, 189, 248, 0.12);
+      --blue: #3b82f6;
+      --purple: #a855f7;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --border: rgba(255, 255, 255, 0.08);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body.light-mode {
+      --bg: #f8fafc;
+      --bg2: #ffffff;
+      --bg3: #e2e8f0;
+      --card-bg: rgba(255, 255, 255, 0.85);
+      --card-border: rgba(56, 189, 248, 0.3);
+      --card-hover: rgba(56, 189, 248, 0.4);
+      --text: #0f172a;
+      --text-mid: #334155;
+      --text-dim: #64748b;
+      --border: rgba(0, 0, 0, 0.1);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-icon {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      border-radius: 10px;
+      display: grid; place-items: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(56,189,248,0.3);
+    }
+    .brand-title { font-size: 16px; font-weight: 800; letter-spacing: -0.5px; }
+    .brand-sub { font-size: 11px; color: var(--text-dim); }
+
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-btn {
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 8px;
+      color: var(--text-mid);
+      text-decoration: none;
+      border: 1px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .nav-btn:hover { background: var(--bg3); color: var(--text); }
+    .nav-btn.active {
+      background: var(--cyan-dim);
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    main { max-width: 1400px; margin: 0 auto; padding: 28px; }
+    
+    .input-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    .btn-generate, .btn-refresh {
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: #fff;
+    }
+    .btn-generate:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .input-text-field {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .input-text-field:focus { outline: none; border-color: var(--cyan); }
+
+    .toast-container {
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .toast {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 18px; font-size: 13px; font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 10px;
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Slot Toggle Switch */
+    .slot-toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+    .slot-toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slot-toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: .3s ease; border-radius: 22px; border: 1px solid rgba(255,255,255,0.2); }
+    .slot-toggle-slider::before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: #94a3b8; transition: .3s ease; border-radius: 50%; }
+    .slot-toggle-switch input:checked + .slot-toggle-slider { background: rgba(168,85,247,0.35); border-color: rgba(168,85,247,0.7); }
+    .slot-toggle-switch input:checked + .slot-toggle-slider::before { transform: translateX(18px); background: #c084fc; box-shadow: 0 0 8px rgba(168,85,247,0.8); }
+
+    .spin { display: inline-block; animation: spin 1s infinite linear; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-icon">📈</div>
+      <div>
+        <div class="brand-title">Trends & Stock Explorer</div>
+        <div class="brand-sub">Google Trends RSS (6 Negara) & Adobe Stock Market Research</div>
+      </div>
+    </div>
+
+    <div class="nav-links">
+      <a href="/dashboard" class="nav-btn">📊 Dashboard</a>
+      <a href="/insights" class="nav-btn active">📈 Trends & Explorer</a>
+      <a href="/compiler" class="nav-btn">💻 HTML Compiler</a>
+      <button class="btn-refresh" id="btnApiKeys" onclick="toggleApiKeysPanel()" style="background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.4); color:var(--blue); padding:6px 12px; margin-left:12px;">🔑 API Keys</button>
+    </div>
+  </header>
+
+  <main>
+    <div style="display:flex; flex-direction:column; gap:28px;">
+      
+      <!-- CARD 1: GOOGLE TRENDS NICHE DISCOVERY -->
+      <div class="input-card" style="padding: 28px; width: 100%;">
+        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
+          <h3 style="font-size:18px; font-weight:800; color:var(--cyan); margin:0;">📈 Google Trends Niche Discovery (6 Negara)</h3>
+          <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
+            Tarik data tren terbaru dari Amerika Serikat, Jerman, Inggris, Jepang, Kanada, dan Prancis, kemudian gunakan AI untuk meracik ide niche video After Effects.
+          </p>
+        </div>
+
+        <!-- STEP 1: FETCH DATA -->
+        <div style="margin-bottom: 24px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
+            <div style="font-size:14px; font-weight:700; color:#fff;">Langkah 1: Ambil Data Tren Mentah</div>
+            <button class="btn-generate" id="btnFetchRawTrends" onclick="fetchRawTrends()" style="margin-top:0; padding:10px 24px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--cyan), #0ea5e9);">
+              📥 Tarik Tren Mentah
+            </button>
+          </div>
+
+          <!-- Loading Raw Trends -->
+          <div id="rawTrendsLoading" style="display:none; text-align:center; padding:20px 0;">
+            <div class="spin" style="font-size:24px; margin-bottom:8px; color:var(--cyan);">⏳</div>
+            <div style="font-size:13px; color:var(--text-mid); font-weight:600;">Menghubungi Google Trends RSS Feed...</div>
+          </div>
+
+          <!-- Raw Trends Grid -->
+          <div id="rawTrendsContainer" style="display:none; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; background: rgba(0,0,0,0.15); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
+          </div>
+        </div>
+
+        <!-- STEP 2: AI ANALYSIS -->
+        <div id="aiAnalysisSection" style="display:none;">
+          <div style="border-top: 1px dashed var(--border); padding-top: 20px; margin-top: 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+              <div style="font-size:14px; font-weight:700; color:#fff;">Langkah 2: AI Niche Generator Prompt</div>
+              <button class="btn-refresh" onclick="resetTrendsPrompt()" style="padding:4px 10px; font-size:11px; border-color:var(--text-dim); color:var(--text-mid);">🔄 Reset Prompt</button>
+            </div>
+
+            <textarea id="trendsPromptEditor" class="input-text-field" style="height: 140px; font-family: monospace; font-size: 11px; margin-bottom: 16px;"></textarea>
+
+            <button class="btn-generate" id="btnAnalyzeTrends" onclick="analyzeTrendsWithAI()" style="width:100%; padding:12px; font-size:14px; font-weight:700; background:linear-gradient(135deg, var(--purple), #7c3aed);">
+              🤖 Analisis Tren & Racik Niche Video AI
+            </button>
+          </div>
+
+          <!-- Loading AI Analysis -->
+          <div id="trendsAnalysisLoading" style="display:none; text-align:center; padding:30px 0;">
+            <div class="spin" style="font-size:28px; margin-bottom:12px; color:var(--purple);">✨</div>
+            <div style="font-size:14px; color:#fff; font-weight:700;">Memproses data tren dengan AI...</div>
+          </div>
+
+          <!-- Result Table -->
+          <div id="trendsTableContainer" style="display:none; margin-top: 24px;">
+            <div style="font-size:14px; font-weight:700; color:var(--green); margin-bottom:12px;">💡 Ide Niche Video Berpotensi Tinggi:</div>
+            <div style="overflow-x:auto; border:1px solid var(--border); border-radius:8px;">
+              <table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+                <thead>
+                  <tr style="background:rgba(255,255,255,0.05); color:var(--cyan); border-bottom:1px solid var(--border);">
+                    <th style="padding:10px;">Judul Niche</th>
+                    <th style="padding:10px;">Konsep Visual</th>
+                    <th style="padding:10px;">Negara</th>
+                    <th style="padding:10px;">Kata Kunci / Tag</th>
+                    <th style="padding:10px; text-align:center;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="trendsTableBody">
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CARD 2: ADOBE STOCK & SHUTTERSTOCK EXPLORER & AI RESEARCH -->
+      <div class="input-card" style="padding: 28px; width: 100%;">
+        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
+          <h3 style="font-size:18px; font-weight:800; color:var(--blue); margin:0;">🔍 Adobe Stock & Shutterstock Explorer</h3>
+          <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
+            Cari kata kunci di Adobe Stock/Shutterstock untuk melihat persaingan, atau jalankan **Riset Pasar AI** untuk menganalisis demand & gap niche.
+          </p>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
+          <input type="text" class="input-text-field" id="stockSearchInput" placeholder="Masukkan kata kunci (contoh: neon HUD background loop)..." style="flex:1; min-width:240px; font-size:14px; padding:12px 16px;" />
+          <button class="btn-generate" onclick="searchDirectly('adobe')" style="margin:0; padding:12px 20px; background:linear-gradient(135deg, #ef4444, #dc2626); font-size:13px;">
+            🔴 Adobe Stock
+          </button>
+          <button class="btn-generate" onclick="searchDirectly('shutterstock')" style="margin:0; padding:12px 20px; background:linear-gradient(135deg, #f97316, #ea580c); font-size:13px;">
+            🟠 Shutterstock
+          </button>
+          <button class="btn-generate" id="btnResearchMarket" onclick="researchMarket()" style="margin:0; padding:12px 24px; background:linear-gradient(135deg, var(--purple), #6366f1); font-size:13px; font-weight:700;">
+            🔬 Riset Pasar (AI)
+          </button>
+        </div>
+
+        <!-- Research Loading -->
+        <div id="researchLoading" style="display:none; text-align:center; padding:30px 0;">
+          <div class="spin" style="font-size:28px; margin-bottom:12px; color:var(--purple);">🔬</div>
+          <div style="font-size:14px; color:#fff; font-weight:700;">Mengambil hasil pencarian & menganalisis pasar...</div>
+        </div>
+
+        <!-- Research Results Panel -->
+        <div id="researchResults" style="display:none; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:12px; padding:24px; margin-top:20px;">
+          <!-- Summary Header -->
+          <div id="researchSummary" style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border);"></div>
+
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:20px;">
+            <!-- Panel 1: Competition & Demand -->
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; padding:16px;">
+              <div id="researchCompetition" style="margin-bottom:16px;"></div>
+              <div id="researchDemand"></div>
+            </div>
+
+            <!-- Panel 2: Trends & Keywords -->
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; padding:16px;">
+              <div id="researchTrends" style="margin-bottom:16px;"></div>
+              <div id="researchKeywords"></div>
+            </div>
+
+            <!-- Panel 3: Underserved Niches -->
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; padding:16px;">
+              <div id="researchNiches"></div>
+            </div>
+
+            <!-- Panel 4: Recommended Titles -->
+            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; padding:16px; grid-column: 1 / -1;">
+              <div id="researchTitles" style="margin-bottom:16px;"></div>
+              <div id="researchStrategy"></div>
+            </div>
+          </div>
+
+          <!-- Raw Data Toggle -->
+          <details style="margin-top:20px; font-size:12px; color:var(--text-dim);">
+            <summary style="cursor:pointer; font-weight:600; color:var(--cyan);">📄 Lihat Data Scrape Mentah</summary>
+            <pre id="researchRawData" style="background:#0a0a12; padding:14px; border-radius:8px; margin-top:10px; overflow-x:auto; max-height:240px; font-family:monospace; color:#a78bfa; font-size:11px;"></pre>
+          </details>
+
+          <div style="margin-top:24px; display:flex; gap:12px; justify-content:flex-end;">
+            <button class="btn-generate" id="btnApplyResearch" onclick="applyResearchToGenerator()" style="margin-top:0; padding:12px 24px; font-size:13px; font-weight:700; background:linear-gradient(135deg, #10b981, #059669);">
+              🚀 Gunakan Hasil Riset di Dashboard Generator
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Modal Pengaturan API Keys -->
+  <div id="apiKeysModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(7, 11, 20, 0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center; padding:20px;">
+    <div style="width:100%; max-width:840px; max-height:88vh; background:rgba(15, 23, 42, 0.96); border:1px solid rgba(59,130,246,0.4); border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 60px rgba(0,0,0,0.85);">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:rgba(59,130,246,0.08); border-bottom:1px solid rgba(59,130,246,0.2);">
+        <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin:0;">🔑 Pengaturan API Keys AI</h3>
+        <span style="cursor:pointer; font-size:24px; color:var(--text-dim);" onclick="toggleApiKeysPanel()">&times;</span>
+      </div>
+      <div style="padding:24px; overflow-y:auto; flex:1;">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px;">
+          <div>
+            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router API Key</label>
+            <input type="password" class="input-text-field" id="keyNinerouter" placeholder="Kunci API 9Router..." />
+          </div>
+          <div>
+            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Base URL</label>
+            <input type="text" class="input-text-field" id="keyNinerouterUrl" placeholder="http://localhost:20128/v1" />
+          </div>
+          <div>
+            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Model Name</label>
+            <input type="text" class="input-text-field" id="keyNinerouterModel" placeholder="9router" />
+          </div>
+          <div id="customSlotsContainer" style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:12px;"></div>
+        </div>
+      </div>
+      <div style="padding:16px 24px; background:rgba(0,0,0,0.2); border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:12px;">
+        <button class="btn-generate" onclick="saveApiKeys()" style="background:var(--blue); margin:0;">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function escHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+      toast.innerHTML = `<span>${icon}</span><span>${escHtml(msg)}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    function toggleApiKeysPanel() {
+      const el = document.getElementById('apiKeysModal');
+      el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+      if (el.style.display === 'flex') loadApiKeys();
+    }
+
+    let cachedCustomProviders = [];
+    function populateCustomSlotsUI() {
+      const container = document.getElementById('customSlotsContainer');
+      if (!container) return;
+      let html = `<div style="grid-column: 1 / -1; font-weight:700; color:var(--purple); font-size:13px; margin-top:10px; margin-bottom:4px; display:flex; align-items:center; justify-content:space-between; border-top:1px dashed rgba(255,255,255,0.1); padding-top:14px;">
+        <span>⚡ Custom LLM Providers (5 Slot Dengan Enable/Disable & Nama Custom)</span>
+      </div>`;
+      cachedCustomProviders.forEach((p, idx) => {
+        const i = idx + 1;
+        html += `
+        <div style="grid-column: 1 / -1; background:rgba(255,255,255,0.03); border:1px solid ${p.enabled ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.08)'}; border-radius:12px; padding:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:10px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <label class="slot-toggle-switch" title="Aktifkan/Nonaktifkan Slot #${i}">
+                <input type="checkbox" id="customEnabled_${i}" ${p.enabled ? 'checked' : ''} onchange="updateCustomProviderField(${i})" />
+                <span class="slot-toggle-slider"></span>
+              </label>
+              <span style="font-weight:700; color:${p.enabled ? 'var(--purple)' : 'var(--text-dim)'}; font-size:13px;">Slot #${i}:</span>
+              <input type="text" id="customName_${i}" value="${escHtml(p.name || 'Custom LLM ' + i)}" onchange="updateCustomProviderField(${i})" class="input-text-field" style="width:160px; padding:3px 8px; font-size:12px; margin:0;" placeholder="Nama Provider" />
+            </div>
+            <button class="btn-refresh" onclick="testApiKey('custom_${i}')" style="padding:4px 10px; font-size:11px; border-color:#a78bfa; color:#a78bfa; background:transparent;">🧪 Test Valid</button>
+            <span id="status_custom_${i}" style="font-size:11px; font-weight:600;"></span>
+          </div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; opacity:${p.enabled ? '1' : '0.55'};">
+            <div><label style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-dim);">API Key</label><input type="password" class="input-text-field" id="keyCustom_${i}" value="${escHtml(p.key || '')}" onchange="updateCustomProviderField(${i})" /></div>
+            <div><label style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-dim);">Base URL</label><input type="text" class="input-text-field" id="keyCustomUrl_${i}" value="${escHtml(p.url || 'https://api.openai.com/v1')}" onchange="updateCustomProviderField(${i})" /></div>
+            <div><label style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-dim);">Model Name</label><input type="text" class="input-text-field" id="keyCustomModel_${i}" value="${escHtml(p.model || 'gpt-4o')}" onchange="updateCustomProviderField(${i})" /></div>
+          </div>
+        </div>`;
+      });
+      container.innerHTML = html;
+    }
+
+    function updateCustomProviderField(i) {
+      const p = cachedCustomProviders[i - 1];
+      if (!p) return;
+      p.enabled = document.getElementById(`customEnabled_${i}`)?.checked === true;
+      p.name = document.getElementById(`customName_${i}`)?.value || `Custom LLM ${i}`;
+      p.key = document.getElementById(`keyCustom_${i}`)?.value || '';
+      p.url = document.getElementById(`keyCustomUrl_${i}`)?.value || '';
+      p.model = document.getElementById(`keyCustomModel_${i}`)?.value || '';
+    }
+
+    async function loadApiKeys() {
+      try {
+        const resp = await fetch('/api/keys');
+        const data = await resp.json();
+        document.getElementById('keyNinerouter').value = data.ninerouterKey || '';
+        document.getElementById('keyNinerouterUrl').value = data.ninerouterUrl || '';
+        document.getElementById('keyNinerouterModel').value = data.ninerouterModel || '';
+        if (Array.isArray(data.customLlmProviders)) cachedCustomProviders = data.customLlmProviders;
+        populateCustomSlotsUI();
+      } catch (err) { showToast('Gagal memuat API Keys: ' + err.message, 'error'); }
+    }
+
+    async function saveApiKeys() {
+      const ninerouterKey = document.getElementById('keyNinerouter').value;
+      const ninerouterUrl = document.getElementById('keyNinerouterUrl').value;
+      const ninerouterModel = document.getElementById('keyNinerouterModel').value;
+      const customLlmProviders = cachedCustomProviders;
+      try {
+        const resp = await fetch('/api/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ninerouterKey, ninerouterUrl, ninerouterModel, customLlmProviders })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        showToast('✅ API Keys berhasil disimpan!', 'success');
+        toggleApiKeysPanel();
+      } catch(err) { showToast('❌ Gagal menyimpan API Keys: ' + err.message, 'error'); }
+    }
+
+    async function testApiKey(provider) {
+      let inputId = 'keyNinerouter'; let statusId = 'status_ninerouter';
+      let urlId = 'keyNinerouterUrl'; let modelId = 'keyNinerouterModel';
+      if (typeof provider === 'string' && provider.startsWith('custom_')) {
+        const i = provider.split('_')[1];
+        inputId = `keyCustom_${i}`; statusId = `status_custom_${i}`;
+        urlId = `keyCustomUrl_${i}`; modelId = `keyCustomModel_${i}`;
+      }
+      let apiKey = document.getElementById(inputId)?.value || 'TIDAK_ADA';
+      const statusEl = document.getElementById(statusId);
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Mengecek...</span>';
+      try {
+        const resp = await fetch('/api/keys/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, apiKey, apiBaseUrl: document.getElementById(urlId)?.value || '', apiModel: document.getElementById(modelId)?.value || '' })
+        });
+        const data = await resp.json();
+        if (data.valid) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);">✅ Valid</span>'; }
+        else { if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);" title="${data.error || 'Gagal'}">❌ Invalid</span>`; }
+      } catch(err) { if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);">❌ Error</span>`; }
+    }
+
+    // ─── TRENDS & EXPLORER JS ───
+    const DEFAULT_TRENDS_PROMPT_TEMPLATE = `Berikut adalah data tren pencarian harian dari 6 negara (US, DE, GB, JP, CA, FR):
+
+{trends_data}
+
+Tugas Anda:
+Analisis tren di atas dan hasilkan 5-8 ide niche video After Effects / Remotion yang berpotensi tinggi laku di platform stock footage (Adobe Stock & Shutterstock).
+
+Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup.
+Format JSON yang wajib diikuti:
+[
+  {
+    "niche": "Judul Niche",
+    "explanation": "Penjelasan konsep visual dalam Bahasa Indonesia",
+    "country": "Nama negara asal tren",
+    "keywords": "tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, tag9, tag10",
+    "source_query": "Kata kunci tren asal"
+  }
+]`;
+
+    let lastFetchedTrendsData = null;
+
+    async function fetchRawTrends() {
+      const btn = document.getElementById('btnFetchRawTrends');
+      const loading = document.getElementById('rawTrendsLoading');
+      const container = document.getElementById('rawTrendsContainer');
+      const aiSection = document.getElementById('aiAnalysisSection');
+      btn.disabled = true; loading.style.display = 'block'; container.style.display = 'none'; aiSection.style.display = 'none';
+      try {
+        showToast('📡 Mengambil data tren mentah...', 'info');
+        const resp = await fetch('/api/trends/raw');
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        lastFetchedTrendsData = data;
+        renderRawTrends(data);
+        showToast('✅ Berhasil menarik tren mentah!', 'success');
+      } catch (err) { showToast('❌ Gagal: ' + err.message, 'error'); }
+      finally { loading.style.display = 'none'; btn.disabled = false; }
+    }
+
+    function renderRawTrends(data) {
+      const container = document.getElementById('rawTrendsContainer');
+      const aiSection = document.getElementById('aiAnalysisSection');
+      let html = '';
+      let trendsPromptText = '';
+      data.forEach(c => {
+        trendsPromptText += `- ${c.country}: ${c.queries.join(", ")}\n`;
+        html += `<div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:6px; padding:10px;">
+          <div style="font-weight:700; color:var(--cyan); font-size:12px; margin-bottom:6px;">${escHtml(c.country)}</div>
+          <div style="font-size:11px; color:var(--text-mid); line-height:1.4;">${c.queries.map(q => escHtml(q)).join(", ")}</div>
+        </div>`;
+      });
+      container.innerHTML = html;
+      container.style.display = 'grid';
+      document.getElementById('trendsPromptEditor').value = DEFAULT_TRENDS_PROMPT_TEMPLATE.replace('{trends_data}', trendsPromptText.trim());
+      aiSection.style.display = 'block';
+    }
+
+    function resetTrendsPrompt() {
+      if (!lastFetchedTrendsData) return;
+      let trendsPromptText = "";
+      lastFetchedTrendsData.forEach(c => { trendsPromptText += `- ${c.country}: ${c.queries.join(", ")}\n`; });
+      document.getElementById('trendsPromptEditor').value = DEFAULT_TRENDS_PROMPT_TEMPLATE.replace('{trends_data}', trendsPromptText.trim());
+    }
+
+    async function analyzeTrendsWithAI() {
+      const btn = document.getElementById('btnAnalyzeTrends');
+      const loading = document.getElementById('trendsAnalysisLoading');
+      const container = document.getElementById('trendsTableContainer');
+      const tbody = document.getElementById('trendsTableBody');
+      const promptValue = document.getElementById('trendsPromptEditor').value;
+
+      btn.disabled = true; loading.style.display = 'block'; container.style.display = 'none';
+      try {
+        showToast('🤖 Menganalisis tren dengan AI...', 'info');
+        const resp = await fetch('/api/trends/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: promptValue })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        renderTrendsAnalysis(data);
+      } catch (err) { showToast('❌ Gagal: ' + err.message, 'error'); }
+      finally { loading.style.display = 'none'; btn.disabled = false; }
+    }
+
+    function renderTrendsAnalysis(data) {
+      const container = document.getElementById('trendsTableContainer');
+      const tbody = document.getElementById('trendsTableBody');
+      let html = '';
+      data.forEach(item => {
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:10px; font-weight:700; color:#fff;">${escHtml(item.niche)}</td>
+          <td style="padding:10px; color:var(--text-mid);">${escHtml(item.explanation)}</td>
+          <td style="padding:10px; color:var(--cyan); font-size:11px;">${escHtml(item.country)}</td>
+          <td style="padding:10px; color:var(--purple); font-size:10px;">${escHtml(item.keywords)}</td>
+          <td style="padding:10px; text-align:center;">
+            <button class="btn-generate" onclick="sendToGenerator('${escHtml(item.niche)}', '${escHtml(item.explanation)}', '${escHtml(item.keywords)}')" style="padding:4px 10px; font-size:11px; margin:0; background:var(--green);">🚀 Buat Kode</button>
+          </td>
+        </tr>`;
+      });
+      tbody.innerHTML = html;
+      container.style.display = 'block';
+    }
+
+    function sendToGenerator(title, desc, tags) {
+      sessionStorage.setItem('pending_paste_title', title);
+      sessionStorage.setItem('pending_paste_desc', desc);
+      sessionStorage.setItem('pending_paste_tags', tags);
+      window.location.href = '/dashboard?mode=paste';
+    }
+
+    function searchDirectly(platform) {
+      const input = document.getElementById('stockSearchInput');
+      const query = input.value.trim();
+      if (!query) return;
+      if (platform === 'adobe') {
+        window.open(`https://stock.adobe.com/search/video?k=${encodeURIComponent(query)}&search_type=usertyped`, '_blank');
+      } else if (platform === 'shutterstock') {
+        const slug = query.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        window.open(`https://www.shutterstock.com/video/search/${slug}`, '_blank');
+      }
+    }
+
+    let lastResearchData = null;
+    async function researchMarket() {
+      const input = document.getElementById('stockSearchInput');
+      const keyword = input.value.trim();
+      if (!keyword) return;
+      const btn = document.getElementById('btnResearchMarket');
+      const loading = document.getElementById('researchLoading');
+      const results = document.getElementById('researchResults');
+      btn.disabled = true; loading.style.display = 'block'; results.style.display = 'none';
+      try {
+        const resp = await fetch('/api/research-market', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        lastResearchData = data;
+        renderResearchResults(data);
+        results.style.display = 'block';
+      } catch (err) { showToast('❌ Riset gagal: ' + err.message, 'error'); }
+      finally { loading.style.display = 'none'; btn.disabled = false; }
+    }
+
+    function renderResearchResults(data) {
+      const a = data.analysis || {};
+      const s = data.scrapeData || {};
+      document.getElementById('researchSummary').innerHTML = `<div style="font-size:16px; font-weight:800; color:#fff;">📊 Riset: "${data.keyword}"</div><div style="font-size:13px; color:var(--text-mid); margin-top:4px;">${a.marketSummary || ''}</div>`;
+      document.getElementById('researchCompetition').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">Kompetisi</div><div style="font-size:20px; font-weight:800; color:var(--cyan);">${a.competitionLevel || 'N/A'}</div>`;
+      document.getElementById('researchDemand').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">Demand Signal</div><div style="font-size:20px; font-weight:800; color:var(--green);">${a.demandSignal || 'N/A'}</div>`;
+      document.getElementById('researchTrends').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">🔥 Tren Visual</div><div>${(a.topTrends || []).join(', ')}</div>`;
+      document.getElementById('researchKeywords').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">🏷 Keywords</div><div>${(a.commonKeywords || []).slice(0, 10).join(', ')}</div>`;
+      document.getElementById('researchNiches').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">🎯 Niche Potensial</div><div>${(a.underservedNiches || []).join('<br>')}</div>`;
+      document.getElementById('researchTitles').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">✨ Rekomendasi Judul</div><div>${(a.recommendedTitles || []).map(t=>t.title).join('<br>')}</div>`;
+      document.getElementById('researchStrategy').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim); margin-top:10px;">📈 Strategi</div><div>${a.actionableStrategy || ''}</div>`;
+    }
+
+    function applyResearchToGenerator() {
+      if (!lastResearchData) return;
+      sessionStorage.setItem('pending_paste_title', lastResearchData.keyword);
+      window.location.href = '/dashboard?mode=paste';
+    }
+  </script>
+</body>
+</html>

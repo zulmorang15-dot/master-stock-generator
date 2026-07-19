@@ -638,6 +638,14 @@
     }
     .toggle-switch input:checked + .toggle-slider { background: var(--cyan-dim); border-color: var(--cyan); }
     .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: var(--cyan); }
+    
+    /* ── SLOT TOGGLE SWITCH ───────────────────────────── */
+    .slot-toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+    .slot-toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slot-toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: .3s ease; border-radius: 22px; border: 1px solid rgba(255,255,255,0.2); }
+    .slot-toggle-slider::before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: #94a3b8; transition: .3s ease; border-radius: 50%; }
+    .slot-toggle-switch input:checked + .slot-toggle-slider { background: rgba(168,85,247,0.35); border-color: rgba(168,85,247,0.7); }
+    .slot-toggle-switch input:checked + .slot-toggle-slider::before { transform: translateX(18px); background: #c084fc; box-shadow: 0 0 8px rgba(168,85,247,0.8); }
     /* ── BATCH RENDER ───────────────────────────── */
     .batch-bar {
       display: none;
@@ -1823,9 +1831,9 @@
     <div class="header-sub">Upload HTML animasi → AI convert → Render 4K di GitHub Actions</div>
   </div>
   <div class="header-nav">
-    <button class="nav-tab active" id="navBtnGenerator" onclick="switchView('generator')">🎬 Generator</button>
-    <button class="nav-tab" id="navBtnInsights" onclick="switchView('insights')">📈 Trends & Stock Explorer</button>
-    <button class="nav-tab" id="navBtnCompiler" onclick="switchView('compiler')">💻 HTML Compiler</button>
+    <a href="/dashboard" class="nav-tab active" style="text-decoration:none; display:inline-flex; align-items:center;">🎬 Generator</a>
+    <a href="/insights" class="nav-tab" style="text-decoration:none; display:inline-flex; align-items:center;">📈 Trends & Stock Explorer</a>
+    <a href="/compiler" class="nav-tab" style="text-decoration:none; display:inline-flex; align-items:center;">💻 HTML Compiler</a>
   </div>
   <div class="theme-toggle" style="display:flex; align-items:center; gap:16px;">
     <div style="display:flex; align-items:center; gap:8px;">
@@ -2035,314 +2043,6 @@
     </div><!-- End workspace-layout -->
 </div><!-- End of generatorPanel -->
 
-  <!-- ═══════════ GOOGLE TRENDS & ADOBE STOCK EXPLORER PANEL ═══════════ -->
-  <div id="insightsPanel" class="insights-panel">
-    <div class="insights-container" style="display:flex; flex-direction:column; gap:28px;">
-      
-      <!-- CARD 1: GOOGLE TRENDS NICHE DISCOVERY -->
-      <div class="input-card" style="padding: 28px; width: 100%;">
-        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
-          <h3 style="font-size:18px; font-weight:800; color:var(--cyan); margin:0;">📈 Google Trends Niche Discovery (6 Negara)</h3>
-          <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
-            Tarik data tren terbaru dari Amerika Serikat, Jerman, Inggris, Jepang, Kanada, dan Prancis, kemudian gunakan AI untuk meracik ide niche video After Effects.
-          </p>
-        </div>
-
-        <!-- STEP 1: FETCH DATA -->
-        <div style="margin-bottom: 24px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
-            <div style="font-size:14px; font-weight:700; color:#fff;">Langkah 1: Ambil Data Tren Mentah</div>
-            <button class="btn-generate" id="btnFetchRawTrends" onclick="fetchRawTrends()" style="margin-top:0; padding:10px 24px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--cyan), #0ea5e9);">
-              📥 Tarik Tren Mentah
-            </button>
-          </div>
-
-          <!-- Loading Raw Trends -->
-          <div id="rawTrendsLoading" style="display:none; text-align:center; padding:20px 0;">
-            <div class="spin" style="font-size:24px; margin-bottom:8px; color:var(--cyan);">⏳</div>
-            <div style="font-size:13px; color:var(--text-mid); font-weight:600;">Menghubungi Google Trends RSS Feed...</div>
-          </div>
-
-          <!-- Raw Trends Grid -->
-          <div id="rawTrendsContainer" style="display:none; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; background: rgba(0,0,0,0.15); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
-            <!-- Populated dynamically -->
-          </div>
-        </div>
-
-        <!-- STEP 2: AI ANALYSIS -->
-        <div id="aiAnalysisSection" style="display:none; border-top:1px dashed var(--border); padding-top:20px; margin-bottom:24px;">
-          <div style="font-size:14px; font-weight:700; color:#fff; margin-bottom:12px;">Langkah 2: Analisis Tren dengan AI</div>
-          
-          <div style="display: flex; gap: 20px; align-items: stretch;">
-            <!-- Prompt Editor -->
-            <div style="flex: 1; display: flex; flex-direction: column;">
-              <label style="font-size: 11px; color: var(--text-dim); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Edit Prompt Pengiriman ke AI:</label>
-              <textarea id="trendsPromptEditor" class="input-text-field" style="height: 150px; font-family: monospace; font-size: 11px; resize: vertical; line-height: 1.4; margin-bottom: 0; background: rgba(0,0,0,0.2); border-color: rgba(56,189,248,0.25); color: #e2e8f0;"></textarea>
-            </div>
-            
-            <!-- Actions Panel -->
-            <div style="width: 260px; display: flex; flex-direction: column; justify-content: center; gap: 12px; background: rgba(255,255,255,0.01); border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
-              <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">
-                Prompt di samping akan diisi otomatis dengan data tren mentah menggantikan tag <code style="color:var(--yellow); font-family:monospace;">{trends_data}</code>.
-              </div>
-              <button class="btn-generate" id="btnAnalyzeTrends" onclick="analyzeTrendsWithAI()" style="margin-top:0; padding:12px; font-size:13px; font-weight:700; width:100%; background:linear-gradient(135deg, var(--cyan), #7c3aed);">
-                🤖 Analisis Tren (AI)
-              </button>
-              <button class="btn-refresh" onclick="resetTrendsPrompt()" style="width: 100%; padding: 6px; font-size: 11px; border-color: rgba(255,255,255,0.15); color: var(--text-mid);">
-                🔄 Reset Prompt
-              </button>
-            </div>
-          </div>
-
-          <!-- Loading Analysis -->
-          <div id="trendsAnalysisLoading" style="display:none; text-align:center; padding:40px 0;">
-            <div class="spin" style="font-size:32px; margin-bottom:12px; color:var(--cyan);">⏳</div>
-            <div style="font-size:14px; color:var(--text-mid); font-weight:600;">Mengirim data ke AI & menyaring niche terpopuler...</div>
-            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">(Membutuhkan waktu 10-25 detik menggunakan Syntx AI)</div>
-          </div>
-        </div>
-
-        <!-- Table Trends -->
-        <div id="trendsTableContainer" style="display:none; overflow-x:auto; border-top: 1px solid var(--border); padding-top: 20px;">
-          <table style="width:100%; border-collapse:collapse; background:var(--bg3); border:1px solid var(--border); border-radius:8px; font-size:13px; overflow:hidden;">
-            <thead>
-              <tr style="background:rgba(255,255,255,0.03); border-bottom:1px solid var(--border); text-align:left;">
-                <th style="padding:14px 12px; width:40px; color:var(--cyan); font-weight:700;">No</th>
-                <th style="padding:14px 12px; width:200px; color:var(--cyan); font-weight:700;">Judul Niche / Ide</th>
-                <th style="padding:14px 12px; color:var(--text-mid); font-weight:700;">Penjelasan Visual</th>
-                <th style="padding:14px 12px; width:130px; color:var(--cyan); font-weight:700;">Negara Populer</th>
-                <th style="padding:14px 12px; width:220px; color:var(--text-mid); font-weight:700;">Turunan Keyword</th>
-                <th style="padding:14px 12px; width:180px; color:var(--cyan); font-weight:700;">Dasar Tren</th>
-                <th style="padding:14px 12px; width:130px; text-align:center; color:var(--cyan); font-weight:700;">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="trendsTableBody">
-              <!-- Dynamically populated -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- CARD 2: INTERNATIONAL DAYS EVENTS (daysoftheyear.com) -->
-      <div class="input-card" style="padding: 28px; width: 100%;">
-        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
-          <h3 style="font-size:18px; font-weight:800; color:var(--green); margin:0;">📅 International Days & Events (daysoftheyear.com)</h3>
-          <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
-            Tarik data hari peringatan dan event internasional populer dari Daysoftheyear.com untuk dijadikan ide niche stock video yang unik dan viral.
-          </p>
-        </div>
-
-        <!-- STEP 1: FETCH DATA -->
-        <div style="margin-bottom: 24px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
-            <div style="font-size:14px; font-weight:700; color:#fff;">Langkah 1: Ambil Data Event Hari Ini</div>
-            <button class="btn-generate" id="btnFetchEvents" onclick="fetchEventsFromSource()" style="margin-top:0; padding:10px 24px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--green), #10b981);">
-              📥 Tarik Event Terbaru
-            </button>
-          </div>
-
-          <!-- Loading Events -->
-          <div id="eventsLoading" style="display:none; text-align:center; padding:20px 0;">
-            <div class="spin" style="font-size:24px; margin-bottom:8px; color:var(--green);">⏳</div>
-            <div style="font-size:13px; color:var(--text-mid); font-weight:600;">Mengambil data dari Daysoftheyear.com...</div>
-          </div>
-
-          <!-- Events Grid -->
-          <div id="eventsGridContainer" style="display:none; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; background: rgba(0,0,0,0.15); padding: 16px; border-radius: 8px; border: 1px solid var(--border); max-height: 500px; overflow-y: auto;">
-            <!-- Populated dynamically -->
-          </div>
-
-          <!-- Motion Suggestions for Events -->
-          <div id="eventsMotionSuggestionsContainer" style="display:none; margin-bottom: 24px; background: rgba(124, 58, 237, 0.05); border: 1px solid rgba(124, 58, 237, 0.25); padding: 18px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);">
-            <div style="font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 16px;">💡</span>
-                <span style="background: linear-gradient(135deg, #a78bfa, var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800;">Rekomendasi Tema Motion Graphics</span>
-              </div>
-              <span style="font-size: 11px; font-weight: 600; color: #a78bfa; background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.2); padding: 3px 8px; border-radius: 20px;">
-                Berdasarkan Event Pilihan
-              </span>
-            </div>
-            <p style="font-size: 12px; color: var(--text-dim); margin-top: 0; margin-bottom: 16px; line-height: 1.5;">
-              Berikut adalah saran visual & konsep animasi yang berpotensi tinggi laku di pasar microstock berdasarkan topik hari penting di atas. Klik <strong>Gunakan Konsep Ini</strong> untuk langsung mengisi editor prompt AI dengan ide tersebut.
-            </p>
-            <div id="eventsMotionSuggestionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;">
-              <!-- Populated dynamically based on monthly events -->
-            </div>
-          </div>
-        </div>
-
-        <!-- STEP 2: AI ANALYSIS -->
-        <div id="eventsAiAnalysisSection" style="display:none; border-top:1px dashed var(--border); padding-top:20px; margin-bottom:24px;">
-          <div style="font-size:14px; font-weight:700; color:#fff; margin-bottom:12px;">Langkah 2: Analisis Event dengan AI</div>
-          
-          <div style="display: flex; gap: 20px; align-items: stretch;">
-            <!-- Prompt Editor -->
-            <div style="flex: 1; display: flex; flex-direction: column;">
-              <label style="font-size: 11px; color: var(--text-dim); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Edit Prompt Pengiriman ke AI:</label>
-              <textarea id="eventsPromptEditor" class="input-text-field" style="height: 150px; font-family: monospace; font-size: 11px; resize: vertical; line-height: 1.4; margin-bottom: 0; background: rgba(0,0,0,0.2); border-color: rgba(16,185,129,0.25); color: #e2e8f0;"></textarea>
-            </div>
-            
-            <!-- Actions Panel -->
-            <div style="width: 260px; display: flex; flex-direction: column; justify-content: center; gap: 12px; background: rgba(255,255,255,0.01); border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
-              <div style="font-size: 11px; color: var(--text-dim); line-height: 1.4;">
-                Prompt di samping akan diisi otomatis dengan data event mentah menggantikan tag <code style="color:var(--yellow); font-family:monospace;">{events_data}</code>.
-              </div>
-              <button class="btn-generate" id="btnAnalyzeEvents" onclick="analyzeEventsWithAI()" style="margin-top:0; padding:12px; font-size:13px; font-weight:700; width:100%; background:linear-gradient(135deg, var(--green), #7c3aed);">
-                🤖 Analisis Event (AI)
-              </button>
-              <button class="btn-refresh" onclick="resetEventsPrompt()" style="width: 100%; padding: 6px; font-size: 11px; border-color: rgba(255,255,255,0.15); color: var(--text-mid);">
-                🔄 Reset Prompt
-              </button>
-            </div>
-          </div>
-
-          <!-- Loading Analysis -->
-          <div id="eventsAnalysisLoading" style="display:none; text-align:center; padding:40px 0;">
-            <div class="spin" style="font-size:32px; margin-bottom:12px; color:var(--green);">⏳</div>
-            <div style="font-size:14px; color:var(--text-mid); font-weight:600;">Mengirim data ke AI & menyaring niche terpopuler...</div>
-            <div style="font-size:11px; color:var(--text-dim); margin-top:4px;">(Membutuhkan waktu 10-25 detik menggunakan AI)</div>
-          </div>
-        </div>
-
-        <!-- Table Events Niches -->
-        <div id="eventsTableContainer" style="display:none; overflow-x:auto; border-top: 1px solid var(--border); padding-top: 20px;">
-          <table style="width:100%; border-collapse:collapse; background:var(--bg3); border:1px solid var(--border); border-radius:8px; font-size:13px; overflow:hidden;">
-            <thead>
-              <tr style="background:rgba(255,255,255,0.03); border-bottom:1px solid var(--border); text-align:left;">
-                <th style="padding:14px 12px; width:40px; color:var(--green); font-weight:700;">No</th>
-                <th style="padding:14px 12px; width:200px; color:var(--green); font-weight:700;">Judul Niche / Ide</th>
-                <th style="padding:14px 12px; color:var(--text-mid); font-weight:700;">Penjelasan Visual</th>
-                <th style="padding:14px 12px; width:130px; color:var(--green); font-weight:700;">Tanggal / Event</th>
-                <th style="padding:14px 12px; width:220px; color:var(--text-mid); font-weight:700;">Turunan Keyword</th>
-                <th style="padding:14px 12px; width:180px; color:var(--green); font-weight:700;">Dasar Event</th>
-                <th style="padding:14px 12px; width:130px; text-align:center; color:var(--green); font-weight:700;">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="eventsTableBody">
-              <!-- Dynamically populated -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- CARD 2: MARKET RESEARCH SCRAPER -->
-      <div class="input-card" style="padding: 28px; width: 100%;">
-        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
-          <h3 style="font-size:18px; font-weight:800; color:var(--purple); margin:0;">🔬 Riset Pasar Microstock (Live Scrape)</h3>
-          <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
-            Scrape data langsung dari Adobe Stock & Shutterstock, lalu analisis dengan AI untuk menemukan niche yang kurang terlayani.
-          </p>
-        </div>
-
-        <!-- Search Bar -->
-        <div style="display:flex; gap:12px; align-items: center; margin-bottom:16px;">
-          <input type="text" class="input-text-field" id="stockSearchInput" placeholder="Ketik kata kunci riset (contoh: cyberpunk neon loop)..." style="margin-bottom:0; flex:1;" onkeydown="if(event.key==='Enter') researchMarket()" />
-          <button class="btn-generate" id="btnResearchMarket" onclick="researchMarket()" style="margin-top:0; width:220px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, #f59e0b, #ef4444);">
-            🔬 Riset Pasar (AI)
-          </button>
-        </div>
-
-        <!-- Quick Links -->
-        <div style="display:flex; gap:8px; margin-bottom:16px;">
-          <button class="btn-refresh" onclick="searchDirectly('adobe')" style="flex:1; padding:8px; font-size:11px; border-color:rgba(168,85,247,0.4); color:var(--purple);">🔗 Buka di Adobe Stock</button>
-          <button class="btn-refresh" onclick="searchDirectly('shutterstock')" style="flex:1; padding:8px; font-size:11px; border-color:rgba(56,189,248,0.4); color:var(--cyan);">🔗 Buka di Shutterstock</button>
-        </div>
-
-        <!-- Loading -->
-        <div id="researchLoading" style="display:none; text-align:center; padding:20px;">
-          <div style="font-size:14px; color:var(--cyan); font-weight:600;">🔍 Sedang scraping Adobe Stock & Shutterstock...</div>
-          <div style="font-size:11px; color:var(--text-dim); margin-top:6px;">Ini bisa memakan waktu 15-30 detik</div>
-        </div>
-
-        <!-- Results Container -->
-        <div id="researchResults" style="display:none;">
-          <!-- Summary Header -->
-          <div id="researchSummary" style="background:rgba(56,189,248,0.05); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:16px; margin-bottom:16px;"></div>
-
-          <!-- Competition & Demand -->
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-            <div id="researchCompetition" style="background:rgba(168,85,247,0.05); border:1px solid rgba(168,85,247,0.2); border-radius:8px; padding:14px;"></div>
-            <div id="researchDemand" style="background:rgba(245,158,11,0.05); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:14px;"></div>
-          </div>
-
-          <!-- Trends & Keywords -->
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-            <div id="researchTrends" style="background:rgba(34,197,94,0.05); border:1px solid rgba(34,197,94,0.2); border-radius:8px; padding:14px;"></div>
-            <div id="researchKeywords" style="background:rgba(236,72,153,0.05); border:1px solid rgba(236,72,153,0.2); border-radius:8px; padding:14px;"></div>
-          </div>
-
-          <!-- Underserved Niches -->
-          <div id="researchNiches" style="background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:14px; margin-bottom:16px;"></div>
-
-          <!-- Recommended Titles -->
-          <div id="researchTitles" style="background:rgba(56,189,248,0.05); border:1px solid rgba(56,189,248,0.2); border-radius:8px; padding:14px; margin-bottom:16px;"></div>
-
-          <!-- Strategy -->
-          <div id="researchStrategy" style="background:rgba(245,158,11,0.05); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:14px; margin-bottom:16px;"></div>
-
-          <!-- Scraped Competitor Data (collapsible) -->
-          <details style="margin-top:12px;">
-            <summary style="cursor:pointer; font-size:12px; color:var(--text-dim); font-weight:600;">📋 Lihat Data Mentah Kompetitor</summary>
-            <div id="researchRawData" style="background:#050810; border:1px solid var(--border); border-radius:6px; padding:12px; margin-top:8px; font-size:11px; color:var(--text-dim); max-height:300px; overflow-y:auto; font-family:monospace; white-space:pre-wrap;"></div>
-          </details>
-
-          <!-- Apply to Generator -->
-          <div style="display:flex; gap:12px; margin-top:16px;">
-            <button class="btn-generate" id="btnApplyResearch" onclick="applyResearchToGenerator()" style="margin-top:0; flex:1; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, #10b981, #059669);">
-              🚀 Gunakan Hasil Riset untuk Generate
-            </button>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ═══════════ HTML COMPILER PANEL ═══════════ -->
-  <div id="compilerPanel" class="insights-panel">
-    <div style="display:flex; flex-direction:column; gap:24px;">
-      
-      <!-- Editor Card -->
-      <div class="input-card" id="compilerEditorCard" style="padding:28px; transition: border-color 0.25s, background-color 0.25s;">
-        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-          <div>
-            <h3 style="font-size:18px; font-weight:800; color:var(--cyan); margin:0;">💻 HTML Compiler & Live Preview</h3>
-            <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
-              Tulis, edit, dan pratinjau kode HTML Anda secara langsung di sini sebelum mengirimkannya ke generator.
-            </p>
-          </div>
-          <div style="display:flex; gap:10px;">
-            <button class="btn-refresh" onclick="loadCompilerTemplate()" style="border-color:var(--cyan); color:var(--cyan); font-weight:600; padding:6px 12px;">📄 Load Template</button>
-            <button class="btn-refresh" onclick="clearCompilerEditor()" style="border-color:var(--red); color:var(--red); font-weight:600; padding:6px 12px;">🗑 Reset</button>
-          </div>
-        </div>
-
-        <textarea class="code-editor-textarea" id="compilerHtmlCode" style="height:320px; font-size:13px; color:#22c55e; border-color:rgba(56,189,248,0.25);" placeholder="<!-- Tulis atau tempelkan (paste) kode HTML lengkap Anda di sini... -->" oninput="saveCompilerState()"></textarea>
-        
-        <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px; flex-wrap:wrap;">
-          <button class="btn-generate" onclick="runHtmlCompiler()" style="margin-top:0; width:180px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--green), #059669); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
-            ▶ &nbsp;PLAY / RUN
-          </button>
-          <button class="btn-generate" onclick="sendCompiledHtmlToGenerator()" style="margin-top:0; width:220px; padding:12px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--purple), #7c3aed); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
-            🚀 &nbsp;KIRIM KE GENERATOR
-          </button>
-        </div>
-      </div>
-
-      <!-- Preview Card -->
-      <div class="input-card" style="padding:28px;">
-        <h3 style="font-size:16px; font-weight:700; color:var(--text-mid); margin-bottom:16px; display:flex; align-items:center; gap:8px;">
-          🖥️ Pratinjau Hasil (Live Preview)
-        </h3>
-        <div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; background:#000; box-shadow:0 8px 24px rgba(0,0,0,0.5); width:100%; aspect-ratio:16/9; min-height:400px; display:flex; position:relative;">
-          <iframe id="compilerPreviewIframe" style="width:100%; height:100%; border:none; background:#000;" sandbox="allow-scripts allow-same-origin"></iframe>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
 </main>
 
 <script>
@@ -2481,7 +2181,7 @@
     localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
   }
 
-  // Restore sidebar collapse state on load
+  // Restore sidebar collapse state and handle pending data from other pages
   document.addEventListener('DOMContentLoaded', () => {
     if (typeof updateViewModeButtons === 'function') updateViewModeButtons();
     if (localStorage.getItem('sidebar_collapsed') === 'true') {
@@ -2493,7 +2193,60 @@
         btn.title = 'Buka Sidebar (Expand)';
       }
     }
+    checkPendingPasteFromOtherPages();
   });
+
+  function checkPendingPasteFromOtherPages() {
+    const pendingCode = sessionStorage.getItem('pending_paste_html');
+    const pendingTitle = sessionStorage.getItem('pending_paste_title');
+    const pendingDesc = sessionStorage.getItem('pending_paste_desc');
+    const pendingTags = sessionStorage.getItem('pending_paste_tags');
+
+    if (pendingCode) {
+      sessionStorage.removeItem('pending_paste_html');
+      switchInputTab('paste');
+      const codeArea = document.getElementById('pasteHtmlCode');
+      const nameInput = document.getElementById('pasteFileName');
+      if (codeArea) codeArea.value = pendingCode;
+      if (nameInput && !nameInput.value.trim()) {
+        nameInput.value = 'compiled_' + Math.floor(Date.now() / 1000);
+      }
+      updateGenerateBtn();
+      showToast('🚀 Kode HTML dari Compiler berhasil di-load!', 'success');
+    } else if (pendingTitle) {
+      sessionStorage.removeItem('pending_paste_title');
+      sessionStorage.removeItem('pending_paste_desc');
+      sessionStorage.removeItem('pending_paste_tags');
+      switchInputTab('paste');
+      const nameInput = document.getElementById('pasteFileName');
+      const codeArea = document.getElementById('pasteHtmlCode');
+      const sanitizedName = pendingTitle.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      if (nameInput) nameInput.value = sanitizedName;
+      if (codeArea) {
+        codeArea.value = `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0; background: #000; overflow: hidden;
+      display: flex; justify-content: center; align-items: center;
+      height: 100vh; color: #fff; font-family: sans-serif;
+    }
+    /* Visual concept: ${pendingDesc || ''} */
+    /* Keywords: ${pendingTags || ''} */
+  </style>
+</head>
+<body>
+  <div id="container">
+    <!-- HTML Animation here -->
+  </div>
+</body>
+</html>`;
+      }
+      updateGenerateBtn();
+      showToast('🚀 Ide visual dari Trends Explorer berhasil di-load!', 'success');
+    }
+  }
 
   const DEFAULT_TRENDS_PROMPT_TEMPLATE = `Kamu adalah pakar Creative Director SEO Microstock.
 Berikut adalah daftar kata kunci pencarian yang sedang tren hari ini di Google Trends dari beberapa negara:
@@ -4049,7 +3802,17 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const has4k = !!item.outputPath4k;
     const canPreview = hasTsx && !isTsxRunning && !isPreviewRunning;
 
-    const aiSelect = `<select id="ai_model_${item.id}" class="select-input" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}><option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>Auto AI</option><option value="9router" ${item.aiModel === '9router' ? 'selected' : ''}>9Router</option><option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>Syntx Claude</option><option value="syntx-chatgpt" ${item.aiModel === 'syntx-chatgpt' ? 'selected' : ''}>Syntx ChatGPT</option><option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>Syntx Gemini</option><option value="syntx-grok" ${item.aiModel === 'syntx-grok' ? 'selected' : ''}>Syntx Grok</option><option value="syntx-deepseek" ${item.aiModel === 'syntx-deepseek' ? 'selected' : ''}>Syntx DeepSeek</option><option value="syntx-qwen" ${item.aiModel === 'syntx-qwen' ? 'selected' : ''}>Syntx Qwen</option><option value="syntx-perplexity" ${item.aiModel === 'syntx-perplexity' ? 'selected' : ''}>Syntx Perplexity</option></select>`;
+    let customOptions = '';
+    if (Array.isArray(cachedCustomProviders)) {
+      cachedCustomProviders.forEach(p => {
+        if (p.enabled) {
+          const selected = item.aiModel === p.id ? 'selected' : '';
+          customOptions += `<option value="${p.id}" ${selected}>⚡ ${escHtml(p.name)} (${escHtml(p.model || 'gpt-4o')})</option>`;
+        }
+      });
+    }
+
+    const aiSelect = `<select id="ai_model_${item.id}" class="select-input" onchange="saveField('${item.id}', 'aiModel', this.value)" ${isAnyRunning ? 'disabled' : ''}><option value="auto" ${item.aiModel === 'auto' ? 'selected' : ''}>Auto AI</option><option value="9router" ${item.aiModel === '9router' ? 'selected' : ''}>9Router</option>${customOptions}<option value="syntx-claude" ${item.aiModel === 'syntx-claude' ? 'selected' : ''}>Syntx Claude</option><option value="syntx-chatgpt" ${item.aiModel === 'syntx-chatgpt' ? 'selected' : ''}>Syntx ChatGPT</option><option value="syntx-gemini" ${item.aiModel === 'syntx-gemini' ? 'selected' : ''}>Syntx Gemini</option><option value="syntx-grok" ${item.aiModel === 'syntx-grok' ? 'selected' : ''}>Syntx Grok</option><option value="syntx-deepseek" ${item.aiModel === 'syntx-deepseek' ? 'selected' : ''}>Syntx DeepSeek</option><option value="syntx-qwen" ${item.aiModel === 'syntx-qwen' ? 'selected' : ''}>Syntx Qwen</option><option value="syntx-perplexity" ${item.aiModel === 'syntx-perplexity' ? 'selected' : ''}>Syntx Perplexity</option></select>`;
 
     const tsxText = isTsxRunning ? 'Converting TSX...' : hasTsx ? 'Regen TSX' : 'Generate TSX';
     const previewText = isPreviewRunning ? 'Rendering preview...' : hasPreview ? 'Regen preview' : 'Render preview';
@@ -4460,6 +4223,71 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     }
   }
 
+  let cachedCustomProviders = [
+    { id: 'custom_1', enabled: true, name: 'Custom LLM 1', key: '', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
+    { id: 'custom_2', enabled: false, name: 'Custom LLM 2', key: '', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
+    { id: 'custom_3', enabled: false, name: 'Custom LLM 3', key: '', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
+    { id: 'custom_4', enabled: false, name: 'Custom LLM 4', key: '', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
+    { id: 'custom_5', enabled: false, name: 'Custom LLM 5', key: '', url: 'https://api.openai.com/v1', model: 'gpt-4o' }
+  ];
+
+  function populateCustomSlotsUI() {
+    const container = document.getElementById('customSlotsContainer');
+    if (!container) return;
+    
+    let html = `<div style="grid-column: 1 / -1; font-weight:700; color:var(--purple); font-size:13px; margin-top:10px; margin-bottom:4px; display:flex; align-items:center; justify-content:space-between; border-top:1px dashed rgba(255,255,255,0.1); padding-top:14px;">
+      <span>⚡ Custom LLM Providers (5 Slot Dengan Enable/Disable & Nama Custom)</span>
+    </div>`;
+
+    cachedCustomProviders.forEach((p, idx) => {
+      const i = idx + 1;
+      html += `
+      <div style="grid-column: 1 / -1; background:rgba(255,255,255,0.03); border:1px solid ${p.enabled ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.08)'}; border-radius:12px; padding:14px; transition:all 0.2s;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:10px; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <label class="slot-toggle-switch" title="Aktifkan/Nonaktifkan Slot #${i}">
+              <input type="checkbox" id="customEnabled_${i}" ${p.enabled ? 'checked' : ''} onchange="updateCustomProviderField(${i})" />
+              <span class="slot-toggle-slider"></span>
+            </label>
+            <span style="font-weight:700; color:${p.enabled ? 'var(--purple)' : 'var(--text-dim)'}; font-size:13px;">Slot #${i}:</span>
+            <input type="text" id="customName_${i}" value="${escHtml(p.name || 'Custom LLM ' + i)}" onchange="updateCustomProviderField(${i})" class="input-text-field" style="width:160px; padding:3px 8px; font-size:12px; margin:0;" placeholder="Nama Provider (Contoh: OpenRouter)" />
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn-refresh" onclick="testApiKey('custom_${i}')" style="padding:4px 10px; font-size:11px; border-color:#a78bfa; color:#a78bfa;">🧪 Test Valid</button>
+            <span id="status_custom_${i}" style="font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;"></span>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; opacity:${p.enabled ? '1' : '0.55'};">
+          <div>
+            <label style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-dim);">API Key</label>
+            <input type="password" class="input-text-field" id="keyCustom_${i}" value="${escHtml(p.key || '')}" onchange="updateCustomProviderField(${i})" style="margin:0; font-size:12px; border-color:rgba(168,85,247,0.2);" placeholder="sk-..." />
+          </div>
+          <div>
+            <label style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-dim);">Base URL</label>
+            <input type="text" class="input-text-field" id="keyCustomUrl_${i}" value="${escHtml(p.url || 'https://api.openai.com/v1')}" onchange="updateCustomProviderField(${i})" style="margin:0; font-size:12px; border-color:rgba(168,85,247,0.2);" placeholder="https://api.openai.com/v1" />
+          </div>
+          <div>
+            <label style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-dim);">Model Name</label>
+            <input type="text" class="input-text-field" id="keyCustomModel_${i}" value="${escHtml(p.model || 'gpt-4o')}" onchange="updateCustomProviderField(${i})" style="margin:0; font-size:12px; border-color:rgba(168,85,247,0.2);" placeholder="gpt-4o" />
+          </div>
+        </div>
+      </div>`;
+    });
+
+    container.innerHTML = html;
+  }
+
+  function updateCustomProviderField(i) {
+    const p = cachedCustomProviders[i - 1];
+    if (!p) return;
+    p.enabled = document.getElementById(`customEnabled_${i}`)?.checked === true;
+    p.name = document.getElementById(`customName_${i}`)?.value || `Custom LLM ${i}`;
+    p.key = document.getElementById(`keyCustom_${i}`)?.value || '';
+    p.url = document.getElementById(`keyCustomUrl_${i}`)?.value || '';
+    p.model = document.getElementById(`keyCustomModel_${i}`)?.value || '';
+    applyFilterAndRender();
+  }
+
   async function loadApiKeys() {
     try {
       const resp = await fetch('/api/keys');
@@ -4472,6 +4300,11 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       document.getElementById('githubToken').value = data.githubToken || '';
       document.getElementById('githubUsername').value = data.githubUsername || '';
       document.getElementById('githubRepo').value = data.githubRepo || '';
+
+      if (Array.isArray(data.customLlmProviders)) {
+        cachedCustomProviders = data.customLlmProviders;
+      }
+      populateCustomSlotsUI();
     } catch (err) {
       showToast('❌ Gagal memuat API Keys: ' + err.message, 'error');
     }
@@ -4487,6 +4320,18 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const githubUsername = document.getElementById('githubUsername').value;
     const githubRepo = document.getElementById('githubRepo').value;
 
+    const customLlmProviders = cachedCustomProviders.map((p, idx) => {
+      const i = idx + 1;
+      return {
+        id: `custom_${i}`,
+        enabled: document.getElementById(`customEnabled_${i}`) ? document.getElementById(`customEnabled_${i}`).checked : p.enabled,
+        name: document.getElementById(`customName_${i}`) ? document.getElementById(`customName_${i}`).value : p.name,
+        key: document.getElementById(`keyCustom_${i}`) ? document.getElementById(`keyCustom_${i}`).value : p.key,
+        url: document.getElementById(`keyCustomUrl_${i}`) ? document.getElementById(`keyCustomUrl_${i}`).value : p.url,
+        model: document.getElementById(`keyCustomModel_${i}`) ? document.getElementById(`keyCustomModel_${i}`).value : p.model,
+      };
+    });
+
     try {
       const resp = await fetch('/api/keys', {
         method: 'POST',
@@ -4495,6 +4340,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
           ninerouterKey,
           ninerouterUrl,
           ninerouterModel,
+          customLlmProviders,
           syntxBaseEmail,
           syntxEmailIndex,
           githubToken,
@@ -4504,32 +4350,44 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
-      showToast('✅ API Keys berhasil disimpan!', 'success');
+      cachedCustomProviders = customLlmProviders;
+      showToast('✅ API Keys & 5 Slot Custom LLM berhasil disimpan!', 'success');
       toggleApiKeysPanel();
+      applyFilterAndRender();
     } catch(err) {
       showToast('❌ Gagal menyimpan API Keys: ' + err.message, 'error');
     }
   }
 
   async function testApiKey(provider) {
-    if (provider !== 'ninerouter') return;
-    const inputId = 'keyNinerouter';
-    const statusId = 'status_ninerouter';
-    let apiKey = document.getElementById(inputId).value;
+    let inputId = 'keyNinerouter';
+    let statusId = 'status_ninerouter';
+    let urlId = 'keyNinerouterUrl';
+    let modelId = 'keyNinerouterModel';
+
+    if (typeof provider === 'string' && provider.startsWith('custom_')) {
+      const i = provider.split('_')[1];
+      inputId = `keyCustom_${i}`;
+      statusId = `status_custom_${i}`;
+      urlId = `keyCustomUrl_${i}`;
+      modelId = `keyCustomModel_${i}`;
+    }
+
+    let apiKey = document.getElementById(inputId) ? document.getElementById(inputId).value : '';
     const statusEl = document.getElementById(statusId);
 
     if (!apiKey) {
       apiKey = "TIDAK_ADA";
     }
 
-    statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Mengecek...</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Mengecek...</span>';
 
     try {
       const requestPayload = { 
         provider, 
         apiKey,
-        apiBaseUrl: document.getElementById('keyNinerouterUrl').value,
-        apiModel: document.getElementById('keyNinerouterModel').value
+        apiBaseUrl: document.getElementById(urlId) ? document.getElementById(urlId).value : '',
+        apiModel: document.getElementById(modelId) ? document.getElementById(modelId).value : ''
       };
       const resp = await fetch('/api/keys/test', {
         method: 'POST',
@@ -4538,13 +4396,13 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       });
       const data = await resp.json();
       if (data.valid) {
-        statusEl.innerHTML = '<span style="color:var(--green);">✅ Valid</span>';
+        if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);">✅ Valid</span>';
       } else {
-        statusEl.innerHTML = `<span style="color:var(--red);" title="${data.error || 'Gagal'}">❌ Invalid</span>`;
-        showToast(`❌ API Key 9Router tidak valid: ${data.error || 'Gagal'}`, 'error');
+        if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);" title="${data.error || 'Gagal'}">❌ Invalid</span>`;
+        showToast(`❌ API Key ${provider} tidak valid: ${data.error || 'Gagal'}`, 'error');
       }
     } catch(err) {
-      statusEl.innerHTML = `<span style="color:var(--red);" title="${err.message}">❌ Error</span>`;
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);" title="${err.message}">❌ Error</span>`;
       showToast(`❌ Gagal mengetes key: ${err.message}`, 'error');
     }
   }
@@ -5582,6 +5440,9 @@ Saran Tags/Keywords: ${tags}`;
           <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Model Name</label>
           <input type="text" class="input-text-field" id="keyNinerouterModel" style="margin-bottom:8px; border-color:rgba(59,130,246,0.2);" placeholder="9router" />
         </div>
+
+        <!-- Container 5 Slot Custom LLM Provider -->
+        <div id="customSlotsContainer" style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:12px;"></div>
 
         <!-- Syntx Base Email -->
         <div>

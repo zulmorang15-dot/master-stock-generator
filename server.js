@@ -96,6 +96,21 @@ app.get("/dashboard", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "dashboard.html"));
 });
 
+// Route for Trends & Stock Explorer
+app.get("/insights", (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.sendFile(path.join(__dirname, "public", "insights.html"));
+});
+app.get("/trends", (req, res) => {
+  res.redirect("/insights");
+});
+
+// Route for HTML Compiler
+app.get("/compiler", (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.sendFile(path.join(__dirname, "public", "compiler.html"));
+});
+
 // Root redirect to dashboard
 app.get("/", (req, res) => {
   res.redirect("/dashboard");
@@ -109,6 +124,24 @@ let SYNTX_EMAIL_INDEX = process.env.SYNTX_EMAIL_INDEX || "0";
 let NINEROUTER_API_KEY = process.env.NINEROUTER_API_KEY || "";
 let NINEROUTER_BASE_URL = process.env.NINEROUTER_BASE_URL || "http://localhost:20128/v1";
 let NINEROUTER_MODEL = process.env.NINEROUTER_MODEL || "9router";
+
+// Array 5 Slot Custom LLM Provider (dengan toggle enable/disable & nama custom)
+let customLlmProviders = Array.from({ length: 5 }, (_, idx) => {
+  const i = idx + 1;
+  const legacyKey = i === 1 ? (process.env.CUSTOM_LLM_KEY || "") : "";
+  const legacyUrl = i === 1 ? (process.env.CUSTOM_LLM_URL || "https://api.openai.com/v1") : "";
+  const legacyModel = i === 1 ? (process.env.CUSTOM_LLM_MODEL || "gpt-4o") : "";
+  const envEnabled = process.env[`CUSTOM_LLM_${i}_ENABLED`];
+
+  return {
+    id: `custom_${i}`,
+    enabled: envEnabled !== undefined ? envEnabled === "true" : (i === 1 ? true : false),
+    name: process.env[`CUSTOM_LLM_${i}_NAME`] || `Custom LLM ${i}`,
+    key: process.env[`CUSTOM_LLM_${i}_KEY`] || legacyKey,
+    url: process.env[`CUSTOM_LLM_${i}_URL`] || legacyUrl || "https://api.openai.com/v1",
+    model: process.env[`CUSTOM_LLM_${i}_MODEL`] || legacyModel || "gpt-4o"
+  };
+});
 
 // ══════════════════════════════════════════════════════════════
 // PRODUCTION ENHANCEMENTS: AI Response Cache & Retry Logic
@@ -373,6 +406,14 @@ async function callAIWithFallback(prompt, options = {}) {
         return result;
       }
       throw new Error("9Router returned invalid response");
+    } else if (preferModel === 'custom' || preferModel === 'custom-llm' || preferModel.startsWith('custom_')) {
+      const targetSlot = (preferModel === 'custom' || preferModel === 'custom-llm') ? 'custom_1' : preferModel;
+      const result = await callCustomLLMSlot(targetSlot, prompt);
+      if (isValid(result, targetSlot)) {
+        log(`✅ Sukses menggunakan ${targetSlot}!`, 'success');
+        return result;
+      }
+      throw new Error(`${targetSlot} returned invalid response`);
     } else if (preferModel === 'syntx-claude') {
       const result = await syntxBot.callSyntx(prompt, 'claude-sonnet-4-6', syntxOptions);
       if (isValid(result, 'Syntx Claude')) {
@@ -614,6 +655,58 @@ async function callNineRouter(prompt, model = NINEROUTER_MODEL) {
       },
       onRetry: (error, attempt) => {
         console.error(`🔄 Retrying 9Router (attempt ${attempt}/2):`, error.message?.substring(0, 100));
+      }
+    }
+  );
+}
+
+// Custom OpenAI-Compatible LLM API Call Helper (5 Slots dengan Enable/Disable)
+async function callCustomLLMSlot(slotId, prompt) {
+  const provider = customLlmProviders.find(p => p.id === slotId);
+  if (!provider) throw new Error(`Custom LLM Slot ${slotId} tidak ditemukan`);
+  if (!provider.enabled) throw new Error(`Custom LLM Provider "${provider.name}" sedang dinonaktifkan! Aktifkan terlebih dahulu di Modal API Keys.`);
+
+  const baseUrl = provider.url || "https://api.openai.com/v1";
+  const model = provider.model || "gpt-4o";
+  const apiKey = provider.key;
+
+  return withRetry(
+    async () => {
+      const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+      console.log(`📡 Mengirim request ke ${provider.name} (URL: ${url}, model: ${model})...`);
+
+      const headers = { "Content-Type": "application/json" };
+      if (apiKey && apiKey !== "TIDAK_ADA" && apiKey !== "kosong") {
+        headers["Authorization"] = `Bearer ${apiKey}`;
+        console.log(`🔑 API Key ${provider.name} ada:`, apiKey.substring(0, 10) + "...");
+      }
+
+      const response = await axios.post(
+        url,
+        {
+          model: model,
+          messages: [{ role: "user", content: prompt }],
+          stream: false
+        },
+        { headers, timeout: 90000 }
+      );
+
+      if (!response.data.choices || !response.data.choices[0]) {
+        throw new Error(`Respons ${provider.name} tidak valid: ` + JSON.stringify(response.data));
+      }
+
+      console.log(`✅ Respon ${provider.name} berhasil diterima!`);
+      return response.data.choices[0].message.content;
+    },
+    {
+      maxRetries: 2,
+      initialDelay: 3000,
+      shouldRetry: (error) => {
+        const status = error?.response?.status;
+        return !status || status >= 500 || error.code === 'ECONNABORTED';
+      },
+      onRetry: (error, attempt) => {
+        console.error(`🔄 Retrying ${provider.name} (attempt ${attempt}/2):`, error.message?.substring(0, 100));
       }
     }
   );
@@ -4418,7 +4511,7 @@ app.post("/api/batch-regenerate-seo", (req, res) => {
 });
 
 // Fungsi untuk memperbarui file .env dan memory variables
-function updateEnvKeys({ syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, ninerouterKey, ninerouterUrl, ninerouterModel }) {
+function updateEnvKeys({ syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, ninerouterKey, ninerouterUrl, ninerouterModel, customLlmProviders: newProviders }) {
   const envPath = path.join(__dirname, ".env");
   let content = "";
   if (fs.existsSync(envPath)) {
@@ -4448,6 +4541,26 @@ function updateEnvKeys({ syntxBaseEmail, syntxEmailIndex, githubToken, githubUse
   if (ninerouterKey !== undefined) keyValues["NINEROUTER_API_KEY"] = ninerouterKey;
   if (ninerouterUrl !== undefined) keyValues["NINEROUTER_BASE_URL"] = ninerouterUrl;
   if (ninerouterModel !== undefined) keyValues["NINEROUTER_MODEL"] = ninerouterModel;
+
+  if (Array.isArray(newProviders)) {
+    newProviders.forEach((p, idx) => {
+      const i = idx + 1;
+      if (p.enabled !== undefined) keyValues[`CUSTOM_LLM_${i}_ENABLED`] = String(p.enabled);
+      if (p.name !== undefined) keyValues[`CUSTOM_LLM_${i}_NAME`] = p.name;
+      if (p.key !== undefined) keyValues[`CUSTOM_LLM_${i}_KEY`] = p.key;
+      if (p.url !== undefined) keyValues[`CUSTOM_LLM_${i}_URL`] = p.url;
+      if (p.model !== undefined) keyValues[`CUSTOM_LLM_${i}_MODEL`] = p.model;
+
+      const existing = customLlmProviders.find(cp => cp.id === `custom_${i}`);
+      if (existing) {
+        if (p.enabled !== undefined) existing.enabled = Boolean(p.enabled);
+        if (p.name !== undefined) existing.name = p.name || `Custom LLM ${i}`;
+        if (p.key !== undefined) existing.key = p.key;
+        if (p.url !== undefined) existing.url = p.url;
+        if (p.model !== undefined) existing.model = p.model;
+      }
+    });
+  }
 
   // Build new content preserving original lines/formatting
   const newLines = [];
@@ -4523,16 +4636,17 @@ app.get("/api/keys", (req, res) => {
     githubRepo: process.env.GITHUB_REPO || "",
     ninerouterKey: process.env.NINEROUTER_API_KEY || "",
     ninerouterUrl: process.env.NINEROUTER_BASE_URL || "",
-    ninerouterModel: process.env.NINEROUTER_MODEL || ""
+    ninerouterModel: process.env.NINEROUTER_MODEL || "",
+    customLlmProviders: customLlmProviders
   });
 });
 
 // POST: Simpan API Keys baru
 app.post("/api/keys", (req, res) => {
-  const { syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, ninerouterKey, ninerouterUrl, ninerouterModel } = req.body;
+  const { syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, ninerouterKey, ninerouterUrl, ninerouterModel, customLlmProviders: newProviders } = req.body;
   try {
-    updateEnvKeys({ syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, ninerouterKey, ninerouterUrl, ninerouterModel });
-    console.log("🔑 API Keys & Config GitHub berhasil diperbarui di server runtime.");
+    updateEnvKeys({ syntxBaseEmail, syntxEmailIndex, githubToken, githubUsername, githubRepo, ninerouterKey, ninerouterUrl, ninerouterModel, customLlmProviders: newProviders });
+    console.log("🔑 API Keys & Config GitHub/Custom LLM 5 Slots berhasil diperbarui di server runtime.");
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Gagal menyimpan API Keys ke .env: " + err.message });
@@ -4543,10 +4657,6 @@ app.post("/api/keys", (req, res) => {
 // POST: Test validitas API Key untuk provider tertentu
 app.post("/api/keys/test", async (req, res) => {
   const { provider, apiKey } = req.body;
-
-  if (!apiKey) {
-    return res.status(400).json({ valid: false, error: "API Key tidak boleh kosong" });
-  }
 
   console.log(`🧪 Mengetes API Key untuk provider: ${provider}...`);
   try {
@@ -4579,6 +4689,40 @@ app.post("/api/keys/test", async (req, res) => {
         return res.json({ valid: true });
       } else {
         throw new Error("Respons dari 9Router tidak valid");
+      }
+    } else if (provider === "custom" || provider === "custom-llm" || (typeof provider === 'string' && provider.startsWith("custom_"))) {
+      const targetSlotId = (provider === "custom" || provider === "custom-llm") ? "custom_1" : provider;
+      const targetProvider = customLlmProviders.find(p => p.id === targetSlotId);
+
+      const baseUrl = req.body.apiBaseUrl || targetProvider?.url || "https://api.openai.com/v1";
+      const model = req.body.apiModel || targetProvider?.model || "gpt-4o";
+      const testKey = req.body.apiKey !== undefined ? req.body.apiKey : targetProvider?.key;
+      const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+      
+      const headers = { "Content-Type": "application/json" };
+      if (testKey && testKey !== "TIDAK_ADA" && testKey !== "kosong") {
+        headers["Authorization"] = `Bearer ${testKey}`;
+      }
+
+      console.log(`🧪 Mengetes Custom LLM (${targetSlotId}) pada ${url} dengan model ${model}...`);
+      const response = await axios.post(
+        url,
+        {
+          model: model,
+          messages: [
+            { role: "user", content: "Hello" }
+          ],
+          max_tokens: 5
+        },
+        {
+          headers: headers,
+          timeout: 15000
+        }
+      );
+      if (response.data && response.data.choices && response.data.choices[0]) {
+        return res.json({ valid: true });
+      } else {
+        throw new Error("Respons dari Custom LLM tidak valid");
       }
     } else {
       return res.status(400).json({ valid: false, error: "Provider tidak dikenal" });
@@ -5446,6 +5590,43 @@ app.post("/api/trends/analyze", async (req, res) => {
   } catch (error) {
     console.error("❌ Gagal menganalisis tren dengan AI:", error.message);
     res.status(500).json({ error: "Gagal memproses analisis tren dengan AI", details: error.message });
+  }
+});
+// Endpoint for AI HTML Compiler Chat Assistant
+app.post("/api/compiler/chat", async (req, res) => {
+  try {
+    const { prompt, currentCode, preferModel } = req.body;
+    if (!prompt || !prompt.trim()) {
+      return res.status(400).json({ error: "Prompt tidak boleh kosong." });
+    }
+
+    const systemContext = `Anda adalah AI Creative Animation Code Generator profesional untuk HTML/CSS/JS Remotion Stock Video.
+Tugas Anda: Hasilkan atau perbarui kode HTML animasi mandiri (standalone HTML dengan CSS/JS internal) berdasarkan permintaan pengguna.
+
+Aturan Wajib:
+1. Kembalikan HANYA dokumen HTML lengkap (dimulai dengan <!DOCTYPE html> dan diakhiri dengan </html>) yang dapat langsung dieksekusi di iframe browser.
+2. Tempatkan semua CSS dalam <style> dan JS dalam <script>.
+3. Gunakan animasi CSS Keyframes atau GSAP/Vanilla JS yang halus, modern, dan looped (berulang tanpa jeda).
+4. Jangan sertakan teks penjelasan, markdown wrapper, atau obrolan luar. HANYA KODE HTML MURNI.
+
+${currentCode ? `Kode HTML saat ini yang perlu diperbarui/di-tweak:\n\`\`\`html\n${currentCode}\n\`\`\`\n` : ''}
+
+Permintaan Pengguna:
+${prompt}`;
+
+    console.log(`🤖 [Compiler AI] Mengolah prompt: "${prompt.slice(0, 50)}..." dengan model: ${preferModel || 'auto'}`);
+    const aiResponse = await callAIWithFallback(systemContext, { preferModel: preferModel || 'auto' });
+
+    let cleanHtml = aiResponse;
+    const match = aiResponse.match(/```html\s*([\s\S]*?)\s*```/i) || aiResponse.match(/```\s*([\s\S]*?)\s*```/i);
+    if (match && match[1]) {
+      cleanHtml = match[1].trim();
+    }
+
+    res.json({ success: true, code: cleanHtml });
+  } catch (err) {
+    console.error("❌ Gagal memproses AI Compiler Chat:", err);
+    res.status(500).json({ error: err.message || "Gagal menggenerate kode animasi dengan AI" });
   }
 });
 
