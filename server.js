@@ -5601,41 +5601,81 @@ app.post("/api/trends/analyze", async (req, res) => {
     res.status(500).json({ error: "Gagal memproses analisis tren dengan AI", details: error.message });
   }
 });
-// Endpoint for AI HTML Compiler Chat Assistant
+// Endpoint for AI HTML Compiler Chat Assistant (Smart Intent & Slash Commands)
 app.post("/api/compiler/chat", async (req, res) => {
   try {
-    const { prompt, currentCode, preferModel } = req.body;
+    const { prompt, currentCode, preferModel, mode = 'auto' } = req.body;
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({ error: "Prompt tidak boleh kosong." });
     }
 
-    const systemContext = `Anda adalah AI Creative Animation Code Generator profesional untuk HTML/CSS/JS Remotion Stock Video.
-Tugas Anda: Hasilkan atau perbarui kode HTML animasi mandiri (standalone HTML dengan CSS/JS internal) berdasarkan permintaan pengguna.
-
-Aturan Wajib:
-1. Kembalikan HANYA dokumen HTML lengkap (dimulai dengan <!DOCTYPE html> dan diakhiri dengan </html>) yang dapat langsung dieksekusi di iframe browser.
-2. Tempatkan semua CSS dalam <style> dan JS dalam <script>.
-3. Gunakan animasi CSS Keyframes atau GSAP/Vanilla JS yang halus, modern, dan looped (berulang tanpa jeda).
-4. Jangan sertakan teks penjelasan, markdown wrapper, atau obrolan luar. HANYA KODE HTML MURNI.
-
-${currentCode ? `Kode HTML saat ini yang perlu diperbarui/di-tweak:\n\`\`\`html\n${currentCode}\n\`\`\`\n` : ''}
-
-Permintaan Pengguna:
-${prompt}`;
-
-    console.log(`🤖 [Compiler AI] Mengolah prompt: "${prompt.slice(0, 50)}..." dengan model: ${preferModel || 'auto'}`);
-    const aiResponse = await callAIWithFallback(systemContext, { preferModel: preferModel || 'auto' });
-
-    let cleanHtml = aiResponse;
-    const match = aiResponse.match(/```html\s*([\s\S]*?)\s*```/i) || aiResponse.match(/```\s*([\s\S]*?)\s*```/i);
-    if (match && match[1]) {
-      cleanHtml = match[1].trim();
+    let modeInstruction = "";
+    if (mode === 'new') {
+      modeInstruction = "PERINTAH: PENGGUNA MEMINTA BUAT ANIMASI BARU DARI NOL. Abaikan kode lama jika ada, buat dokumen HTML animasi baru yang lengkap dan indah dari awal.";
+    } else if (mode === 'edit') {
+      modeInstruction = "PERINTAH: PENGGUNA MEMINTA MENGEDIT / MEMPERBARUI ANIMASI YANG ADA. Gunakan kode HTML saat ini di bawah ini dan ubah/tambah sesuai instruksi pengguna.";
     }
 
-    res.json({ success: true, code: cleanHtml });
+    const systemContext = `Anda adalah AI Creative Animation Code Generator & Assistant profesional untuk HTML/CSS/JS Remotion Stock Video (seperti v0.dev / Claude Artifacts).
+
+Tugas Anda:
+${modeInstruction || 'Analisis niat (intent) pesan pengguna (apakah percakapan biasa atau perintah animasi):'}
+
+Aturan Respons:
+1. Jika ini percakapan biasa / sapaan / pertanyaan:
+   - Jawab secara ramah dan informatif dalam Bahasa Indonesia.
+   - Atur "isCodeUpdate": false.
+
+2. Jika ini perintah MEMBUAT BARU atau MENGEDIT animasi HTML/CSS:
+   - Buat atau perbarui dokumen HTML animasi mandiri (lengkap dengan CSS <style> & JS <script>).
+   - Pastikan animasi looped (berulang tanpa jeda) dan visualnya sangat menarik (efek glowing, smooth gradients, kinetic motion).
+   - Jawab dengan penjelasan singkat tentang apa yang Anda buat/ubah di "message".
+   - Atur "isCodeUpdate": true dan tempatkan kode HTML lengkap di "code".
+
+Format Wajib Respons (HANYA JSON MURNI TANPA MARKDOWN):
+{
+  "isCodeUpdate": true atau false,
+  "message": "Pesan percakapan atau penjelasan perubahan untuk pengguna dalam Bahasa Indonesia",
+  "code": "<!DOCTYPE html>... (dokumen HTML lengkap jika isCodeUpdate === true, jika false isi string kosong)"
+}
+
+${currentCode && mode !== 'new' ? `Kode HTML animasi saat ini di Canvas/Preview:\n\`\`\`html\n${currentCode}\n\`\`\`\n` : ''}
+
+Pesan Pengguna:
+${prompt}`;
+
+    console.log(`🤖 [Compiler AI Chat] Mengolah prompt: "${prompt.slice(0, 50)}..." dengan model: ${preferModel || 'auto'}`);
+    const aiResponse = await callAIWithFallback(systemContext, { preferModel: preferModel || 'auto' });
+
+    let parsed = null;
+    try {
+      let jsonText = aiResponse.trim();
+      const match = jsonText.match(/```json\s*([\s\S]*?)\s*```/i) || jsonText.match(/```\s*([\s\S]*?)\s*```/i);
+      if (match && match[1]) jsonText = match[1].trim();
+      parsed = JSON.parse(jsonText);
+    } catch (e) {
+      // Fallback parser if LLM didn't format strict JSON
+      const isHtml = aiResponse.includes('<html') || aiResponse.includes('<!DOCTYPE') || aiResponse.includes('<style');
+      let cleanCode = aiResponse;
+      const htmlMatch = aiResponse.match(/```html\s*([\s\S]*?)\s*```/i) || aiResponse.match(/```\s*([\s\S]*?)\s*```/i);
+      if (htmlMatch && htmlMatch[1]) cleanCode = htmlMatch[1].trim();
+
+      parsed = {
+        isCodeUpdate: isHtml,
+        message: isHtml ? "🎉 Kode animasi telah dibuat dan diperbarui di Live Preview!" : aiResponse,
+        code: isHtml ? cleanCode : ""
+      };
+    }
+
+    res.json({
+      success: true,
+      isCodeUpdate: !!parsed.isCodeUpdate,
+      message: parsed.message || "Selesai memproses.",
+      code: parsed.code || ""
+    });
   } catch (err) {
     console.error("❌ Gagal memproses AI Compiler Chat:", err);
-    res.status(500).json({ error: err.message || "Gagal menggenerate kode animasi dengan AI" });
+    res.status(500).json({ error: err.message || "Gagal memproses percakapan AI" });
   }
 });
 
