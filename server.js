@@ -1200,7 +1200,7 @@ app.post("/api/save-item", (req, res) => {
     const index = items.findIndex(i => i.id === item.id);
     if (index !== -1) {
       // Track if user manually changed video config fields
-      const videoConfigFields = ['loop', 'transparent', 'animationDuration', 'fps', 'addTransparentScene'];
+      const videoConfigFields = ['loop', 'transparent', 'animationDuration', 'fps', 'addTransparentScene', 'proresProfile'];
       if (videoConfigFields.some(f => item[f] !== undefined)) {
         item._userSetVideoConfig = true;
       }
@@ -1315,6 +1315,63 @@ app.post("/api/batch-delete", (req, res) => {
   }
 });
 
+
+// Variable to track Remotion Studio process
+let remotionStudioProcess = null;
+
+// POST: Open/update Remotion Studio for instant live preview
+app.post("/api/preview-studio", async (req, res) => {
+  const { item } = req.body;
+  if (!item || !item.id) {
+    return res.status(400).json({ error: "Item tidak valid" });
+  }
+
+  try {
+    if (item.promptCode) {
+      fs.writeFileSync("src/Composition.tsx", item.promptCode);
+      console.log(`📝 [Studio] Updated src/Composition.tsx for ${item.id}`);
+    }
+
+    const studioProps = {
+      durationInFrames: Number(item.durationInFrames) || ((Number(item.animationDuration) || 10) * (Number(item.fps) || 60)),
+      fps: Number(item.fps) || 60,
+      addTransparentScene: item.addTransparentScene === true || item.addTransparentScene === 'true'
+    };
+    fs.writeFileSync("src/studio-props.json", JSON.stringify(studioProps, null, 2));
+    console.log(`⚙️ [Studio] Updated studio-props.json:`, studioProps);
+
+    let isRunning = false;
+    try {
+      const net = require("net");
+      const checkPort = (port) => new Promise((resolve) => {
+        const client = new net.Socket();
+        client.setTimeout(1000);
+        client.on("connect", () => { client.destroy(); resolve(true); });
+        client.on("error", () => { client.destroy(); resolve(false); });
+        client.on("timeout", () => { client.destroy(); resolve(false); });
+        client.connect(port, "127.0.0.1");
+      });
+      isRunning = await checkPort(3000) || await checkPort(3001);
+    } catch (_) {}
+
+    if (!isRunning && !remotionStudioProcess) {
+      console.log("🚀 Launching Remotion Studio on port 3000...");
+      const { spawn } = require("child_process");
+      remotionStudioProcess = spawn(
+        process.platform === "win32" ? "npx.cmd" : "npx",
+        ["remotion", "studio", "src/index.ts", "--port=3000", "--bind-to-any-host"],
+        { cwd: __dirname, stdio: "ignore", windowsHide: true }
+      );
+      remotionStudioProcess.on("exit", () => { remotionStudioProcess = null; });
+      await new Promise(r => setTimeout(r, 3000));
+    }
+
+    res.json({ success: true, studioUrl: "http://localhost:3000" });
+  } catch (error) {
+    console.error("❌ Gagal launching Remotion Studio:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // POST: Render low-res preview MP4 lokal
 app.post("/api/render-preview", async (req, res) => {
@@ -1588,7 +1645,15 @@ app.get("/api/queue-status", (req, res) => {
 // Sequential Git operator lock (Mutex) to prevent local commit/push conflicts
 let gitMutex = Promise.resolve();
 async function runGitTask(fn) {
-  const next = gitMutex.then(() => fn());
+  const next = gitMutex.then(async () => {
+    // Safety: abort any stale rebase state before running git operations
+    try {
+      execSync("git rebase --abort 2>/dev/null", { stdio: "ignore" });
+    } catch (_) {
+      // No rebase in progress — good
+    }
+    return fn();
+  });
   gitMutex = next.catch(() => {});
   return next;
 }
@@ -2552,8 +2617,8 @@ ${cleanHtmlForAnalysis.substring(0, 3000)}`;
     const runCompositionTypecheck = () => {
       // Prefer local tsc binary; fall back to npx. Quote paths for Windows spaces.
       const cmd = fs.existsSync(tscBin)
-        ? `"${process.execPath}" "${tscBin}" --noEmit --pretty false --jsx react-jsx --esModuleInterop --skipLibCheck --strict --module commonjs --target ES2018 --moduleResolution node --lib es2018,dom src/Composition.tsx src/Root.tsx`
-        : `npx tsc --noEmit --pretty false --noUnusedLocals false --noUnusedParameters false`;
+        ? `"${process.execPath}" "${tscBin}" --noEmit --pretty false --jsx react-jsx --esModuleInterop --resolveJsonModule --skipLibCheck --strict --module commonjs --target ES2018 --moduleResolution node --lib es2018,dom src/Composition.tsx src/Root.tsx`
+        : `npx tsc --noEmit --pretty false --resolveJsonModule --noUnusedLocals false --noUnusedParameters false`;
       return execSync(cmd, {
         cwd: __dirname,
         encoding: "utf8",
@@ -3155,6 +3220,15 @@ async function runPreviewRenderBackground(itemId) {
         execSync("git pull origin main --rebase", { stdio: "inherit" });
       } catch (pullErr) {
         console.error("Gagal melakukan git pull:", pullErr.message);
+        addTaskLog(itemId, `⚠️ Git pull gagal: ${pullErr.message}. Mencoba abort rebase...`, "warning");
+        // Abort rebase if it was left in progress to unblock subsequent git operations
+        try {
+          execSync("git rebase --abort", { stdio: "inherit" });
+          addTaskLog(itemId, "Rebase di-abort. Mencoba pull lagi...", "info");
+          execSync("git pull origin main --rebase", { stdio: "inherit" });
+        } catch (retryErr) {
+          addTaskLog(itemId, `❌ Git sync gagal setelah retry: ${retryErr.message}. Melanjutkan dengan state lokal...`, "warning");
+        }
       }
 
       addTaskLog(itemId, "Mulai menulis src/Composition.tsx...", "info");
@@ -3385,6 +3459,14 @@ async function run4kRenderBackground(itemId) {
         execSync("git pull origin main --rebase", { stdio: "inherit" });
       } catch (pullErr) {
         console.error("Gagal melakukan git pull:", pullErr.message);
+        addTaskLog(itemId, `⚠️ Git pull gagal: ${pullErr.message}. Mencoba abort rebase...`, "warning");
+        try {
+          execSync("git rebase --abort", { stdio: "inherit" });
+          addTaskLog(itemId, "Rebase di-abort. Mencoba pull lagi...", "info");
+          execSync("git pull origin main --rebase", { stdio: "inherit" });
+        } catch (retryErr) {
+          addTaskLog(itemId, `❌ Git sync gagal setelah retry: ${retryErr.message}. Melanjutkan dengan state lokal...`, "warning");
+        }
       }
 
       addTaskLog(itemId, "Mulai menulis src/Composition.tsx...", "info");
@@ -3477,6 +3559,7 @@ async function run4kRenderBackground(itemId) {
             judul: item.judul || "Stock Video",
             keywords: item.keywords || "motion, abstract, loop",
             transparent: String(item.transparent || false),
+            prores_profile: String(item.proresProfile || (item.transparent ? '4444' : '422hq')),
             has_threejs: ((item.promptCode || '').includes('THREE') || (item.promptCode || '').includes("getContext('2d')") || (item.promptCode || '').includes('shadowBlur')) ? 'true' : 'false'
           }
         },
@@ -3773,11 +3856,15 @@ app.post("/api/trigger-4k/:id", async (req, res) => {
       return res.status(400).json({ error: "Render 4K sedang berjalan atau dalam antrean" });
     }
 
+    if (req.body && req.body.proresProfile) {
+      item.proresProfile = req.body.proresProfile;
+    }
+
     item.statusRender4k = 'queued';
     if (!item.logs) item.logs = [];
     const timeStr = new Date().toLocaleTimeString('id-ID');
     item.logs.push({ message: `=================================`, type: "info", time: timeStr });
-    item.logs.push({ message: `📥 Ditambahkan ke antrean Render 4K di server.`, type: "info", time: timeStr });
+    item.logs.push({ message: `📥 Ditambahkan ke antrean Render 4K (${item.proresProfile === '4444' ? 'ProRes 4444 - Alpha Transparan' : 'ProRes 422 HQ - Opaque/Hitam'}) di server.`, type: "info", time: timeStr });
     item.lastLogMessage = "Mengantre untuk render 4K...";
     
     fs.writeFileSync(dbPath, JSON.stringify(items, null, 2));

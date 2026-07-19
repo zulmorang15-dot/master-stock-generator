@@ -1,38 +1,37 @@
 import React from 'react';
-import { useVideoConfig, useCurrentFrame, interpolate, Easing } from 'remotion';
+import { useVideoConfig, useCurrentFrame, interpolate } from 'remotion';
 
-const ORIGINAL_WIDTH = 1920;
-const ORIGINAL_HEIGHT = 1080;
-
-const GlowingBox: React.FC<{ addTransparentScene?: boolean }> = ({ addTransparentScene = false }) => {
-  const { width, height, fps, durationInFrames } = useVideoConfig();
+export const GlowingHexagon: React.FC<{ addTransparentScene?: boolean }> = ({
+  addTransparentScene = false,
+}) => {
+  const { width, height, durationInFrames } = useVideoConfig();
   const rawFrame = useCurrentFrame();
 
-  // Dual-scene transparent extension
+  const ORIGINAL_WIDTH = 1920;
+  const ORIGINAL_HEIGHT = 1080;
+
   const baseFrames = addTransparentScene ? Math.floor(durationInFrames / 2) : durationInFrames;
   const isTransparentSection = addTransparentScene && rawFrame >= baseFrames;
   const frame = isTransparentSection ? rawFrame - baseFrames : rawFrame;
 
-  // Seamless loop: 8 seconds at 30fps = 240 frames
-  const totalFrames = 240;
-  const localFrame = frame % totalFrames;
-
-  // Scale to fill 16:9
   const scaleFactor = Math.min(width / ORIGINAL_WIDTH, height / ORIGINAL_HEIGHT);
 
-  // Animation parameters
-  const translateY = interpolate(localFrame, [0, totalFrames], [0, 0], {
-    easing: Easing.inOut(Easing.sin),
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  // Actually we need sin-based translation. Use interpolate with a custom mapping? Better to compute directly.
-  // Use Math.sin with frame-based angle.
-  const angle = (localFrame / totalFrames) * 2 * Math.PI;
-  const yOffset = Math.sin(angle) * 40;
-  const rotation = (localFrame / totalFrames) * 360; // degrees
+  // Rotate exactly 3 full times (1080 degrees) over the course of the video to ensure a seamless loop.
+  const rotation = interpolate(frame, [0, baseFrames], [0, 1080]);
 
-  const wrapperStyle: React.CSSProperties = {
+  const bgStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: isTransparentSection ? 'transparent' : '#02111b',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  const containerStyle: React.CSSProperties = {
     width: ORIGINAL_WIDTH,
     height: ORIGINAL_HEIGHT,
     position: 'absolute',
@@ -41,27 +40,38 @@ const GlowingBox: React.FC<{ addTransparentScene?: boolean }> = ({ addTransparen
     transform: `translate(-50%, -50%) scale(${scaleFactor})`,
     transformOrigin: 'center center',
     overflow: 'hidden',
-    backgroundColor: isTransparentSection ? 'transparent' : '#0a0a12',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   };
 
-  const boxStyle: React.CSSProperties = {
-    width: 120,
-    height: 120,
-    borderRadius: 24,
-    background: 'linear-gradient(135deg, #22d3ee, #6366f1)',
-    boxShadow: '0 0 40px rgba(34,211,238,0.5)',
-    transform: `translateY(${yOffset}px) rotate(${rotation}deg)`,
+  // Using CSS drop-shadow filter on a parent wrapper to preserve and correctly render
+  // the high-fidelity glow effect, as browser clip-path masks traditional box-shadows.
+  const glowWrapperStyle: React.CSSProperties = {
+    filter: 'drop-shadow(0 0 40px #10b981)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: `rotate(${rotation}deg)`,
+  };
+
+  const hexStyle: React.CSSProperties = {
+    width: '250px',
+    height: '250px',
+    backgroundColor: '#10b981',
+    clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
   };
 
   return (
-    <div style={wrapperStyle}>
-      <div style={boxStyle} />
+    <div style={bgStyle}>
+      <div style={containerStyle}>
+        <div style={glowWrapperStyle}>
+          <div id="hex" style={hexStyle} />
+        </div>
+      </div>
     </div>
   );
 };
 
-export default GlowingBox;
+export default GlowingHexagon;
 // END_OF_FILE

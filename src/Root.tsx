@@ -1,29 +1,31 @@
 import { Composition, getInputProps } from "remotion";
 import MyComposition from "./Composition";
-import { Dashboard } from "./Dashboard";
 import React from "react";
 
+// Safely read studio-props.json using require to avoid TS2732
+let studioProps: any = {};
+try {
+  studioProps = require("./studio-props.json");
+} catch (_) {}
 
 export const RemotionRoot: React.FC = () => {
-  // Membaca durasi dinamis yang dikirim dari cloud, jika tidak ada default-nya 150 frame
-  const config = (getInputProps() as any) || {};
-  const baseDuration = config.durationInFrames || 150;
+  const inputConfig = (getInputProps() as any) || {};
+  const config = { ...studioProps, ...inputConfig };
+  
+  const baseDuration = Number(config.durationInFrames) || 300;
   const addTransparentScene = config.addTransparentScene === true || config.addTransparentScene === 'true';
-  // Jika fitur scene transparan aktif, durasi digandakan: paruh pertama opaque, paruh kedua transparent
   const dynamicDuration = addTransparentScene ? baseDuration * 2 : baseDuration;
-  const dynamicFps = config.fps || 30;
+  const dynamicFps = Number(config.fps) || 60;
 
   return (
     <>
-      <Dashboard />
       <Composition
         id="Composition"
         component={MyComposition}
-        durationInFrames={dynamicDuration} // <-- Sekarang durasinya dinamis!
+        durationInFrames={dynamicDuration}
         fps={dynamicFps}
         width={1920}
         height={1080}
-        // Teruskan flag ke komponen agar tahu harus membagi scene
         defaultProps={{ addTransparentScene }}
       />
     </>

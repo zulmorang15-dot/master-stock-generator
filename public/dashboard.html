@@ -3492,6 +3492,10 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       const videoSrc = item.previewUrl.startsWith('http://') || item.previewUrl.startsWith('https://') ? item.previewUrl : `/api/preview-file/${item.id}`;
       return `<div style="display:flex; flex-direction:column; gap:6px; width:100%;"><video class="preview-video" src="${videoSrc}#t=0.1" preload="none" controls muted loop playsinline></video><button class="btn-browse" aria-label="Buka preview ${escHtml(item.fileName || item.id)}" onclick="openVideoModal('${videoSrc}')" style="border-color:var(--cyan); color:var(--cyan); background:var(--cyan-dim); width:100%;">Perbesar preview</button></div>`;
     }
+    if (item.htmlPreview) {
+      const studioBtn = item.promptCode ? `<button class="btn-browse" onclick="openLiveStudio('${item.id}')" style="border-color:#34d399; color:#34d399; background:rgba(16,185,129,0.15); width:100%; font-size:11px; padding:4px 8px; margin-top:2px;">🎬 Remotion Live Studio</button>` : '';
+      return `<div style="display:flex; flex-direction:column; gap:6px; width:100%;"><iframe srcdoc="${escHtml(item.htmlPreview)}" style="width:100%; height:110px; border:1px solid rgba(255,255,255,0.15); border-radius:6px; background:#0a0a12;" sandbox="allow-scripts allow-same-origin"></iframe>${studioBtn}</div>`;
+    }
     return `<div class="asset-preview__empty">Menunggu preview</div>`;
   }
 
@@ -3499,7 +3503,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const isTsxRunning = item.statusConvertTsx === 'queued' || item.statusConvertTsx === 'processing-tsx';
     const isPreviewRunning = item.statusConvertTsx === 'processing-preview';
     const has4k = !!item.outputPath4k;
-    const videoConfig = `<div class="video-config"><select id="loop_${item.id}" class="select-input" onchange="saveField('${item.id}', 'loop', this.value === 'true')" title="Loop video"><option value="true" ${item.loop !== false ? 'selected' : ''}>Loop</option><option value="false" ${item.loop === false ? 'selected' : ''}>No loop</option></select><select id="transparent_${item.id}" class="select-input" onchange="saveField('${item.id}', 'transparent', this.value === 'true')" title="Transparansi"><option value="false" ${item.transparent !== true ? 'selected' : ''}>Solid</option><option value="true" ${item.transparent === true ? 'selected' : ''}>Alpha</option></select><select id="duration_${item.id}" class="select-input" onchange="updateRowDuration('${item.id}', Number(this.value))" title="Durasi"><option value="5" ${item.animationDuration === 5 ? 'selected' : ''}>5s</option><option value="8" ${item.animationDuration === 8 ? 'selected' : ''}>8s</option><option value="10" ${item.animationDuration === 10 || !item.animationDuration ? 'selected' : ''}>10s</option><option value="12" ${item.animationDuration === 12 ? 'selected' : ''}>12s</option><option value="15" ${item.animationDuration === 15 ? 'selected' : ''}>15s</option><option value="20" ${item.animationDuration === 20 ? 'selected' : ''}>20s</option><option value="30" ${item.animationDuration === 30 ? 'selected' : ''}>30s</option></select><select id="fps_${item.id}" class="select-input" onchange="updateRowFps('${item.id}', Number(this.value))" title="Frame rate"><option value="30" ${item.fps === 30 || !item.fps ? 'selected' : ''}>30fps</option><option value="60" ${item.fps === 60 ? 'selected' : ''}>60fps</option></select></div>`;
+    const videoConfig = `<div class="video-config"><select id="loop_${item.id}" class="select-input" onchange="saveField('${item.id}', 'loop', this.value === 'true')" title="Loop video"><option value="true" ${item.loop !== false ? 'selected' : ''}>Loop</option><option value="false" ${item.loop === false ? 'selected' : ''}>No loop</option></select><select id="transparent_${item.id}" class="select-input" onchange="saveField('${item.id}', 'transparent', this.value === 'true')" title="Transparansi"><option value="false" ${item.transparent !== true ? 'selected' : ''}>Solid</option><option value="true" ${item.transparent === true ? 'selected' : ''}>Alpha</option></select><select id="proresProfile_${item.id}" class="select-input" onchange="saveField('${item.id}', 'proresProfile', this.value)" title="Format Varian ProRes 4K"><option value="422hq" ${item.proresProfile === '422hq' || !item.proresProfile ? 'selected' : ''}>ProRes 422 HQ (No. 3)</option><option value="4444" ${item.proresProfile === '4444' ? 'selected' : ''}>ProRes 4444 (No. 2)</option></select><select id="duration_${item.id}" class="select-input" onchange="updateRowDuration('${item.id}', Number(this.value))" title="Durasi"><option value="5" ${item.animationDuration === 5 ? 'selected' : ''}>5s</option><option value="8" ${item.animationDuration === 8 ? 'selected' : ''}>8s</option><option value="10" ${item.animationDuration === 10 || !item.animationDuration ? 'selected' : ''}>10s</option><option value="12" ${item.animationDuration === 12 ? 'selected' : ''}>12s</option><option value="15" ${item.animationDuration === 15 ? 'selected' : ''}>15s</option><option value="20" ${item.animationDuration === 20 ? 'selected' : ''}>20s</option><option value="30" ${item.animationDuration === 30 ? 'selected' : ''}>30s</option></select><select id="fps_${item.id}" class="select-input" onchange="updateRowFps('${item.id}', Number(this.value))" title="Frame rate"><option value="30" ${item.fps === 30 || !item.fps ? 'selected' : ''}>30fps</option><option value="60" ${item.fps === 60 ? 'selected' : ''}>60fps</option></select></div>`;
     const fileLinks = [
       has4k ? `<a href="/api/4k-file/${item.id}" class="btn-action btn-dl" style="text-decoration:none;" title="Download MOV">MOV</a>` : '',
       has4k ? `<a href="/api/download-4k-zip/${item.id}" class="btn-action btn-dl" style="text-decoration:none;" title="Download ZIP">ZIP</a>` : '',
@@ -3533,16 +3537,88 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     const seoText = isSeoRunning ? 'Generating metadata...' : hasTitle ? 'Regen metadata' : 'Generate metadata';
     const fourKText = is4kRunning ? 'Rendering 4K...' : has4k ? 'Regen 4K' : 'Generate 4K';
 
-    return `<div class="asset-actions"><div class="asset-section-label">Next action</div><div class="asset-actions__primary">${aiSelect}<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${isAnyRunning ? 'disabled' : ''} style="background:rgba(56,189,248,.13); border:1px solid rgba(56,189,248,.35); color:var(--cyan);">${tsxText}</button><button class="btn-action" onclick="triggerPreview('${item.id}')" ${!canPreview || isSeoRunning || is4kRunning ? 'disabled' : ''} style="background:rgba(124,58,237,.13); border:1px solid rgba(124,58,237,.35); color:#a78bfa;">${previewText}</button><button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${isAnyRunning || !hasPreview ? 'disabled' : ''}>${seoText}</button><button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${isAnyRunning || !hasTitle ? 'disabled' : ''}>${fourKText}</button></div><div class="asset-actions__log"><div class="asset-section-label">Live status log</div>${renderLogCell(item)}</div></div>`;
+    return `<div class="asset-actions"><div class="asset-section-label">Next action</div><div class="asset-actions__primary">${aiSelect}<button class="btn-action" onclick="generateTsx('${item.id}', '${item.statusConvertTsx || 'waiting'}')" ${isAnyRunning ? 'disabled' : ''} style="background:rgba(56,189,248,.13); border:1px solid rgba(56,189,248,.35); color:var(--cyan);">${tsxText}</button><button class="btn-action" onclick="openLiveStudio('${item.id}')" ${!hasTsx ? 'disabled' : ''} style="background:rgba(16,185,129,.13); border:1px solid rgba(16,185,129,.35); color:#34d399;" title="Preview TSX Remotion secara live tanpa konversi MP4">🎬 Studio Live</button><button class="btn-action" onclick="triggerPreview('${item.id}')" ${!canPreview || isSeoRunning || is4kRunning ? 'disabled' : ''} style="background:rgba(124,58,237,.13); border:1px solid rgba(124,58,237,.35); color:#a78bfa;">${previewText}</button><button class="btn-action btn-retry" onclick="regenerateSeo('${item.id}')" ${isAnyRunning || !hasPreview ? 'disabled' : ''}>${seoText}</button><button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" ${isAnyRunning || !hasTitle ? 'disabled' : ''}>${fourKText}</button></div><div class="asset-actions__log"><div class="asset-section-label">Live status log</div>${renderLogCell(item)}</div></div>`;
+  }
+
+  async function openLiveStudio(id) {
+    const items = typeof cachedItems !== 'undefined' ? cachedItems : [];
+    const item = items.find(i => i.id === id);
+    if (!item) {
+      showToast('⚠️ Item tidak ditemukan', 'warning');
+      return;
+    }
+    showToast('🚀 Menyiapkan Remotion Studio Live...', 'info');
+    try {
+      const resp = await fetch('/api/preview-studio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+
+      const host = window.location.hostname || 'localhost';
+      const targetUrl = `http://${host}:3000/Composition`;
+
+      const modal = document.getElementById('studioModal');
+      const iframe = document.getElementById('studioIframe');
+      const titleEl = document.getElementById('studioModalTitle');
+      const extLink = document.getElementById('studioExternalLink');
+
+      if (titleEl) titleEl.innerText = `— ${item.judul || item.id}`;
+      if (extLink) extLink.href = targetUrl;
+      if (iframe) iframe.src = targetUrl;
+      if (modal) modal.style.display = 'flex';
+
+      showToast('✅ Remotion Studio Live Siap!', 'success');
+    } catch(err) {
+      showToast('❌ Gagal: ' + err.message, 'error');
+    }
+  }
+
+  function closeStudioModal() {
+    const modal = document.getElementById('studioModal');
+    const iframe = document.getElementById('studioIframe');
+    if (iframe) iframe.src = '';
+    if (modal) modal.style.display = 'none';
   }
 
   async function trigger4K(id) {
-    if (!confirm(`Generate 4K ProRes untuk "${id}"?\n\nProses ini akan git push dan trigger GitHub Actions (~10-15 menit).`)) return;
+    const items = typeof cachedItems !== 'undefined' ? cachedItems : [];
+    const item = items.find(i => i.id === id);
+    const defaultVal = (item && item.proresProfile) === '4444' ? '2' : '3';
+
+    const input = prompt(
+      `Pilih Varian ProRes untuk render 4K "${id}":\n\n` +
+      `[3] Apple ProRes 422 HQ (Nomor 3) -> Opaque (10-bit, area transparan diubah jadi hitam)\n` +
+      `[2] Apple ProRes 4444   (Nomor 2) -> Alpha/Transparan (12-bit + Alpha Channel)\n\n` +
+      `Ketik '3' atau '2':`,
+      defaultVal
+    );
+
+    if (!input) return;
+
+    const choice = input.trim();
+    if (choice !== '2' && choice !== '3') {
+      showToast('⚠️ Pilihan tidak valid. Ketik 3 atau 2.', 'warning');
+      return;
+    }
+
+    const proresProfile = choice === '2' ? '4444' : '422hq';
+    if (item) item.proresProfile = proresProfile;
+
+    const profileName = proresProfile === '4444' ? 'ProRes 4444 (No. 2 - Alpha Transparan)' : 'ProRes 422 HQ (No. 3 - Background Hitam/Opaque)';
+    showToast(`🚀 Memulai Render 4K (${profileName})...`, 'info');
+
     try {
-      const resp = await fetch(`/api/trigger-4k/${id}`, { method: 'POST' });
+      const resp = await fetch(`/api/trigger-4k/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proresProfile })
+      });
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
-      showToast('🚀 4K render dipicu! Pantau di log box.', 'success');
+      showToast(`🚀 Render 4K (${profileName}) dipicu! Pantau di log box.`, 'success');
       startTaskLogStream(id);
       loadResults();
     } catch(err) {
@@ -4795,6 +4871,23 @@ Saran Tags/Keywords: ${tags}`;
 <div id="videoModal" class="modal">
   <span class="close-modal" onclick="closeVideoModal()">&times;</span>
   <video id="modalVideoPlayer" controls autoplay muted loop style="margin:auto; display:block; max-width:90%; max-height:90%; border-radius:8px; border:3px solid var(--cyan); box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); background:#000;"></video>
+</div>
+
+<!-- Modal Remotion Studio Live -->
+<div id="studioModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.85); z-index:99999; justify-content:center; align-items:center; flex-direction:column;">
+  <div style="width:92vw; height:90vh; background:#0f0f17; border:1px solid rgba(56,189,248,0.3); border-radius:12px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px; background:rgba(255,255,255,0.04); border-bottom:1px solid rgba(255,255,255,0.1);">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-weight:600; color:#34d399; font-size:16px;">🎬 Remotion Live Studio Preview</span>
+        <span id="studioModalTitle" style="color:var(--text-dim); font-size:13px;"></span>
+      </div>
+      <div style="display:flex; align-items:center; gap:15px;">
+        <a id="studioExternalLink" href="#" target="_blank" style="color:var(--cyan); font-size:13px; text-decoration:none;">🔗 Buka di Tab Baru</a>
+        <span style="cursor:pointer; font-size:26px; color:#aaa; line-height:1;" onclick="closeStudioModal()">&times;</span>
+      </div>
+    </div>
+    <iframe id="studioIframe" style="width:100%; height:100%; border:none; background:#000;" allow="autoplay; fullscreen"></iframe>
+  </div>
 </div>
 
 </body>
