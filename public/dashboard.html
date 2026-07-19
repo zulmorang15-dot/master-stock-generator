@@ -3759,12 +3759,32 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       </div>`;
     }
     if (item.htmlPreview) {
-      // Kita pakai viewport 800x450 (16:9 standard) agar konten tidak terlihat terlalu kecil
-      // Inject minimal style agar tidak ada scrollbar dan ukuran body ter-lock di 800x450
-      const thumbStyle = 'html,body{margin:0!important;padding:0!important;overflow:hidden!important;width:800px!important;height:450px!important;box-sizing:border-box!important;}';
-      const thumbDoc = item.htmlPreview.includes('<head>')
-        ? item.htmlPreview.replace('<head>', `<head><style>${thumbStyle}</style>`)
-        : `<!DOCTYPE html><html><head><style>${thumbStyle}</style></head><body>${item.htmlPreview}</body></html>`;
+      // Viewport standard 800x450 (16:9) agar elemen dalam thumbnail proporsional
+      const styleBlock = `<style>
+        html, body {
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          width: 800px !important;
+          height: 450px !important;
+          max-width: 800px !important;
+          max-height: 450px !important;
+          box-sizing: border-box !important;
+          background: #0a0a12 !important;
+        }
+      </style>`;
+
+      // Cegah tag bersarang (nested html/body) yang merusak parser browser
+      let thumbDoc = item.htmlPreview.trim();
+      if (thumbDoc.includes('</head>')) {
+        thumbDoc = thumbDoc.replace('</head>', `${styleBlock}</head>`);
+      } else if (thumbDoc.includes('<body') || thumbDoc.includes('<html')) {
+        // Jika sudah ada body/html, tempelkan styleBlock di akhir dokumen (browser sangat toleran)
+        thumbDoc = thumbDoc + styleBlock;
+      } else {
+        // Jika hanya potongan kode/fragment saja
+        thumbDoc = `<!DOCTYPE html><html><head>${styleBlock}</head><body>${thumbDoc}</body></html>`;
+      }
 
       return `<div onclick="openHtmlModal('${item.id}')" title="Klik untuk preview HTML" style="width:84px; height:47px; border-radius:6px; overflow:hidden; border:1px solid rgba(56,189,248,0.5); background:#0a0a12; cursor:pointer; flex-shrink:0; position:relative; box-shadow:0 3px 10px rgba(0,0,0,0.6);">
         <iframe srcdoc="${escHtml(thumbDoc)}" style="width:800px; height:450px; transform:scale(${84/800}); transform-origin:0 0; border:none; display:block; background:#0a0a12; pointer-events:none; position:absolute; top:0; left:0;" sandbox="allow-scripts allow-same-origin"></iframe>
