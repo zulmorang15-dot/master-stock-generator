@@ -223,26 +223,25 @@
 </head>
 <body>
 
-  <header>
-    <div class="brand">
-      <div class="brand-icon">🤖</div>
+  <header class="header" style="background: linear-gradient(180deg, rgba(56,189,248,0.06) 0%, transparent 100%); border-bottom: 1px solid var(--border); padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px);">
+    <div class="brand" style="display: flex; align-items: center; gap: 12px;">
+      <div class="header-icon" style="font-size: 28px;">🎬</div>
       <div>
-        <div class="brand-title">AI Animation Studio & Compiler</div>
-        <div class="brand-sub">Chat AI + Compiler HTML Live Simulator</div>
+        <div class="header-title" style="font-size: 20px; font-weight: 800; background: linear-gradient(90deg, #38bdf8, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px;">Remotion Stock Generator</div>
+        <div class="header-sub" style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">AI Animation Studio & HTML Compiler Simulator</div>
       </div>
     </div>
 
-    <div class="nav-links">
-      <a href="/dashboard" class="nav-btn">📊 Dashboard</a>
-      <a href="/insights" class="nav-btn">📈 Trends & Explorer</a>
-      <a href="/compiler" class="nav-btn active">💻 AI Compiler</a>
-      
-      <select id="aiModelSelect" class="select-input" onchange="localStorage.setItem('compiler_selected_model', this.value)" style="margin-left: 8px; border-color: rgba(168,85,247,0.4); color: #c084fc; font-weight:700;">
-        <option value="auto">Auto AI (LLM)</option>
-        <option value="9router">9Router</option>
-      </select>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="header-nav" style="display:flex; align-items:center; gap:8px;">
+        <a href="/dashboard" class="nav-btn" style="padding:7px 14px; font-size:12px; font-weight:600; border-radius:8px; color:var(--text-mid); text-decoration:none; transition:all 0.2s;">🎬 Generator</a>
+        <a href="/insights" class="nav-btn" style="padding:7px 14px; font-size:12px; font-weight:600; border-radius:8px; color:var(--text-mid); text-decoration:none; transition:all 0.2s;">📈 Trends & Stock Explorer</a>
+        <a href="/compiler" class="nav-btn active" style="padding:7px 14px; font-size:12px; font-weight:600; border-radius:8px; background:rgba(168,85,247,0.15); border:1px solid #a855f7; color:#c084fc; text-decoration:none; transition:all 0.2s;">💻 HTML Compiler</a>
+      </div>
 
-      <button class="btn-refresh" id="btnApiKeys" onclick="toggleApiKeysPanel()" style="background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.4); color:var(--blue); padding:6px 12px; margin-left:8px;">🔑 API Keys</button>
+      <button class="btn-refresh" id="btnApiKeys" onclick="toggleApiKeysPanel()" style="display:flex; align-items:center; gap:6px; border-color:var(--blue); color:var(--blue); padding:6px 12px; background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.4); border-radius:8px; cursor:pointer; font-weight:600; font-size:12px;">
+        🔑 API Keys
+      </button>
     </div>
   </header>
 
@@ -250,11 +249,20 @@
     
     <!-- LEFT PANEL: AI CHAT ASSISTANT -->
     <div class="panel-card">
-      <div class="chat-header">
-        <div style="font-weight: 800; font-size: 14px; color: #c084fc; display: flex; align-items: center; gap: 8px;">
-          💬 AI Chat Animation Assistant
+      <div class="chat-header" style="padding: 12px 16px; background: rgba(168,85,247,0.06); border-bottom: 1px solid rgba(168,85,247,0.15); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+        <div style="font-weight: 800; font-size: 13px; color: #c084fc; display: flex; align-items: center; gap: 6px;">
+          💬 AI Chat Studio
         </div>
-        <button class="btn-refresh" onclick="clearChatHistory()" style="padding: 3px 8px; font-size: 11px; border-color: var(--text-dim); color: var(--text-dim); background: transparent;">Clear Chat</button>
+
+        <div style="display:flex; align-items:center; gap:6px;">
+          <select id="aiModelSelect" class="select-input" onchange="localStorage.setItem('compiler_selected_model', this.value)" style="border-color: rgba(168,85,247,0.4); color: #c084fc; font-weight:700; font-size:11px; padding:3px 8px; background:var(--bg3);">
+            <option value="auto">Auto AI (LLM)</option>
+            <option value="9router">9Router</option>
+          </select>
+
+          <button class="btn-refresh" onclick="startNewChatSession()" style="padding: 4px 10px; font-size: 11px; border-color: var(--purple); color: #c084fc; background: rgba(168,85,247,0.15); font-weight:700;" title="Mulai sesi percakapan & animasi baru">➕ Chat Baru</button>
+          <button class="btn-refresh" onclick="toggleHistoryModal()" style="padding: 4px 10px; font-size: 11px; border-color: var(--cyan); color: var(--cyan); background: transparent; font-weight:700;" title="Lihat Riwayat Chat Sesi Sebelumnya">📜 History</button>
+        </div>
       </div>
 
       <div class="chat-body" id="chatMessages">
@@ -322,6 +330,7 @@
         <div style="display:flex; gap:8px; align-items:center;">
           <button class="btn-refresh" onclick="runHtmlCompiler()" style="border-color:var(--green); color:var(--green); background:transparent;" title="Jalankan Ulang Animasi">▶ Run</button>
           <button class="btn-refresh" onclick="loadCompilerTemplate()" style="border-color:var(--cyan); color:var(--cyan); background:transparent;">📄 Template</button>
+          <button class="btn-refresh" onclick="downloadCompiledHtml()" style="border-color:var(--purple); color:var(--purple); background:rgba(168,85,247,0.12);" title="Download File HTML">📥 Download HTML</button>
           <button class="btn-refresh" onclick="clearCompilerEditor()" style="border-color:var(--red); color:var(--red); background:transparent;">🗑 Reset</button>
           <button class="btn-generate" onclick="sendCompiledHtmlToGenerator()" style="background:linear-gradient(135deg, var(--purple), #7c3aed); padding:8px 16px; margin:0;">
             🚀 KIRIM KE GENERATOR
@@ -346,18 +355,45 @@
 
   <div class="toast-container" id="toastContainer"></div>
 
+  <!-- Modal History Chat Sesi -->
+  <div id="historyModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(7, 11, 20, 0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center; padding:20px;">
+    <div style="width:100%; max-width:680px; max-height:85vh; background:rgba(15, 23, 42, 0.96); border:1px solid rgba(56,189,248,0.4); border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 60px rgba(0,0,0,0.85);">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:rgba(56,189,248,0.08); border-bottom:1px solid rgba(56,189,248,0.2);">
+        <h3 style="font-size:16px; font-weight:700; color:var(--cyan); margin:0; display:flex; align-items:center; gap:8px;">
+          📜 Riwayat Chat & Sesi Animasi
+        </h3>
+        <span style="cursor:pointer; font-size:24px; color:var(--text-dim);" onclick="toggleHistoryModal()">&times;</span>
+      </div>
+      <div id="historyListContainer" style="padding:20px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:12px;"></div>
+      <div style="padding:14px 24px; background:rgba(0,0,0,0.2); border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+        <button class="btn-refresh" onclick="clearAllHistorySessions()" style="border-color:var(--red); color:var(--red); background:transparent; font-size:11px; padding:4px 10px;">🗑 Hapus Semua History</button>
+        <button class="btn-refresh" onclick="toggleHistoryModal()" style="border-color:var(--text-dim); color:var(--text); background:transparent; font-size:12px; padding:6px 14px;">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Pengaturan API Keys -->
   <div id="apiKeysModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(7, 11, 20, 0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center; padding:20px;">
     <div style="width:100%; max-width:840px; max-height:88vh; background:rgba(15, 23, 42, 0.96); border:1px solid rgba(59,130,246,0.4); border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 60px rgba(0,0,0,0.85);">
       <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:rgba(59,130,246,0.08); border-bottom:1px solid rgba(59,130,246,0.2);">
-        <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin:0;">🔑 Pengaturan API Keys AI</h3>
+        <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin:0; display:flex; align-items:center; gap:8px;">
+          🔑 Pengaturan API Keys AI & Layanan Pembantu
+        </h3>
         <span style="cursor:pointer; font-size:24px; color:var(--text-dim);" onclick="toggleApiKeysPanel()">&times;</span>
       </div>
       <div style="padding:24px; overflow-y:auto; flex:1;">
+        <p style="font-size:12px; color:var(--text-dim); margin-top:0; margin-bottom:20px;">
+          Isi API Key untuk 9Router dan 5 Slot Custom LLM Provider di bawah ini. Kunci disimpan secara aman di server.
+        </p>
+
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px;">
           <div>
             <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router API Key</label>
             <input type="password" class="input-text-field" id="keyNinerouter" placeholder="Kunci API 9Router..." />
+            <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+              <button class="btn-refresh" onclick="testApiKey('ninerouter')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+              <span id="status_ninerouter" style="font-size:11px; font-weight:600;"></span>
+            </div>
           </div>
           <div>
             <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Base URL</label>
@@ -567,13 +603,130 @@
         </div>`;
     }
 
+    function downloadCompiledHtml() {
+      const code = document.getElementById('compilerHtmlCode')?.value || '';
+      if (!code.trim()) {
+        showToast('⚠️ Kode HTML kosong!', 'warning');
+        return;
+      }
+      const blob = new Blob([code], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `remotion-animation-${Date.now()}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('📥 File HTML berhasil didownload!', 'success');
+    }
+
+    // ─── HISTORY SESSION SYSTEM ───
+    function getStoredHistorySessions() {
+      try {
+        return JSON.parse(localStorage.getItem('compiler_history_sessions') || '[]');
+      } catch (e) { return []; }
+    }
+
+    function saveCurrentSessionToHistory() {
+      const chatHtml = document.getElementById('chatMessages')?.innerHTML || '';
+      const code = document.getElementById('compilerHtmlCode')?.value || '';
+      if (!code.trim() && !chatHtml.includes('msg-user')) return; // Don't save empty clean state
+
+      const sessions = getStoredHistorySessions();
+      const userMsgs = Array.from(document.querySelectorAll('.msg-user')).map(el => el.innerText.trim());
+      const titlePreview = userMsgs.length ? userMsgs[userMsgs.length - 1] : 'Animasi HTML';
+
+      const newSession = {
+        id: 'session_' + Date.now(),
+        timestamp: new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }),
+        title: titlePreview.slice(0, 40) + (titlePreview.length > 40 ? '...' : ''),
+        chatHtml: chatHtml,
+        code: code
+      };
+
+      sessions.unshift(newSession);
+      if (sessions.length > 30) sessions.pop(); // Keep max 30
+      localStorage.setItem('compiler_history_sessions', JSON.stringify(sessions));
+    }
+
+    function startNewChatSession() {
+      saveCurrentSessionToHistory();
+      clearChatHistory();
+      loadCompilerTemplate();
+      showToast('✨ Sesi chat & animasi baru dimulai!', 'success');
+    }
+
+    function toggleHistoryModal() {
+      const modal = document.getElementById('historyModal');
+      modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+      if (modal.style.display === 'flex') renderHistoryList();
+    }
+
+    function renderHistoryList() {
+      const container = document.getElementById('historyListContainer');
+      const sessions = getStoredHistorySessions();
+      if (!sessions.length) {
+        container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-dim); font-size:13px;">Belum ada riwayat sesi chat tersimpan.</div>`;
+        return;
+      }
+
+      let html = '';
+      sessions.forEach((s, idx) => {
+        html += `
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px;">
+          <div>
+            <div style="font-weight:700; color:var(--text); font-size:13px; margin-bottom:2px;">${escHtml(s.title)}</div>
+            <div style="font-size:11px; color:var(--text-dim);">🕒 ${escHtml(s.timestamp)}</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-refresh" onclick="loadHistorySession(${idx})" style="padding:4px 10px; font-size:11px; border-color:var(--cyan); color:var(--cyan); background:transparent;">📂 Buka</button>
+            <button class="btn-refresh" onclick="deleteHistorySession(${idx})" style="padding:4px 8px; font-size:11px; border-color:var(--red); color:var(--red); background:transparent;">🗑</button>
+          </div>
+        </div>`;
+      });
+      container.innerHTML = html;
+    }
+
+    function loadHistorySession(idx) {
+      const sessions = getStoredHistorySessions();
+      const s = sessions[idx];
+      if (!s) return;
+
+      saveCurrentSessionToHistory(); // Save active session before switching
+      if (s.chatHtml) document.getElementById('chatMessages').innerHTML = s.chatHtml;
+      if (s.code) {
+        document.getElementById('compilerHtmlCode').value = s.code;
+        saveCompilerState();
+        runHtmlCompiler();
+      }
+      toggleHistoryModal();
+      showToast('📂 Sesi riwayat berhasil dimuat!', 'success');
+    }
+
+    function deleteHistorySession(idx) {
+      const sessions = getStoredHistorySessions();
+      sessions.splice(idx, 1);
+      localStorage.setItem('compiler_history_sessions', JSON.stringify(sessions));
+      renderHistoryList();
+      showToast('🗑 Sesi riwayat dihapus', 'info');
+    }
+
+    function clearAllHistorySessions() {
+      if (confirm('Apakah Anda yakin ingin menghapus seluruh riwayat sesi?')) {
+        localStorage.removeItem('compiler_history_sessions');
+        renderHistoryList();
+        showToast('🗑 Seluruh riwayat dihapus', 'info');
+      }
+    }
+
     function handleChatInput(el) {
-      const val = el.value.trim();
+      const val = el.value;
       const menu = document.getElementById('slashMenu');
-      if (val.startsWith('/')) {
-        menu.style.display = 'block';
-      } else {
+      if (!val.startsWith('/') || val.includes(' ') || ['/buat', '/edit', '/code', '/run', '/send', '/clear', '/help'].includes(val.trim())) {
         menu.style.display = 'none';
+      } else {
+        menu.style.display = 'block';
       }
     }
 
