@@ -3759,12 +3759,16 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       </div>`;
     }
     if (item.htmlPreview) {
-      const cleanHtmlDoc = item.htmlPreview.includes('<head>')
-        ? item.htmlPreview.replace('<head>', '<head><style>html,body{margin:0;padding:0;overflow:hidden;width:100%;height:100%;box-sizing:border-box;display:flex;justify-content:center;align-items:center;}</style>')
-        : `<style>html,body{margin:0;padding:0;overflow:hidden;width:100%;height:100%;box-sizing:border-box;display:flex;justify-content:center;align-items:center;}</style>${item.htmlPreview}`;
-      
-      return `<div onclick="toggleCardDetails('${item.id}')" title="Klik untuk buka detail proyek" style="width:84px; height:47px; border-radius:6px; overflow:hidden; border:1px solid rgba(56,189,248,0.5); background:#0a0a12; cursor:pointer; flex-shrink:0; position:relative; display:block; box-shadow:0 3px 10px rgba(0,0,0,0.6);">
-        <iframe srcdoc="${escHtml(cleanHtmlDoc)}" style="width:840px; height:470px; transform:scale(0.1); transform-origin:0 0; border:none; pointer-events:none; background:#0a0a12;" sandbox="allow-scripts allow-same-origin"></iframe>
+      // Inject reset CSS so iframe content fills 840x470 cleanly
+      const thumbStyle = 'html,body{margin:0!important;padding:0!important;overflow:hidden!important;width:840px!important;height:470px!important;box-sizing:border-box!important;}';
+      const thumbDoc = item.htmlPreview.includes('<head>')
+        ? item.htmlPreview.replace('<head>', `<head><style>${thumbStyle}</style>`)
+        : `<!DOCTYPE html><html><head><style>${thumbStyle}</style></head><body>${item.htmlPreview}</body></html>`;
+
+      return `<div onclick="toggleCardDetails('${item.id}')" title="Klik untuk buka detail proyek" style="width:84px; height:47px; border-radius:6px; overflow:hidden; border:1px solid rgba(56,189,248,0.5); background:#0a0a12; cursor:pointer; flex-shrink:0; position:relative; box-shadow:0 3px 10px rgba(0,0,0,0.6);">
+        <div style="position:absolute; top:0; left:0; width:840px; height:470px; transform:scale(0.1); transform-origin:top left; pointer-events:none; overflow:hidden;">
+          <iframe srcdoc="${escHtml(thumbDoc)}" style="width:840px; height:470px; border:none; display:block; background:#0a0a12;" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
         <span style="position:absolute; bottom:2px; right:2px; font-size:8px; background:rgba(13,20,36,0.85); padding:1px 4px; border-radius:3px; color:var(--cyan); font-weight:bold; border:1px solid rgba(56,189,248,0.4);">HTML</span>
       </div>`;
     }
