@@ -3759,19 +3759,21 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
       </div>`;
     }
     if (item.htmlPreview) {
-      // Inject reset CSS so iframe content fills 840x470 cleanly
-      const thumbStyle = 'html,body{margin:0!important;padding:0!important;overflow:hidden!important;width:840px!important;height:470px!important;box-sizing:border-box!important;}';
+      // Reset CSS: beri iframe viewport 840x470 yang bersih
+      // Jangan paksa flex centering - biarkan konten HTML asli yang mengatur posisinya sendiri
+      const thumbStyle = 'html,body{margin:0!important;padding:0!important;overflow:hidden!important;width:840px!important;height:470px!important;max-width:840px!important;max-height:470px!important;box-sizing:border-box!important;}';
       const thumbDoc = item.htmlPreview.includes('<head>')
         ? item.htmlPreview.replace('<head>', `<head><style>${thumbStyle}</style>`)
         : `<!DOCTYPE html><html><head><style>${thumbStyle}</style></head><body>${item.htmlPreview}</body></html>`;
 
+      // zoom:0.1 mengubah layout+visual sekaligus (berbeda dengan transform:scale yang hanya visual)
+      // Hasilnya: iframe layout 84x47, konten render di 840x470 lalu zoom → posisi animasi terjaga
       return `<div onclick="toggleCardDetails('${item.id}')" title="Klik untuk buka detail proyek" style="width:84px; height:47px; border-radius:6px; overflow:hidden; border:1px solid rgba(56,189,248,0.5); background:#0a0a12; cursor:pointer; flex-shrink:0; position:relative; box-shadow:0 3px 10px rgba(0,0,0,0.6);">
-        <div style="position:absolute; top:0; left:0; width:840px; height:470px; transform:scale(0.1); transform-origin:top left; pointer-events:none; overflow:hidden;">
-          <iframe srcdoc="${escHtml(thumbDoc)}" style="width:840px; height:470px; border:none; display:block; background:#0a0a12;" sandbox="allow-scripts allow-same-origin"></iframe>
-        </div>
+        <iframe srcdoc="${escHtml(thumbDoc)}" style="width:840px; height:470px; zoom:0.1; border:none; display:block; background:#0a0a12; pointer-events:none;" sandbox="allow-scripts allow-same-origin"></iframe>
         <span style="position:absolute; bottom:2px; right:2px; font-size:8px; background:rgba(13,20,36,0.85); padding:1px 4px; border-radius:3px; color:var(--cyan); font-weight:bold; border:1px solid rgba(56,189,248,0.4);">HTML</span>
       </div>`;
     }
+
     return `<div style="width:84px; height:47px; border-radius:6px; border:1px dashed var(--border); background:rgba(0,0,0,0.2); flex-shrink:0; display:grid; place-items:center; font-size:9px; color:var(--text-dim);">
       No Media
     </div>`;
