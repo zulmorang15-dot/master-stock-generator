@@ -3761,6 +3761,47 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     return actions.join('');
   }
 
+  function getSingleNextActionHtml(item) {
+    const status = item.statusConvertTsx || 'queued';
+    const render4k = item.statusRender4k;
+    const isSeoRunning = !!activeSeoGenerations[item.id];
+    const isTsxRunning = status === 'queued' || status === 'processing-tsx';
+    const is4kRunning = render4k === 'processing' || render4k === 'queued';
+
+    const hasTsx = !!item.promptCode;
+    const hasMetadata = !!(item.judul && item.judul.trim());
+    const has4k = !!item.outputPath4k || render4k === 'success';
+
+    // State Sedang Berjalan (Loading)
+    if (isTsxRunning) {
+      return `<button class="btn-action" disabled style="background:rgba(56,189,248,.15); color:var(--cyan); border:1px solid rgba(56,189,248,.4); font-size:11px; padding:4px 10px; margin:0; display:inline-flex; align-items:center; gap:4px;"><span class="spin">⚙</span> TSX...</button>`;
+    }
+    if (isSeoRunning) {
+      return `<button class="btn-action" disabled style="background:rgba(168,85,247,.15); color:#c084fc; border:1px solid rgba(168,85,247,.4); font-size:11px; padding:4px 10px; margin:0; display:inline-flex; align-items:center; gap:4px;"><span class="spin">✨</span> Metadata...</button>`;
+    }
+    if (is4kRunning) {
+      return `<button class="btn-action" disabled style="background:rgba(245,158,11,.15); color:var(--amber); border:1px solid rgba(245,158,11,.4); font-size:11px; padding:4px 10px; margin:0; display:inline-flex; align-items:center; gap:4px;"><span class="spin">🚀</span> 4K...</button>`;
+    }
+
+    // Step 1: Baru masuk / Belum ada TSX -> Konversi TSX
+    if (!hasTsx) {
+      return `<button class="btn-action" onclick="generateTsx('${item.id}', '${status}')" style="background:rgba(56,189,248,.15); color:var(--cyan); border:1px solid rgba(56,189,248,.4); font-size:11px; padding:4px 10px; margin:0; font-weight:600;" title="Konversi HTML ke React/Remotion TSX">⚙️ Konversi TSX</button>`;
+    }
+
+    // Step 2: Belum ada Metadata SEO -> AI Metadata
+    if (!hasMetadata) {
+      return `<button class="btn-action" onclick="regenerateSeoSingle('${item.id}')" style="background:rgba(168,85,247,.15); color:#c084fc; border:1px solid rgba(168,85,247,.4); font-size:11px; padding:4px 10px; margin:0; font-weight:600;" title="Generate judul & keywords AI">✨ AI Metadata</button>`;
+    }
+
+    // Step 3: Langsung ke Render 4K (Preview ditiadakan di compact view)
+    if (!has4k) {
+      return `<button class="btn-action btn-4k" onclick="trigger4K('${item.id}')" style="font-size:11px; padding:4px 10px; margin:0; font-weight:600;" title="Render video final 4K ProRes">🚀 Render 4K</button>`;
+    }
+
+    // Step 4: Selesai 4K -> Tombol Download 4K
+    return `<a href="/api/4k-file/${item.id}" class="btn-action btn-dl" style="padding:4px 10px; font-size:11px; margin:0; text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-weight:600;" title="Download video 4K ProRes">🎥 Download 4K</a>`;
+  }
+
   function renderCompactThumb(item) {
     if (item.previewUrl) {
       const videoSrc = item.previewUrl.startsWith('http://') || item.previewUrl.startsWith('https://') ? item.previewUrl : `/api/preview-file/${item.id}`;
@@ -3886,7 +3927,7 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
               <div style="flex-shrink:0;">${statusBadge}</div>
               <div class="asset-card__meta" style="display:none; gap:6px;">${uploadStatus}${categoryControls}</div>
               <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
-                <div style="display:flex; align-items:center; gap:4px;">${quickActions}</div>
+                <div style="display:flex; align-items:center; gap:4px;">${getSingleNextActionHtml(item)}</div>
                 <button class="btn-action" onclick="toggleCardDetails('${item.id}')" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color:var(--text); font-size:11px; padding:4px 10px; white-space:nowrap; margin:0;" title="Buka/Tutup Detail Proyek">
                   <span id="btnDetailText_${item.id}">${isExpanded ? '🔼 Ringkas' : '🔽 Detail'}</span>
                 </button>
