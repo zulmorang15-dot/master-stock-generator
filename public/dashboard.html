@@ -1970,6 +1970,7 @@
           <button class="toggle-btn active" id="viewModeDetail" onclick="setViewMode('detail')" title="Tampilan Detail (Lengkap)">📋 Detail</button>
           <button class="toggle-btn" id="viewModeCompact" onclick="setViewMode('compact')" title="Tampilan Ramping (Thumbnail & Judul)">⚡ Ramping</button>
         </div>
+        <button id="autoplayToggleBtn" class="btn-refresh" onclick="toggleAutoplayThumbnails()" title="Aktifkan/Nonaktifkan Autoplay Animasi" style="margin: 0; font-size: 11px; padding: 6px 10px;"></button>
         <button class="btn-refresh" onclick="loadResults()">🔄 Refresh</button>
       </div>
     </div>
@@ -2360,6 +2361,7 @@
   let activeFilter = 'all';
   let currentViewMode = localStorage.getItem('dashboard_viewMode') || 'detail';
   let cardExpandedState = {};
+  let autoplayThumbnails = localStorage.getItem('autoplay_thumbnails') !== 'false';
 
   // ─── GOOGLE TRENDS & ADOBE STOCK EXPLORER STATE & FUNCTIONS ───
   let currentView = 'generator';
@@ -3794,9 +3796,22 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
         thumbDoc = `<!DOCTYPE html><html><head>${styleBlock}</head><body>${thumbDoc}</body></html>`;
       }
 
-      return `<div onclick="openHtmlModal('${item.id}')" title="Klik untuk preview HTML" style="width:84px; height:47px; border-radius:6px; overflow:hidden; border:1px solid rgba(56,189,248,0.5); background:#0a0a12; cursor:pointer; flex-shrink:0; position:relative; box-shadow:0 3px 10px rgba(0,0,0,0.6);">
-        <iframe srcdoc="${escHtml(thumbDoc)}" style="width:800px; height:450px; transform:scale(${84/800}); transform-origin:0 0; border:none; display:block; background:#0a0a12; pointer-events:none; position:absolute; top:0; left:0;" sandbox="allow-scripts allow-same-origin"></iframe>
-      </div>`;
+      if (autoplayThumbnails) {
+        return `<div onclick="openHtmlModal('${item.id}')" title="Klik untuk preview HTML" style="width:84px; height:47px; border-radius:6px; overflow:hidden; border:1px solid rgba(56,189,248,0.5); background:#0a0a12; cursor:pointer; flex-shrink:0; position:relative; box-shadow:0 3px 10px rgba(0,0,0,0.6);">
+          <iframe srcdoc="${escHtml(thumbDoc)}" style="width:800px; height:450px; transform:scale(${84/800}); transform-origin:0 0; border:none; display:block; background:#0a0a12; pointer-events:none; position:absolute; top:0; left:0;" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>`;
+      } else {
+        return `<div onclick="touchThumbToggle('${item.id}', this)" 
+                     onmouseenter="playCompactThumb('${item.id}', this)" 
+                     onmouseleave="pauseCompactThumb('${item.id}', this)"
+                     data-item-id="${item.id}"
+                     data-playing="false"
+                     title="Laptop: arahkan kursor untuk preview. Mobile: ketuk untuk memutar, ketuk lagi untuk perbesar" 
+                     style="width:84px; height:47px; border-radius:6px; overflow:hidden; border:1px solid rgba(255,255,255,0.15); background:#0a0a12; cursor:pointer; flex-shrink:0; position:relative; box-shadow:0 3px 10px rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center;">
+          <div class="thumb-placeholder" style="font-size:12px; color:rgba(56,189,248,0.6); display:flex; align-items:center; justify-content:center; width:100%; height:100%; font-family:sans-serif; z-index:1;">▶</div>
+          <iframe data-srcdoc="${escHtml(thumbDoc)}" style="width:800px; height:450px; transform:scale(${84/800}); transform-origin:0 0; border:none; display:none; background:#0a0a12; pointer-events:none; position:absolute; top:0; left:0;" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>`;
+      }
     }
 
     return `<div style="width:84px; height:47px; border-radius:6px; border:1px dashed var(--border); background:rgba(0,0,0,0.2); flex-shrink:0; display:grid; place-items:center; font-size:9px; color:var(--text-dim);">
@@ -4546,6 +4561,100 @@ Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup. 
     iframe.srcdoc = '';
     modal.style.display = 'none';
   }
+
+  // ═══ Autoplay / Hover to Play HTML Thumbnails ═══
+
+  // Deteksi touch device (mobile/tablet)
+  const isTouchDevice = () => ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+  // Desktop hover: putar saat mouse masuk
+  window.playCompactThumb = function(itemId, container) {
+    if (isTouchDevice()) return; // Abaikan hover di touch device
+    const iframe = container.querySelector('iframe');
+    const placeholder = container.querySelector('.thumb-placeholder');
+    if (iframe && !iframe.srcdoc) {
+      const dataSrc = iframe.getAttribute('data-srcdoc');
+      if (dataSrc) {
+        iframe.srcdoc = dataSrc;
+        iframe.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'none';
+        container.dataset.playing = 'true';
+      }
+    }
+  };
+
+  // Mobile tap: toggle play / open modal
+  window.touchThumbToggle = function(itemId, container) {
+    if (!isTouchDevice()) {
+      // Desktop: langsung buka modal saat klik
+      openHtmlModal(itemId);
+      return;
+    }
+    // Mobile: tap 1 = putar, tap 2 = buka modal
+    const isPlaying = container.dataset.playing === 'true';
+    if (isPlaying) {
+      openHtmlModal(itemId);
+    } else {
+      const iframe = container.querySelector('iframe');
+      const placeholder = container.querySelector('.thumb-placeholder');
+      if (iframe) {
+        const dataSrc = iframe.getAttribute('data-srcdoc');
+        if (dataSrc) {
+          iframe.srcdoc = dataSrc;
+          iframe.style.display = 'block';
+          if (placeholder) {
+            placeholder.style.display = 'none';
+          }
+          container.dataset.playing = 'true';
+          // Tambah indikator visual: border cyan saat playing
+          container.style.borderColor = 'rgba(56,189,248,0.6)';
+          // Auto-reset setelah 10 detik jika tidak diklik lagi
+          setTimeout(() => {
+            if (container.dataset.playing === 'true') {
+              pauseCompactThumb(itemId, container);
+            }
+          }, 10000);
+        }
+      }
+    }
+  };
+
+  window.pauseCompactThumb = function(itemId, container) {
+    const iframe = container.querySelector('iframe');
+    const placeholder = container.querySelector('.thumb-placeholder');
+    if (iframe && iframe.srcdoc) {
+      iframe.srcdoc = '';
+      iframe.style.display = 'none';
+      if (placeholder) placeholder.style.display = 'flex';
+    }
+    container.dataset.playing = 'false';
+    container.style.borderColor = 'rgba(255,255,255,0.15)';
+  };
+
+  window.toggleAutoplayThumbnails = function() {
+    autoplayThumbnails = !autoplayThumbnails;
+    localStorage.setItem('autoplay_thumbnails', autoplayThumbnails);
+    updateAutoplayButton();
+    applyFilterAndRender();
+  };
+
+  function updateAutoplayButton() {
+    const btn = document.getElementById('autoplayToggleBtn');
+    if (btn) {
+      if (autoplayThumbnails) {
+        btn.innerHTML = '🎬 Autoplay: AKTIF';
+        btn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        btn.style.color = 'var(--green)';
+        btn.style.background = 'rgba(16, 185, 129, 0.1)';
+      } else {
+        btn.innerHTML = '⏸️ Autoplay: JEDA';
+        btn.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+        btn.style.color = 'var(--amber)';
+        btn.style.background = 'rgba(245, 158, 11, 0.1)';
+      }
+    }
+  }
+  window.updateAutoplayButton = updateAutoplayButton;
 
   // Close modal when clicking outside
   window.addEventListener('click', (e) => {
@@ -5348,6 +5457,7 @@ Saran Tags/Keywords: ${tags}`;
 
   // INIT
   // ═══════════════════════════════════════════
+  updateAutoplayButton();
   loadResults();
   loadPrompts();
   restoreState();
