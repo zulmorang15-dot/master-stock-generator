@@ -1069,6 +1069,10 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ keyword, monthName, demand, supply })
         });
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error(`Server Express belum merefresh endpoint baru (HTTP ${resp.status}). Server telah di-restart, silakan klik Coba Lagi.`);
+        }
         const data = await resp.json();
         if (!data.success) throw new Error(data.error || 'Gagal generate');
 
@@ -1095,32 +1099,71 @@
       const container = document.getElementById(`longtailContainer_${idx}`);
       if (!container) return;
 
-      const f = data.framework5W1H || {};
+      const angles = data.commercialAngles || [];
       const tags = data.allLongtailTags || [];
       const tagsStr = tags.join(', ');
 
-      const renderCard = (title, icon, color, items, desc) => {
-        const listHtml = (items || []).map(item => `<span style="display:inline-block; background:rgba(255,255,255,0.05); border:1px solid ${color}44; color:${color}; padding:4px 9px; border-radius:6px; font-size:11px; margin:2px; font-weight:600;">${escHtml(item)}</span>`).join('');
-        return `
-          <div style="background:rgba(15,23,42,0.7); border:1px solid ${color}33; border-radius:10px; padding:12px; backdrop-filter:blur(6px);">
-            <div style="font-size:12px; font-weight:800; color:${color}; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-              <span>${icon}</span> <span>${title}</span>
-            </div>
-            <div style="font-size:10px; color:var(--text-dim); margin-bottom:8px;">${escHtml(desc || '')}</div>
-            <div style="display:flex; flex-wrap:wrap; gap:4px;">${listHtml || '<span style="font-size:11px; color:var(--text-dim);">-</span>'}</div>
-          </div>
-        `;
-      };
-
       const safeKw = keyword.replace(/'/g, "\\'");
       const safeTagsStr = tagsStr.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+      let anglesHtml = '';
+      if (angles.length > 0) {
+        anglesHtml = angles.map(a => {
+          const color = a.color || 'var(--cyan)';
+          const icon = a.icon || '🎯';
+          const title = a.angleName || 'Commercial Angle';
+          const formula = a.formula || '';
+          const phrases = a.longtailPhrases || [];
+          const angleTagsStr = phrases.join(', ').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+          const phraseBadges = phrases.map(p => `<span style="display:inline-block; background:rgba(255,255,255,0.06); border:1px solid ${color}44; color:#fff; padding:5px 10px; border-radius:6px; font-size:11px; margin:3px; font-weight:600;">${escHtml(p)}</span>`).join('');
+
+          return `
+            <div style="background:rgba(15,23,42,0.75); border:1px solid ${color}44; border-radius:12px; padding:14px; backdrop-filter:blur(8px);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <div style="font-size:13px; font-weight:800; color:${color}; display:flex; align-items:center; gap:6px;">
+                  <span>${icon}</span> <span>${escHtml(title)}</span>
+                </div>
+                <button class="btn-refresh" onclick="copyTextToClipboard('${angleTagsStr}', 'Angle ${title}')" style="padding:2px 8px; font-size:10px; border-color:${color}; color:${color}; background:transparent;">📋 Copy Angle</button>
+              </div>
+              <div style="font-size:10px; font-family:'JetBrains Mono',monospace; color:var(--text-dim); background:rgba(0,0,0,0.3); border-radius:6px; padding:4px 8px; margin-bottom:10px; display:inline-block;">
+                Formula: <span style="color:${color}; font-weight:600;">${escHtml(formula)}</span>
+              </div>
+              <div style="display:flex; flex-wrap:wrap; gap:4px;">${phraseBadges}</div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        // Fallback for old 5W+1H format
+        const f = data.framework5W1H || {};
+        const renderCard = (title, icon, color, items, desc) => {
+          const listHtml = (items || []).map(item => `<span style="display:inline-block; background:rgba(255,255,255,0.05); border:1px solid ${color}44; color:${color}; padding:4px 9px; border-radius:6px; font-size:11px; margin:2px; font-weight:600;">${escHtml(item)}</span>`).join('');
+          return `
+            <div style="background:rgba(15,23,42,0.7); border:1px solid ${color}33; border-radius:10px; padding:12px; backdrop-filter:blur(6px);">
+              <div style="font-size:12px; font-weight:800; color:${color}; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                <span>${icon}</span> <span>${title}</span>
+              </div>
+              <div style="font-size:10px; color:var(--text-dim); margin-bottom:8px;">${escHtml(desc || '')}</div>
+              <div style="display:flex; flex-wrap:wrap; gap:4px;">${listHtml || '<span style="font-size:11px; color:var(--text-dim);">-</span>'}</div>
+            </div>
+          `;
+        };
+        anglesHtml = `
+          ${renderCard("WHAT (Objek Visual)", "📌", "#38bdf8", f.what?.longtails, f.what?.question)}
+          ${renderCard("WHY (Alasan Pembeli)", "🎯", "#f59e0b", f.why?.longtails, f.why?.question)}
+          ${renderCard("WHO (Target Persona)", "👤", "#a855f7", f.who?.longtails, f.who?.question)}
+          ${renderCard("WHERE (Penempatan Video)", "📍", "#ec4899", f.where?.longtails, f.where?.question)}
+          ${renderCard("WHEN (Tren / Momentum)", "📅", "#10b981", f.when?.longtails, f.when?.question)}
+          ${renderCard("HOW (Fitur Teknis / Kode)", "⚙️", "#f43f5e", f.how?.longtails, f.how?.question)}
+        `;
+      }
 
       container.innerHTML = `
         <div style="padding:18px; background:rgba(7,11,20,0.95); border:1px solid var(--purple)55; border-radius:12px; margin:8px 0; box-shadow:0 8px 25px rgba(0,0,0,0.5);">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08);">
             <div>
               <div style="font-size:14px; font-weight:800; color:#fff; display:flex; align-items:center; gap:8px;">
-                <span>✨ Matriks Long-Tail 5W+1H</span>
+                <span>🎯 Matriks Kombinasi Parameter (Commercial Angles)</span>
                 <span style="font-size:10px; font-weight:700; color:var(--green); background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); padding:2px 8px; border-radius:10px;">💾 Tersimpan Local</span>
               </div>
               <div style="font-size:12px; color:var(--cyan); margin-top:3px;">Keyword Utama: <strong>"${escHtml(keyword)}"</strong> ${data.recommendedTitle ? `• Judul SEO Komersial: <strong style="color:#fff;">"${escHtml(data.recommendedTitle)}"</strong>` : ''}</div>
@@ -1135,14 +1178,9 @@
             </div>
           </div>
 
-          <!-- 5W+1H GRID -->
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:10px; margin-bottom:14px;">
-            ${renderCard("WHAT (Objek Visual)", "📌", "#38bdf8", f.what?.longtails, f.what?.question)}
-            ${renderCard("WHY (Alasan Pembeli)", "🎯", "#f59e0b", f.why?.longtails, f.why?.question)}
-            ${renderCard("WHO (Target Persona)", "👤", "#a855f7", f.who?.longtails, f.who?.question)}
-            ${renderCard("WHERE (Penempatan Video)", "📍", "#ec4899", f.where?.longtails, f.where?.question)}
-            ${renderCard("WHEN (Tren / Momentum)", "📅", "#10b981", f.when?.longtails, f.when?.question)}
-            ${renderCard("HOW (Fitur Teknis / Kode)", "⚙️", "#f43f5e", f.how?.longtails, f.how?.question)}
+          <!-- COMMERCIAL ANGLES MATRIX GRID -->
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:12px; margin-bottom:14px;">
+            ${anglesHtml}
           </div>
 
           <!-- QUICK COPY CSV METADATA TAGS BOX -->

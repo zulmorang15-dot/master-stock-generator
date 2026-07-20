@@ -989,64 +989,74 @@ app.post("/api/generate-longtail", async (req, res) => {
 PRIMARY KEYWORD: "${keyword}"
 CONTEXT: Target Month "${monthName || 'General'}", Demand Level "${demand || 'High'}", Existing Supply "${supply || 'Medium'}".
 
-CRITICAL RULE FOR LONG-TAIL FORMULATION:
-Do NOT output single words or separate bullet points. Each long-tail keyword MUST be a synthesized 3-to-6 word commercial English phrase created by combining 2 or 3 components of the 5W+1H framework together!
+TASK: Generate 4 Distinct Commercial Angle Matrices by combining 2-3 components of the 5W+1H framework together (Who, What, Why, Where, When, How) into high-converting 3-to-6 word commercial English long-tail phrases!
 
-FORMULA COMBINATION EXAMPLES (e.g. for keyword "money"):
-- Angle Keamanan Tech: [Mood: Secure] + [Where: Digital Mobile Banking] + [What: Payment Transaction] -> "secure digital mobile banking payment transaction"
-- Angle Growth: [What: Stock Market Chart] + [Why: Wealth Growth] + [How: Seamless Loop 4K] -> "rising stock market wealth growth chart loop 4k"
-- Angle Sci-Fi / Crypto: [Mood: Futuristic] + [What: Digital Currency] + [How: Transparent Alpha] -> "futuristic digital currency crypto transfer alpha background"
-
-Generate 5W+1H synthesized long-tail phrases tailored specifically to "${keyword}":
+FORMULA COMBINATION EXAMPLES (for keyword "money"):
+1. Corporate & Financial Growth Angle: [Who: Corporate Business] + [Mood: Wealth Growth] + [What: Data Analytics Chart] -> "corporate business growth data analytics chart loop"
+2. Tech, Cyber & Alpha Overlay Angle: [How: Transparent Alpha] + [What: Futuristic HUD] + [Where: App Landing Page] -> "transparent background futuristic hud overlay app header"
+3. Crypto & Creator Content Angle: [Who: Crypto Trader] + [Why: Video Engagement] + [Where: Youtube Intro] -> "crypto trading market growth youtube intro template"
+4. Seasonal & Financial Events Angle: [When: Q4 Earnings Report] + [What: Stock Graph] + [How: 60fps Loop] -> "q4 corporate financial earnings report graph 60fps"
 
 Output ONLY a valid JSON object without markdown formatting:
 {
   "keyword": "${keyword}",
   "recommendedTitle": "Top commercial SEO title combining key long-tail phrases (max 12 words, no programming terms)",
-  "framework5W1H": {
-    "what": {
-      "question": "What (Visual Object) + Technical/Mood",
-      "longtails": [
-        "4-5 synthesized 3-6 word commercial phrases (e.g. 4k glowing neon bar chart loop)"
+  "commercialAngles": [
+    {
+      "angleName": "Corporate & Financial Growth",
+      "icon": "📊",
+      "color": "#38bdf8",
+      "formula": "[Who: Corporate Business] + [Mood: Growth] + [What: Data Analytics Chart]",
+      "longtailPhrases": [
+        "corporate business growth data analytics chart loop",
+        "financial presentation wealth growth graph 4k",
+        "annual business report data visualization background",
+        "company revenue growth candlestick chart animation"
       ]
     },
-    "why": {
-      "question": "Why (Buyer Motivation) + Object/Context",
-      "longtails": [
-        "4-5 synthesized 3-6 word commercial phrases (e.g. boost financial pitch deck presentation sales)"
+    {
+      "angleName": "Tech, Cyber & Alpha Overlay",
+      "icon": "⚡",
+      "color": "#a855f7",
+      "formula": "[How: Transparent Alpha] + [What: Futuristic HUD] + [Where: App Landing Page]",
+      "longtailPhrases": [
+        "transparent background futuristic hud overlay app header",
+        "prores 4444 isolated cyber interface animation",
+        "clean minimalist tech data stream overlay 60fps",
+        "digital technology network line alpha background"
       ]
     },
-    "who": {
-      "question": "Who (Target Persona) + Use Case",
-      "longtails": [
-        "4-5 synthesized 3-6 word commercial phrases (e.g. crypto youtube content creator video intro)"
+    {
+      "angleName": "Crypto & Creator Content",
+      "icon": "🚀",
+      "color": "#f59e0b",
+      "formula": "[Who: Crypto Trader] + [Why: Video Engagement] + [Where: Youtube Intro]",
+      "longtailPhrases": [
+        "crypto trading market growth youtube intro template",
+        "digital currency stock exchange promo lower third",
+        "bitcoin market trend trading video background",
+        "fintech marketing promo video asset"
       ]
     },
-    "where": {
-      "question": "Where (Placement / Platform) + Visual Style",
-      "longtails": [
-        "4-5 synthesized 3-6 word commercial phrases (e.g. website landing page header background animation)"
-      ]
-    },
-    "when": {
-      "question": "When (Seasonal / Trending Event) + Context",
-      "longtails": [
-        "4-5 synthesized 3-6 word commercial phrases (e.g. q4 corporate financial earnings report graph)"
-      ]
-    },
-    "how": {
-      "question": "How (Technical Motion / Alpha) + Object",
-      "longtails": [
-        "4-5 synthesized 3-6 word commercial phrases (e.g. transparent background alpha channel isolated overlay)"
+    {
+      "angleName": "Seasonal & Corporate Events",
+      "icon": "📅",
+      "color": "#10b981",
+      "formula": "[When: Q4 Earnings Report] + [What: Stock Graph] + [How: 60fps Loop]",
+      "longtailPhrases": [
+        "q4 corporate financial earnings report graph 60fps",
+        "annual stock market review background loop",
+        "business fiscal year presentation chart animation",
+        "quarterly financial forecast data motion graphic"
       ]
     }
-  },
+  ],
   "allLongtailTags": [
-    "Array of 25-35 multi-word synthesized long-tail phrases (3-6 words each) combining 2-3 components of the 5W+1H elements above. NO programming terms like CSS, canvas, keyframes."
+    "Array of 25-35 multi-word synthesized long-tail phrases (3-6 words each) combining 2-3 components of 5W+1H. NO programming terms like CSS, canvas, keyframes."
   ]
 }
 
-Tailor all longtail phrases specifically to "${keyword}". Make them extremely valuable for microstock video buyers.`;
+Tailor all angles and phrases specifically to "${keyword}".`;
 
   try {
     const aiResponse = await callAIWithFallback(prompt, { preferModel: 'syntx-claude' });
