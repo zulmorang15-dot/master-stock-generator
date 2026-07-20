@@ -975,6 +975,76 @@ Generate 5 recommended titles that would OUTPERFORM existing competitors. Focus 
   }
 });
 
+// POST /api/generate-longtail -> Generate 5W+1H Long-Tail Keywords via AI
+app.post("/api/generate-longtail", async (req, res) => {
+  const { keyword, monthName, demand, supply } = req.body;
+  if (!keyword || !keyword.trim()) {
+    return res.status(400).json({ error: "Keyword diperlukan" });
+  }
+
+  console.log(`🏷️ Generating 5W+1H Long-Tail Keywords untuk: "${keyword}"`);
+
+  const prompt = `You are an Elite Microstock SEO Analyst specializing in Adobe Stock and Shutterstock video markets.
+
+PRIMARY KEYWORD: "${keyword}"
+CONTEXT: Targeted Month "${monthName || 'General'}", Demand Level "${demand || 'High'}", Existing Supply "${supply || 'Medium'}".
+
+Apply the 5W+1H Framework (What, Why, Who, Where, When, How) to generate highly commercial, high-converting LONG-TAIL KEYWORDS for video stock buyers.
+
+Output ONLY a valid JSON object without markdown formatting:
+{
+  "keyword": "${keyword}",
+  "recommendedTitle": "Top recommended SEO commercial title (max 12 words, no programming terms)",
+  "framework5W1H": {
+    "what": {
+      "question": "What is the visual asset / object?",
+      "longtails": ["4k glowing neon bar chart", "3d isometric candlestick graph", "digital particle wave overlay", "cyberpunk hud interface"]
+    },
+    "why": {
+      "question": "Why do buyers need this asset?",
+      "longtails": ["boost financial pitch deck presentation", "increase crypto video sales conversion", "enhance corporate webinar intro", "engage youtube subscribers"]
+    },
+    "who": {
+      "question": "Who is the target buyer / audience?",
+      "longtails": ["stock trader presentation editor", "crypto youtube content creator", "fintech startup marketer", "corporate video editor"]
+    },
+    "where": {
+      "question": "Where will this asset be placed?",
+      "longtails": ["website landing page header animation", "youtube video intro lower third", "financial news broadcast background", "instagram story promo"]
+    },
+    "when": {
+      "question": "When is this asset most relevant?",
+      "longtails": ["q4 financial earnings report", "crypto bull run trending market", "annual corporate business review", "black friday tech sale"]
+    },
+    "how": {
+      "question": "How is it technical / moving?",
+      "longtails": ["transparent background alpha channel", "prores 4444 isolated overlay", "4k 60fps seamless looping animation", "minimalist fluid motion"]
+    }
+  },
+  "allLongtailTags": [
+    "array of 25-35 single and multi-word long-tail tags ready for stock metadata CSV upload. NO programming terms like CSS, canvas, keyframes."
+  ]
+}
+
+Tailor all longtail phrases specifically to "${keyword}". Make them extremely useful for video editors.`;
+
+  try {
+    const aiResponse = await callAIWithFallback(prompt, { preferModel: 'syntx-claude' });
+    let jsonText = aiResponse.trim();
+    if (jsonText.includes("```json")) {
+      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+    } else if (jsonText.includes("```")) {
+      jsonText = jsonText.split("```")[1].split("```")[0].trim();
+    }
+    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+    const result = JSON.parse(jsonText);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error("❌ Error generate longtail:", err.message);
+    res.status(500).json({ error: "Gagal generate longtail keyword", details: err.message });
+  }
+});
+
 // JALUR 1: AMBIL DATA & OPTIMALISASI ATM VIA OPENROUTER
 app.post("/api/generate", async (req, res) => {
   const { keyword } = req.body;

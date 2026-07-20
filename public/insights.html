@@ -458,6 +458,7 @@
                 <th class="sortable" onclick="toggleColumnSort('leadtime')" style="width:250px; cursor:pointer;" title="Klik untuk urutkan Lead Time">
                   Jadwal Upload Ideal <span id="sortArrow_leadtime" style="font-size:10px; color:var(--cyan);">↕</span>
                 </th>
+                <th style="width:160px; text-align:center;">Riset 5W+1H</th>
               </tr>
             </thead>
             <tbody id="recommendationTableBody">
@@ -933,7 +934,7 @@
       document.getElementById('btnNextPage').disabled = currentPage >= Math.ceil(filteredData.length / pageSize);
 
       if (!pageData.length) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-dim);">Tidak ada kata kunci ditemukan untuk kriteria filter ini.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:40px; color:var(--text-dim);">Tidak ada kata kunci ditemukan untuk kriteria filter ini.</td></tr>`;
         return;
       }
 
@@ -946,11 +947,24 @@
         const opp = row.oppInfo || calculateOpportunity(row.demand, row.supply);
         const lead = row.leadInfo || calculateUploadLeadTime(row.monthName);
 
+        const storageKey = 'insights_longtail_' + String(row.keyword).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const isSaved = !!localStorage.getItem(storageKey);
+
+        const safeKw = row.keyword.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const safeMonth = (row.rawMonth || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const safeDemand = (row.demand || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const safeSupply = (row.supply || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
         html += `
-        <tr>
+        <tr class="main-row" onclick="toggleLongTailDetail(${i}, '${safeKw}', '${safeMonth}', '${safeDemand}', '${safeSupply}')" style="cursor:pointer;">
           <td style="text-align:center; font-weight:700; color:var(--text-dim);">${rank}</td>
           <td><span style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.25); color:var(--cyan); padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700;">🗓️ ${escHtml(row.rawMonth)}</span></td>
-          <td style="font-weight:700; color:#fff; font-size:13px;">${escHtml(row.keyword)}</td>
+          <td style="font-weight:700; color:#fff; font-size:13px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span>${escHtml(row.keyword)}</span>
+              <span id="longtailStatus_${i}" style="font-size:9px; font-weight:700; color:var(--green); background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); padding:1px 6px; border-radius:8px; display:${isSaved ? 'inline-block' : 'none'};">💾 Saved</span>
+            </div>
+          </td>
           <td><span class="badge-demand ${badgeClass}">${badgeIcon} ${escHtml(row.demand)}</span></td>
           <td style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-mid);">${escHtml(row.supply)}</td>
           <td>
@@ -961,10 +975,188 @@
           <td>
             <span class="badge-demand ${lead.badge}" title="${escHtml(lead.desc)}" style="white-space:nowrap;">${escHtml(lead.text)}</span>
           </td>
+          <td style="text-align:center;" onclick="event.stopPropagation()">
+            <button class="btn-refresh" id="btnToggleLongtail_${i}" onclick="toggleLongTailDetail(${i}, '${safeKw}', '${safeMonth}', '${safeDemand}', '${safeSupply}')" style="padding:4px 10px; font-size:11px; border-color:${isSaved ? 'var(--purple)' : 'var(--cyan)'}; color:${isSaved ? 'var(--purple)' : 'var(--cyan)'}; background:transparent;">
+              ${isSaved ? '✨ Lihat 5W+1H' : '🔍 Riset 5W+1H'}
+            </button>
+          </td>
+        </tr>
+        <tr id="detailRow_${i}" style="display:none; background:rgba(0,0,0,0.35);">
+          <td colspan="8" style="padding:0;">
+            <div id="longtailContainer_${i}" style="padding:10px 14px;"></div>
+          </td>
         </tr>`;
       });
 
       tbody.innerHTML = html;
+    }
+
+    // ─── 5W+1H LONG-TAIL KEYWORD FUNCTIONS ───
+    function copyTextToClipboard(text, label = 'Teks') {
+      if (!text) return;
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast(`✅ ${label} berhasil disalin ke clipboard!`, 'success');
+        }).catch(() => fallbackCopy(text, label));
+      } else {
+        fallbackCopy(text, label);
+      }
+    }
+
+    function fallbackCopy(text, label) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast(`✅ ${label} berhasil disalin!`, 'success');
+      } catch (err) {
+        showToast(`❌ Gagal menyalin: ${err.message}`, 'error');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    function toggleLongTailDetail(idx, keyword, monthName, demand, supply) {
+      const detailRow = document.getElementById(`detailRow_${idx}`);
+      const btn = document.getElementById(`btnToggleLongtail_${idx}`);
+      if (!detailRow) return;
+
+      const isVisible = detailRow.style.display !== 'none';
+      if (isVisible) {
+        detailRow.style.display = 'none';
+        const storageKey = 'insights_longtail_' + String(keyword).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const isSaved = !!localStorage.getItem(storageKey);
+        if (btn) btn.innerHTML = isSaved ? '✨ Lihat 5W+1H' : '🔍 Riset 5W+1H';
+      } else {
+        detailRow.style.display = 'table-row';
+        if (btn) btn.innerHTML = '▲ Tutup 5W+1H';
+        renderLongTailContent(idx, keyword, monthName, demand, supply, false);
+      }
+    }
+
+    async function renderLongTailContent(idx, keyword, monthName, demand, supply, forceRegenerate = false) {
+      const container = document.getElementById(`longtailContainer_${idx}`);
+      if (!container) return;
+
+      const storageKey = 'insights_longtail_' + String(keyword).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+
+      if (!forceRegenerate) {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            displayLongTailData(idx, parsed, keyword, monthName, demand, supply);
+            return;
+          } catch(e) {}
+        }
+      }
+
+      // Show Loading / Progress UI
+      container.innerHTML = `
+        <div style="padding: 24px; text-align: center; background: rgba(15,23,42,0.8); border-radius: 12px; border: 1px solid var(--purple)44; margin: 8px 0;">
+          <div style="font-size: 28px; color: var(--purple); margin-bottom: 8px;" class="spin">🤖</div>
+          <div style="font-size: 14px; font-weight: 800; color: #fff;">Sedang meracik Long-Tail Keywords berbasis 5W+1H untuk "${escHtml(keyword)}"...</div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 4px;">Menganalisis What, Why, Who, Where, When, How untuk pembeli microstock...</div>
+        </div>
+      `;
+
+      try {
+        const resp = await fetch('/api/generate-longtail', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword, monthName, demand, supply })
+        });
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Gagal generate');
+
+        // Save to localStorage
+        localStorage.setItem(storageKey, JSON.stringify(data));
+        
+        // Show status badge & update button
+        const badgeEl = document.getElementById(`longtailStatus_${idx}`);
+        if (badgeEl) badgeEl.style.display = 'inline-block';
+
+        displayLongTailData(idx, data, keyword, monthName, demand, supply);
+        showToast(`✅ Long-Tail Keyword 5W+1H berhasil diracik!`, 'success');
+      } catch(err) {
+        container.innerHTML = `
+          <div style="padding: 16px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; color: #ef4444; font-size: 12px; display: flex; justify-content: space-between; align-items: center; margin: 8px 0;">
+            <span>❌ Gagal meracik Long-Tail: ${escHtml(err.message)}</span>
+            <button class="btn-generate" onclick="renderLongTailContent(${idx}, '${escHtml(keyword.replace(/'/g, "\\'"))}', '${escHtml(monthName)}', '${escHtml(demand)}', '${escHtml(supply)}', true)" style="padding: 5px 12px; font-size: 11px; background: var(--red);">🔄 Coba Lagi</button>
+          </div>
+        `;
+      }
+    }
+
+    function displayLongTailData(idx, data, keyword, monthName, demand, supply) {
+      const container = document.getElementById(`longtailContainer_${idx}`);
+      if (!container) return;
+
+      const f = data.framework5W1H || {};
+      const tags = data.allLongtailTags || [];
+      const tagsStr = tags.join(', ');
+
+      const renderCard = (title, icon, color, items, desc) => {
+        const listHtml = (items || []).map(item => `<span style="display:inline-block; background:rgba(255,255,255,0.05); border:1px solid ${color}44; color:${color}; padding:4px 9px; border-radius:6px; font-size:11px; margin:2px; font-weight:600;">${escHtml(item)}</span>`).join('');
+        return `
+          <div style="background:rgba(15,23,42,0.7); border:1px solid ${color}33; border-radius:10px; padding:12px; backdrop-filter:blur(6px);">
+            <div style="font-size:12px; font-weight:800; color:${color}; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+              <span>${icon}</span> <span>${title}</span>
+            </div>
+            <div style="font-size:10px; color:var(--text-dim); margin-bottom:8px;">${escHtml(desc || '')}</div>
+            <div style="display:flex; flex-wrap:wrap; gap:4px;">${listHtml || '<span style="font-size:11px; color:var(--text-dim);">-</span>'}</div>
+          </div>
+        `;
+      };
+
+      const safeKw = keyword.replace(/'/g, "\\'");
+      const safeTagsStr = tagsStr.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+      container.innerHTML = `
+        <div style="padding:18px; background:rgba(7,11,20,0.95); border:1px solid var(--purple)55; border-radius:12px; margin:8px 0; box-shadow:0 8px 25px rgba(0,0,0,0.5);">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.08);">
+            <div>
+              <div style="font-size:14px; font-weight:800; color:#fff; display:flex; align-items:center; gap:8px;">
+                <span>✨ Matriks Long-Tail 5W+1H</span>
+                <span style="font-size:10px; font-weight:700; color:var(--green); background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); padding:2px 8px; border-radius:10px;">💾 Tersimpan Local</span>
+              </div>
+              <div style="font-size:12px; color:var(--cyan); margin-top:3px;">Keyword Utama: <strong>"${escHtml(keyword)}"</strong> ${data.recommendedTitle ? `• Judul SEO Komersial: <strong style="color:#fff;">"${escHtml(data.recommendedTitle)}"</strong>` : ''}</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-generate" onclick="copyTextToClipboard('${safeTagsStr}', 'Semua Long-Tail Tag')" style="background:linear-gradient(135deg, var(--green), #059669); padding:7px 16px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
+                📋 Copy Semua Tag (${tags.length})
+              </button>
+              <button class="btn-refresh" onclick="renderLongTailContent(${idx}, '${safeKw}', '${escHtml(monthName)}', '${escHtml(demand)}', '${escHtml(supply)}', true)" style="padding:7px 14px; font-size:12px; border-color:var(--purple); color:var(--purple); background:transparent;">
+                🔄 Regenerate AI
+              </button>
+            </div>
+          </div>
+
+          <!-- 5W+1H GRID -->
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:10px; margin-bottom:14px;">
+            ${renderCard("WHAT (Objek Visual)", "📌", "#38bdf8", f.what?.longtails, f.what?.question)}
+            ${renderCard("WHY (Alasan Pembeli)", "🎯", "#f59e0b", f.why?.longtails, f.why?.question)}
+            ${renderCard("WHO (Target Persona)", "👤", "#a855f7", f.who?.longtails, f.who?.question)}
+            ${renderCard("WHERE (Penempatan Video)", "📍", "#ec4899", f.where?.longtails, f.where?.question)}
+            ${renderCard("WHEN (Tren / Momentum)", "📅", "#10b981", f.when?.longtails, f.when?.question)}
+            ${renderCard("HOW (Fitur Teknis / Kode)", "⚙️", "#f43f5e", f.how?.longtails, f.how?.question)}
+          </div>
+
+          <!-- QUICK COPY CSV METADATA TAGS BOX -->
+          <div style="background:rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px 14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="font-size:11px; font-weight:700; color:var(--text-dim);">🏷 EXPORTABLE CSV TAGS (${tags.length} TAGS DIPISAH KOMA)</span>
+              <button class="btn-refresh" onclick="copyTextToClipboard('${safeTagsStr}', 'CSV Tags')" style="padding:3px 10px; font-size:11px; border-color:var(--cyan); color:var(--cyan); background:transparent;">📋 Copy CSV</button>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#fcd34d; word-break:break-all; line-height:1.5; max-height:80px; overflow-y:auto; padding:6px; background:rgba(0,0,0,0.3); border-radius:6px;">
+              ${escHtml(tagsStr)}
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     function changePage(delta) {
