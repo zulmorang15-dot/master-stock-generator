@@ -984,49 +984,69 @@ app.post("/api/generate-longtail", async (req, res) => {
 
   console.log(`🏷️ Generating 5W+1H Long-Tail Keywords untuk: "${keyword}"`);
 
-  const prompt = `You are an Elite Microstock SEO Analyst specializing in Adobe Stock and Shutterstock video markets.
+  const prompt = `You are a Master Microstock Commercial SEO Strategist.
 
 PRIMARY KEYWORD: "${keyword}"
-CONTEXT: Targeted Month "${monthName || 'General'}", Demand Level "${demand || 'High'}", Existing Supply "${supply || 'Medium'}".
+CONTEXT: Target Month "${monthName || 'General'}", Demand Level "${demand || 'High'}", Existing Supply "${supply || 'Medium'}".
 
-Apply the 5W+1H Framework (What, Why, Who, Where, When, How) to generate highly commercial, high-converting LONG-TAIL KEYWORDS for video stock buyers.
+CRITICAL RULE FOR LONG-TAIL FORMULATION:
+Do NOT output single words or separate bullet points. Each long-tail keyword MUST be a synthesized 3-to-6 word commercial English phrase created by combining 2 or 3 components of the 5W+1H framework together!
+
+FORMULA COMBINATION EXAMPLES (e.g. for keyword "money"):
+- Angle Keamanan Tech: [Mood: Secure] + [Where: Digital Mobile Banking] + [What: Payment Transaction] -> "secure digital mobile banking payment transaction"
+- Angle Growth: [What: Stock Market Chart] + [Why: Wealth Growth] + [How: Seamless Loop 4K] -> "rising stock market wealth growth chart loop 4k"
+- Angle Sci-Fi / Crypto: [Mood: Futuristic] + [What: Digital Currency] + [How: Transparent Alpha] -> "futuristic digital currency crypto transfer alpha background"
+
+Generate 5W+1H synthesized long-tail phrases tailored specifically to "${keyword}":
 
 Output ONLY a valid JSON object without markdown formatting:
 {
   "keyword": "${keyword}",
-  "recommendedTitle": "Top recommended SEO commercial title (max 12 words, no programming terms)",
+  "recommendedTitle": "Top commercial SEO title combining key long-tail phrases (max 12 words, no programming terms)",
   "framework5W1H": {
     "what": {
-      "question": "What is the visual asset / object?",
-      "longtails": ["4k glowing neon bar chart", "3d isometric candlestick graph", "digital particle wave overlay", "cyberpunk hud interface"]
+      "question": "What (Visual Object) + Technical/Mood",
+      "longtails": [
+        "4-5 synthesized 3-6 word commercial phrases (e.g. 4k glowing neon bar chart loop)"
+      ]
     },
     "why": {
-      "question": "Why do buyers need this asset?",
-      "longtails": ["boost financial pitch deck presentation", "increase crypto video sales conversion", "enhance corporate webinar intro", "engage youtube subscribers"]
+      "question": "Why (Buyer Motivation) + Object/Context",
+      "longtails": [
+        "4-5 synthesized 3-6 word commercial phrases (e.g. boost financial pitch deck presentation sales)"
+      ]
     },
     "who": {
-      "question": "Who is the target buyer / audience?",
-      "longtails": ["stock trader presentation editor", "crypto youtube content creator", "fintech startup marketer", "corporate video editor"]
+      "question": "Who (Target Persona) + Use Case",
+      "longtails": [
+        "4-5 synthesized 3-6 word commercial phrases (e.g. crypto youtube content creator video intro)"
+      ]
     },
     "where": {
-      "question": "Where will this asset be placed?",
-      "longtails": ["website landing page header animation", "youtube video intro lower third", "financial news broadcast background", "instagram story promo"]
+      "question": "Where (Placement / Platform) + Visual Style",
+      "longtails": [
+        "4-5 synthesized 3-6 word commercial phrases (e.g. website landing page header background animation)"
+      ]
     },
     "when": {
-      "question": "When is this asset most relevant?",
-      "longtails": ["q4 financial earnings report", "crypto bull run trending market", "annual corporate business review", "black friday tech sale"]
+      "question": "When (Seasonal / Trending Event) + Context",
+      "longtails": [
+        "4-5 synthesized 3-6 word commercial phrases (e.g. q4 corporate financial earnings report graph)"
+      ]
     },
     "how": {
-      "question": "How is it technical / moving?",
-      "longtails": ["transparent background alpha channel", "prores 4444 isolated overlay", "4k 60fps seamless looping animation", "minimalist fluid motion"]
+      "question": "How (Technical Motion / Alpha) + Object",
+      "longtails": [
+        "4-5 synthesized 3-6 word commercial phrases (e.g. transparent background alpha channel isolated overlay)"
+      ]
     }
   },
   "allLongtailTags": [
-    "array of 25-35 single and multi-word long-tail tags ready for stock metadata CSV upload. NO programming terms like CSS, canvas, keyframes."
+    "Array of 25-35 multi-word synthesized long-tail phrases (3-6 words each) combining 2-3 components of the 5W+1H elements above. NO programming terms like CSS, canvas, keyframes."
   ]
 }
 
-Tailor all longtail phrases specifically to "${keyword}". Make them extremely useful for video editors.`;
+Tailor all longtail phrases specifically to "${keyword}". Make them extremely valuable for microstock video buyers.`;
 
   try {
     const aiResponse = await callAIWithFallback(prompt, { preferModel: 'syntx-claude' });
