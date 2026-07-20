@@ -400,7 +400,7 @@ async function callAIWithFallback(prompt, options = {}) {
 
     log(`Mencoba model spesifik pilihan: ${preferModel}...`, 'info');
     if (preferModel === '9router') {
-      const result = await callNineRouter(prompt);
+      const result = await callNineRouter(prompt, NINEROUTER_MODEL, options.attachedImage);
       if (isValid(result, '9Router')) {
         log(`✅ Sukses menggunakan 9Router!`, 'success');
         return result;
@@ -408,7 +408,7 @@ async function callAIWithFallback(prompt, options = {}) {
       throw new Error("9Router returned invalid response");
     } else if (preferModel === 'custom' || preferModel === 'custom-llm' || preferModel.startsWith('custom_')) {
       const targetSlot = (preferModel === 'custom' || preferModel === 'custom-llm') ? 'custom_1' : preferModel;
-      const result = await callCustomLLMSlot(targetSlot, prompt);
+      const result = await callCustomLLMSlot(targetSlot, prompt, options.attachedImage);
       if (isValid(result, targetSlot)) {
         log(`✅ Sukses menggunakan ${targetSlot}!`, 'success');
         return result;
@@ -523,7 +523,7 @@ async function callAIWithFallback(prompt, options = {}) {
       if (slot.enabled && slot.key && slot.key !== "TIDAK_ADA" && slot.key !== "kosong") {
         try {
           log(`📡 Mencoba ${slot.name || slot.id} (${slot.model})...`, "info");
-          const result = await callCustomLLMSlot(slot.id, prompt);
+          const result = await callCustomLLMSlot(slot.id, prompt, options.attachedImage);
           if (isValid(result, slot.name || slot.id)) {
             log(`✅ Sukses menggunakan ${slot.name || slot.id}!`, "success");
             return result;
@@ -540,7 +540,7 @@ async function callAIWithFallback(prompt, options = {}) {
   if (NINEROUTER_API_KEY || NINEROUTER_BASE_URL) {
     try {
       log("📡 Mencoba 9Router...", "info");
-      const result = await callNineRouter(prompt);
+      const result = await callNineRouter(prompt, NINEROUTER_MODEL, options.attachedImage);
       if (isValid(result, "9Router")) {
         log("✅ Sukses menggunakan 9Router!", "success");
         return result;
@@ -615,19 +615,24 @@ async function callAIWithRetry(prompt, options = {}) {
 }
 
 // 9Router API Call Helper (OpenAI-compatible) with retry
-async function callNineRouter(prompt, model = NINEROUTER_MODEL) {
+// 9Router API Call Helper (OpenAI-compatible) with retry
+async function callNineRouter(prompt, model = NINEROUTER_MODEL, attachedImage = null) {
   return withRetry(
     async () => {
       const url = `${NINEROUTER_BASE_URL.replace(/\/+$/, '')}/chat/completions`;
-      console.log(`📡 Mengirim request ke 9Router (URL: ${url}, model: ${model})...`);
+      console.log(`📡 Mengirim request ke 9Router (URL: ${url}, model: ${model}, image: ${!!attachedImage})...`);
 
       const headers = {
         "Content-Type": "application/json"
       };
       if (NINEROUTER_API_KEY) {
         headers["Authorization"] = `Bearer ${NINEROUTER_API_KEY}`;
-        console.log("🔑 API Key 9Router ada:", NINEROUTER_API_KEY.substring(0, 10) + "...");
       }
+
+      const messageContent = attachedImage ? [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: attachedImage } }
+      ] : prompt;
 
       const response = await axios.post(
         url,
@@ -636,14 +641,14 @@ async function callNineRouter(prompt, model = NINEROUTER_MODEL) {
           messages: [
             {
               role: "user",
-              content: prompt
+              content: messageContent
             }
           ],
-          stream: false // Explicitly disable streaming for consistency
+          stream: false
         },
         {
           headers: headers,
-          timeout: 90000 // 9Router may run slow for complex combo queries, give it 90s
+          timeout: 90000
         }
       );
 
@@ -658,7 +663,6 @@ async function callNineRouter(prompt, model = NINEROUTER_MODEL) {
       maxRetries: 2,
       initialDelay: 3000,
       shouldRetry: (error) => {
-        // Retry on network errors and timeouts, but not on 4xx client errors
         const status = error?.response?.status;
         return !status || status >= 500 || error.code === 'ECONNABORTED';
       },
@@ -670,7 +674,7 @@ async function callNineRouter(prompt, model = NINEROUTER_MODEL) {
 }
 
 // Custom OpenAI-Compatible LLM API Call Helper (5 Slots dengan Enable/Disable)
-async function callCustomLLMSlot(slotId, prompt) {
+async function callCustomLLMSlot(slotId, prompt, attachedImage = null) {
   const provider = customLlmProviders.find(p => p.id === slotId);
   if (!provider) throw new Error(`Custom LLM Slot ${slotId} tidak ditemukan`);
   if (!provider.enabled) throw new Error(`Custom LLM Provider "${provider.name}" sedang dinonaktifkan! Aktifkan terlebih dahulu di Modal API Keys.`);
@@ -682,19 +686,23 @@ async function callCustomLLMSlot(slotId, prompt) {
   return withRetry(
     async () => {
       const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
-      console.log(`📡 Mengirim request ke ${provider.name} (URL: ${url}, model: ${model})...`);
+      console.log(`📡 Mengirim request ke ${provider.name} (URL: ${url}, model: ${model}, image: ${!!attachedImage})...`);
 
       const headers = { "Content-Type": "application/json" };
       if (apiKey && apiKey !== "TIDAK_ADA" && apiKey !== "kosong") {
         headers["Authorization"] = `Bearer ${apiKey}`;
-        console.log(`🔑 API Key ${provider.name} ada:`, apiKey.substring(0, 10) + "...");
       }
+
+      const messageContent = attachedImage ? [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: attachedImage } }
+      ] : prompt;
 
       const response = await axios.post(
         url,
         {
           model: model,
-          messages: [{ role: "user", content: prompt }],
+          messages: [{ role: "user", content: messageContent }],
           stream: false
         },
         { headers, timeout: 90000 }
@@ -5601,10 +5609,199 @@ app.post("/api/trends/analyze", async (req, res) => {
     res.status(500).json({ error: "Gagal memproses analisis tren dengan AI", details: error.message });
   }
 });
-// Endpoint for AI HTML Compiler Chat Assistant (Smart Intent & Slash Commands)
+// Helper to cache parsed keyword.csv in memory
+let cachedKeywordCsvData = null;
+
+function sanitizeKeywordString(raw) {
+  if (!raw) return '';
+  let str = raw
+    .replace(/\x82/g, 'e')
+    .replace(/\xA4/g, 'n')
+    .replace(/\x85/g, 'a')
+    .replace(/\x88/g, 'e')
+    .replace(/\x94/g, 'o')
+    .replace(/\x81/g, 'u')
+    .replace(/\x96/g, 'u')
+    .replace(/[\uFFFD\u0000-\u001F]/g, '')
+    .trim();
+  
+  // Clean question mark artifacts left over from broken encoding
+  if (/^[\?\s]+$/.test(str)) return ''; // Filter out pure question mark garbage like "???" or "??"
+  str = str.replace(/^\?+|\?+$/g, '').trim();
+  return str;
+}
+
+function loadKeywordCsvData() {
+  if (cachedKeywordCsvData) return cachedKeywordCsvData;
+  const filePath = path.join(__dirname, 'keyword.csv');
+  if (!fs.existsSync(filePath)) return [];
+
+  // Read with latin1 to capture CP850/Latin1 accents accurately
+  const content = fs.readFileSync(filePath, 'latin1');
+  const lines = content.split(/\r?\n/);
+  const records = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]?.trim();
+    if (!line) continue;
+    const parts = line.split(';');
+    if (parts.length >= 2) {
+      const monthRaw = parts[0]?.trim() || '';
+      const rawKw = parts[1]?.trim() || '';
+      const demand = parts[2]?.trim() || 'Rising';
+      const supply = parts[3]?.trim() || '0';
+
+      const keyword = sanitizeKeywordString(rawKw);
+
+      if (!keyword || keyword.toUpperCase() === 'KEYWORD') continue;
+
+      const monthMatch = monthRaw.match(/(January|February|March|April|May|June|July|August|September|October|November|December)/i);
+      const monthName = monthMatch ? monthMatch[1] : monthRaw;
+
+      records.push({
+        rawMonth: monthRaw,
+        monthName: monthName,
+        keyword: keyword,
+        demand: demand,
+        supply: supply
+      });
+    }
+  }
+  cachedKeywordCsvData = records;
+  return records;
+}
+
+// GET /api/insights/shutterstock-trends -> Endpoint Rekomendasi Kata Kunci Shutterstock 2025 per bulan
+app.get("/api/insights/shutterstock-trends", (req, res) => {
+  try {
+    const allRecords = loadKeywordCsvData();
+    const requestedMonth = (req.query.month || '').trim().toLowerCase();
+    const demandFilter = (req.query.demand || 'all').trim().toLowerCase();
+    const searchQuery = (req.query.search || '').trim().toLowerCase();
+
+    const monthListEng = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const monthListIndo = [
+      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+
+    const currentMonthIndex = new Date().getMonth(); // 0..11 (6 = July/Juli)
+    const currentMonthEng = monthListEng[currentMonthIndex];
+    const currentMonthIndo = monthListIndo[currentMonthIndex];
+
+    let targetMonthIdx = currentMonthIndex;
+    if (requestedMonth) {
+      const idxEng = monthListEng.findIndex(m => m.toLowerCase() === requestedMonth);
+      const idxIndo = monthListIndo.findIndex(m => m.toLowerCase() === requestedMonth);
+      if (idxEng !== -1) targetMonthIdx = idxEng;
+      else if (idxIndo !== -1) targetMonthIdx = idxIndo;
+    }
+
+    const targetMonthEng = monthListEng[targetMonthIdx];
+    const targetMonthIndo = monthListIndo[targetMonthIdx];
+
+    let filtered = allRecords.filter(r => r.monthName.toLowerCase() === targetMonthEng.toLowerCase());
+
+    if (demandFilter === 'high') {
+      filtered = filtered.filter(r => r.demand.toLowerCase().includes('high'));
+    } else if (demandFilter === 'rising') {
+      filtered = filtered.filter(r => r.demand.toLowerCase().includes('rising'));
+    }
+
+    if (searchQuery) {
+      filtered = filtered.filter(r => r.keyword.toLowerCase().includes(searchQuery));
+    }
+
+    const upcomingMonths = [];
+    for (let offset = 1; offset <= 3; offset++) {
+      const nextIdx = (currentMonthIndex + offset) % 12;
+      upcomingMonths.push({
+        eng: monthListEng[nextIdx],
+        indo: monthListIndo[nextIdx]
+      });
+    }
+
+    res.json({
+      success: true,
+      currentMonth: targetMonthIndo,
+      currentMonthEng: targetMonthEng,
+      currentMonthIndo: targetMonthIndo,
+      availableMonths: monthListEng.map((m, i) => ({ eng: m, indo: monthListIndo[i] })),
+      upcomingMonths: upcomingMonths,
+      totalRecordsInMonth: filtered.length,
+      data: filtered
+    });
+  } catch (err) {
+    console.error("❌ Error loading shutterstock trends:", err);
+    res.status(500).json({ error: "Gagal memuat data tren Shutterstock: " + err.message });
+  }
+});
+
+// POST /api/insights/generate-ai-niche -> Endpoint AI untuk menghasilkan Long Tail Keywords, Konsep Animasi Detail, Judul Stock Video, dan Prompt Compiler (100% ENGLISH FOR GLOBAL MARKET)
+app.post("/api/insights/generate-ai-niche", async (req, res) => {
+  try {
+    const { keyword, month, demand, supply, category, preferModel } = req.body;
+    if (!keyword || !keyword.trim()) {
+      return res.status(400).json({ error: "Keyword tidak boleh kosong" });
+    }
+
+    console.log(`🤖 Generasi AI Niche & Breakdown (100% English) untuk keyword: "${keyword}" (${month || 'All'}), model: ${preferModel || 'auto'}`);
+
+    const systemPrompt = `You are a World-Class Senior Stock Video Creative Director & Global SEO Meta Strategist for Shutterstock, Adobe Stock, Getty Images, and Motion Elements.
+
+CRITICAL INSTRUCTION: ALL OUTPUT VALUES (KEYWORDS, TITLES, CONCEPTS, CHOREOGRAPHY, AND COMPILER PROMPTS) MUST BE 100% IN HIGH-CONVERTING COMMERCIAL ENGLISH FOR THE GLOBAL INTERNATIONAL STOCK MARKET!
+
+Main Keyword: "${keyword}"
+Month Period: "${month || 'All'}"
+Demand Status: "${demand || 'High'}"
+Estimated Supply: "${supply || 'N/A'}"
+Category Niche: "${category || 'General'}"
+
+REQUIRED OUTPUT FORMAT (PURE JSON ONLY, NO MARKDOWN WRAPPERS):
+{
+  "keyword": "${keyword}",
+  "longTailKeywords": [
+    "long tail keyword 1", "long tail keyword 2", "long tail keyword 3", "... (generate 20 specific high-intent English stock video keywords and metadata tags)"
+  ],
+  "stockVideoTitles": [
+    "Commercial Stock Title 1 (High-CTR 4K Looped Stock Video)",
+    "Commercial Stock Title 2 (SEO Optimized for Shutterstock & Adobe Stock)",
+    "Commercial Stock Title 3 (Kinetic Typography & Motion Graphic Focus)"
+  ],
+  "animConcept": {
+    "visualStyle": "Detailed English visual style description (e.g., Dark Cyberpunk Hologram, Glowing Gold Luxury Particles, Vibrant Summer Waves, Futuristic Tech Grid)",
+    "colorPalette": ["#0a1128", "#00f0ff", "#a855f7", "#ffffff"],
+    "choreography": "English timeline description per second (0-3s intro reveal, 3-7s main kinetic motion & floating elements, 7-10s seamless loop transition)",
+    "specs": "Resolution: 3840x2160 (4K UHD), 60FPS, 10-Second Seamless Loop, Remotion HTML/CSS/JS Native"
+  },
+  "detailedCompilerPrompt": "/buat Create a premium 4K 60FPS 10-second seamless loop stock video animation for \\"${keyword}\\". Use a sleek dark background with glowing cyan, purple, and gold accents. Add kinetic typography displaying \\"${keyword}\\" with Plus Jakarta Sans font, smooth SVG path animations, floating particle burst effects, dynamic CSS keyframes, and a seamless loop transition."
+}`;
+
+    const aiResponse = await callAIWithFallback(systemPrompt, { preferModel: preferModel || 'auto' });
+    let jsonText = aiResponse.trim();
+    if (jsonText.startsWith("```json")) {
+      jsonText = jsonText.split("```json")[1].split("```")[0].trim();
+    } else if (jsonText.includes("```")) {
+      jsonText = jsonText.split("```")[1].split("```")[0].trim();
+    }
+
+    jsonText = jsonText.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+    const parsed = JSON.parse(jsonText);
+
+    res.json({ success: true, data: parsed });
+  } catch (err) {
+    console.error("❌ Error AI Generate Niche Breakdown:", err.message);
+    res.status(500).json({ error: "Gagal memproses AI Niche Breakdown: " + err.message });
+  }
+});
+
+// Endpoint for AI HTML Compiler Chat Assistant (Smart Intent, Slash Commands & Vision Multimodal)
 app.post("/api/compiler/chat", async (req, res) => {
   try {
-    const { prompt, currentCode, preferModel, mode = 'auto', history = [] } = req.body;
+    const { prompt, currentCode, preferModel, mode = 'auto', history = [], attachedImage = null } = req.body;
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({ error: "Prompt tidak boleh kosong." });
     }
@@ -5614,6 +5811,10 @@ app.post("/api/compiler/chat", async (req, res) => {
       modeInstruction = "PERINTAH: PENGGUNA MEMINTA BUAT ANIMASI BARU DARI NOL. Abaikan kode lama jika ada, buat dokumen HTML animasi baru yang lengkap dan indah dari awal.";
     } else if (mode === 'edit') {
       modeInstruction = "PERINTAH: PENGGUNA MEMINTA MENGEDIT / MEMPERBARUI ANIMASI YANG ADA. Gunakan kode HTML saat ini di bawah ini dan ubah/tambah sesuai instruksi pengguna.";
+    }
+
+    if (attachedImage) {
+      modeInstruction += "\nCATATAN MULTIMODAL VISION: Pengguna melampirkan gambar mockup/diagram/referensi visual. Analisis elemen visual pada gambar ini dan gunakan sebagai acuan utama dalam membuat/mengedit kode HTML animasi.";
     }
 
     let historyText = "";
@@ -5632,7 +5833,7 @@ Aturan Respons:
    - Jawab secara ramah dan informatif dalam Bahasa Indonesia, nyambung dengan riwayat percakapan sebelumnya jika ada.
    - Atur "isCodeUpdate": false.
 
-2. Jika ini perintah MEMBUAT BARU atau MENGEDIT animasi HTML/CSS:
+2. Jika ini perintah MEMBUAT BARU atau MENGEDIT animasi HTML/CSS (termasuk jika dilampirkan gambar referensi):
    - Buat atau perbarui dokumen HTML animasi mandiri (lengkap dengan CSS <style> & JS <script>).
    - Pastikan animasi looped (berulang tanpa jeda) dan visualnya sangat menarik (efek glowing, smooth gradients, kinetic motion).
    - Jawab dengan penjelasan singkat tentang apa yang Anda buat/ubah di "message".
@@ -5650,8 +5851,23 @@ ${historyText}${currentCode && mode !== 'new' ? `Kode HTML animasi saat ini di C
 Pesan Pengguna Terbaru:
 ${prompt}`;
 
-    console.log(`🤖 [Compiler AI Chat] Mengolah prompt: "${prompt.slice(0, 50)}..." dengan model: ${preferModel || 'auto'}`);
-    const aiResponse = await callAIWithFallback(systemContext, { preferModel: preferModel || 'auto' });
+    console.log(`🤖 [Compiler AI Chat] Mengolah prompt: "${prompt.slice(0, 50)}..." dengan model: ${preferModel || 'auto'}, image: ${!!attachedImage}`);
+    
+    let aiResponse = "";
+    try {
+      aiResponse = await callAIWithFallback(systemContext, { preferModel: preferModel || 'auto', attachedImage });
+    } catch (modelErr) {
+      if (attachedImage) {
+        console.error("⚠️ Error Vision model/provider:", modelErr.message);
+        return res.json({
+          success: true,
+          isCodeUpdate: false,
+          message: `❌ Model/Provider LLM yang Anda pilih (${preferModel || 'auto'}) tidak mendukung analisis gambar (Vision) atau mengalami kesalahan: ${modelErr.message}. Kode HTML tidak dapat dibuat dari gambar. Harap pilih model yang mendukung Vision (seperti GPT-4o, Claude 3.5, atau Gemini).`,
+          code: ""
+        });
+      }
+      throw modelErr;
+    }
 
     let parsed = null;
     try {

@@ -53,15 +53,15 @@
       min-height: 100vh;
     }
 
-    header {
+    header, .header {
       background: var(--bg2);
       border-bottom: 1px solid var(--border);
       padding: 16px 28px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      position: sticky;
-      top: 0;
+      position: relative !important;
+      top: auto !important;
       z-index: 100;
       backdrop-filter: blur(12px);
     }
@@ -96,14 +96,14 @@
       color: var(--cyan);
     }
 
-    main { max-width: 1400px; margin: 0 auto; padding: 28px; }
+    main { max-width: 1650px; margin: 0 auto; padding: 28px; }
     
     .input-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: var(--radius);
-      padding: 24px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      padding: 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
     }
 
     .btn-generate, .btn-refresh {
@@ -143,26 +143,195 @@
     }
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-    /* Slot Toggle Switch */
-    .slot-toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
-    .slot-toggle-switch input { opacity: 0; width: 0; height: 0; }
-    .slot-toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: .3s ease; border-radius: 22px; border: 1px solid rgba(255,255,255,0.2); }
-    .slot-toggle-slider::before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: #94a3b8; transition: .3s ease; border-radius: 50%; }
-    .slot-toggle-switch input:checked + .slot-toggle-slider { background: rgba(168,85,247,0.35); border-color: rgba(168,85,247,0.7); }
-    .slot-toggle-switch input:checked + .slot-toggle-slider::before { transform: translateX(18px); background: #c084fc; box-shadow: 0 0 8px rgba(168,85,247,0.8); }
+    /* Chip Month Selectors */
+    .chip-item {
+      padding: 7px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 30px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--text-mid);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chip-item:hover {
+      background: rgba(56,189,248,0.15);
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+    .chip-item.active {
+      background: linear-gradient(135deg, rgba(56,189,248,0.25), rgba(168,85,247,0.2));
+      border-color: var(--cyan);
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(56,189,248,0.25);
+    }
+
+    /* Table Styles */
+    .trend-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    .trend-table th {
+      background: rgba(255,255,255,0.04);
+      color: var(--cyan);
+      padding: 14px 16px;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      user-select: none;
+    }
+    .trend-table th.sortable:hover {
+      background: rgba(56,189,248,0.12);
+      color: #fff;
+    }
+    .trend-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      color: var(--text);
+    }
+    .trend-table tbody tr {
+      transition: background 0.15s ease;
+    }
+    .trend-table tbody tr:hover {
+      background: rgba(255,255,255,0.03);
+    }
+
+    /* EXCEL FILTER TRIGGER & POPUP SYSTEM */
+    .excel-filter-trigger {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px;
+      color: var(--cyan);
+      font-size: 10px;
+      padding: 2px 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .excel-filter-trigger:hover, .excel-filter-trigger.active {
+      background: var(--purple);
+      border-color: var(--purple);
+      color: #fff;
+      box-shadow: 0 0 8px rgba(168,85,247,0.4);
+    }
+
+    .excel-filter-popup {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      width: 230px;
+      background: rgba(15, 23, 42, 0.98);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 15px 40px rgba(0,0,0,0.85);
+      z-index: 1000;
+      backdrop-filter: blur(16px);
+      text-transform: none;
+      font-weight: normal;
+      font-size: 12px;
+    }
+
+    .excel-filter-popup-header {
+      font-weight: 700;
+      color: var(--cyan);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .excel-filter-list {
+      max-height: 180px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .excel-filter-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      color: var(--text-mid);
+      font-size: 12px;
+    }
+    .excel-filter-item:hover {
+      color: #fff;
+    }
+    .excel-filter-item input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: var(--purple);
+    }
+
+    /* Badges */
+    .badge-demand {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .badge-high {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+    .badge-rising {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fcd34d;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    /* Opportunity Badges */
+    .badge-gold {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(234, 179, 8, 0.2));
+      color: #fef08a;
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+    }
+    .badge-high-opp {
+      background: rgba(168, 85, 247, 0.15);
+      color: #e9d5ff;
+      border: 1px solid rgba(168, 85, 247, 0.35);
+    }
+    .badge-rising-opp {
+      background: rgba(56, 189, 248, 0.15);
+      color: #bae6fd;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+    .badge-competitive {
+      background: rgba(148, 163, 184, 0.12);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
 
     .spin { display: inline-block; animation: spin 1s infinite linear; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   </style>
 </head>
-<body>
+<body onclick="closeAllExcelFilterMenus(event)">
 
   <header>
     <div class="brand">
       <div class="brand-icon">📈</div>
       <div>
-        <div class="brand-title">Trends & Stock Explorer</div>
-        <div class="brand-sub">Google Trends RSS (6 Negara) & Adobe Stock Market Research</div>
+        <div class="brand-title">Shutterstock Trends & Stock Explorer 2025-2026</div>
+        <div class="brand-sub">Rekomendasi Kata Kunci Tren Perbulan Berdasarkan Data Rekap Historis Shutterstock</div>
       </div>
     </div>
 
@@ -175,151 +344,137 @@
   </header>
 
   <main>
-    <div style="display:flex; flex-direction:column; gap:28px;">
-      
-      <!-- CARD 1: GOOGLE TRENDS NICHE DISCOVERY -->
-      <div class="input-card" style="padding: 28px; width: 100%;">
-        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
-          <h3 style="font-size:18px; font-weight:800; color:var(--cyan); margin:0;">📈 Google Trends Niche Discovery (6 Negara)</h3>
-          <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
-            Tarik data tren terbaru dari Amerika Serikat, Jerman, Inggris, Jepang, Kanada, dan Prancis, kemudian gunakan AI untuk meracik ide niche video After Effects.
-          </p>
+    <div style="display:flex; flex-direction:column; gap:24px;">
+
+      <!-- KPI METRIC CARDS HEADER -->
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
+        <div class="metric-card" style="border-color:rgba(56,189,248,0.3); background:rgba(56,189,248,0.04);">
+          <div class="metric-lbl">🗓️ Bulan Rekomendasi Aktif</div>
+          <div class="metric-val" id="metricActiveMonth" style="color:var(--cyan);">Juli 2025</div>
+          <div style="font-size:11px; color:var(--text-mid);" id="metricUpcomingSub">Bulan Depan: Agustus, September</div>
         </div>
 
-        <!-- STEP 1: FETCH DATA -->
-        <div style="margin-bottom: 24px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
-            <div style="font-size:14px; font-weight:700; color:#fff;">Langkah 1: Ambil Data Tren Mentah</div>
-            <button class="btn-generate" id="btnFetchRawTrends" onclick="fetchRawTrends()" style="margin-top:0; padding:10px 24px; font-size:13px; font-weight:700; background:linear-gradient(135deg, var(--cyan), #0ea5e9);">
-              📥 Tarik Tren Mentah
-            </button>
-          </div>
-
-          <!-- Loading Raw Trends -->
-          <div id="rawTrendsLoading" style="display:none; text-align:center; padding:20px 0;">
-            <div class="spin" style="font-size:24px; margin-bottom:8px; color:var(--cyan);">⏳</div>
-            <div style="font-size:13px; color:var(--text-mid); font-weight:600;">Menghubungi Google Trends RSS Feed...</div>
-          </div>
-
-          <!-- Raw Trends Grid -->
-          <div id="rawTrendsContainer" style="display:none; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; background: rgba(0,0,0,0.15); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
-          </div>
+        <div class="metric-card" style="border-color:rgba(234,179,8,0.4); background:rgba(234,179,8,0.04);">
+          <div class="metric-lbl">💎 Peluang Emas (Low Supply)</div>
+          <div class="metric-val" id="metricGoldCount" style="color:#fef08a;">0</div>
+          <div style="font-size:11px; color:var(--text-dim);">Demand Tinggi + Kompetisi Masih Rendah</div>
         </div>
 
-        <!-- STEP 2: AI ANALYSIS -->
-        <div id="aiAnalysisSection" style="display:none;">
-          <div style="border-top: 1px dashed var(--border); padding-top: 20px; margin-top: 20px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
-              <div style="font-size:14px; font-weight:700; color:#fff;">Langkah 2: AI Niche Generator Prompt</div>
-              <button class="btn-refresh" onclick="resetTrendsPrompt()" style="padding:4px 10px; font-size:11px; border-color:var(--text-dim); color:var(--text-mid);">🔄 Reset Prompt</button>
-            </div>
-
-            <textarea id="trendsPromptEditor" class="input-text-field" style="height: 140px; font-family: monospace; font-size: 11px; margin-bottom: 16px;"></textarea>
-
-            <button class="btn-generate" id="btnAnalyzeTrends" onclick="analyzeTrendsWithAI()" style="width:100%; padding:12px; font-size:14px; font-weight:700; background:linear-gradient(135deg, var(--purple), #7c3aed);">
-              🤖 Analisis Tren & Racik Niche Video AI
-            </button>
-          </div>
-
-          <!-- Loading AI Analysis -->
-          <div id="trendsAnalysisLoading" style="display:none; text-align:center; padding:30px 0;">
-            <div class="spin" style="font-size:28px; margin-bottom:12px; color:var(--purple);">✨</div>
-            <div style="font-size:14px; color:#fff; font-weight:700;">Memproses data tren dengan AI...</div>
-          </div>
-
-          <!-- Result Table -->
-          <div id="trendsTableContainer" style="display:none; margin-top: 24px;">
-            <div style="font-size:14px; font-weight:700; color:var(--green); margin-bottom:12px;">💡 Ide Niche Video Berpotensi Tinggi:</div>
-            <div style="overflow-x:auto; border:1px solid var(--border); border-radius:8px;">
-              <table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
-                <thead>
-                  <tr style="background:rgba(255,255,255,0.05); color:var(--cyan); border-bottom:1px solid var(--border);">
-                    <th style="padding:10px;">Judul Niche</th>
-                    <th style="padding:10px;">Konsep Visual</th>
-                    <th style="padding:10px;">Negara</th>
-                    <th style="padding:10px;">Kata Kunci / Tag</th>
-                    <th style="padding:10px; text-align:center;">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody id="trendsTableBody">
-                </tbody>
-              </table>
-            </div>
-          </div>
+        <div class="metric-card" style="border-color:rgba(168,85,247,0.4); background:rgba(168,85,247,0.04);">
+          <div class="metric-lbl">🚀 Waktu Emas Production (3 Bulan)</div>
+          <div class="metric-val" id="metricGoldenUploadCount" style="color:#c084fc;">0</div>
+          <div style="font-size:11px; color:var(--text-dim);">Keyword event +3 bulan ideal di-upload sekarang!</div>
         </div>
 
+        <div class="metric-card" style="border-color:rgba(239,68,68,0.3); background:rgba(239,68,68,0.04);">
+          <div class="metric-lbl">🔥 High Demand Spikes</div>
+          <div class="metric-val" id="metricHighDemandCount" style="color:#fca5a5;">0</div>
+          <div style="font-size:11px; color:var(--text-dim);">Kata kunci lonjakan tertinggi minggu ini</div>
+        </div>
       </div>
 
-      <!-- CARD 2: ADOBE STOCK & SHUTTERSTOCK EXPLORER & AI RESEARCH -->
-      <div class="input-card" style="padding: 28px; width: 100%;">
-        <div style="border-bottom:1px solid var(--border); padding-bottom:16px; margin-bottom:20px;">
-          <h3 style="font-size:18px; font-weight:800; color:var(--blue); margin:0;">🔍 Adobe Stock & Shutterstock Explorer</h3>
-          <p style="font-size:12px; color:var(--text-dim); margin:8px 0 0 0;">
-            Cari kata kunci di Adobe Stock/Shutterstock untuk melihat persaingan, atau jalankan **Riset Pasar AI** untuk menganalisis demand & gap niche.
-          </p>
-        </div>
-
-        <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
-          <input type="text" class="input-text-field" id="stockSearchInput" placeholder="Masukkan kata kunci (contoh: neon HUD background loop)..." style="flex:1; min-width:240px; font-size:14px; padding:12px 16px;" />
-          <button class="btn-generate" onclick="searchDirectly('adobe')" style="margin:0; padding:12px 20px; background:linear-gradient(135deg, #ef4444, #dc2626); font-size:13px;">
-            🔴 Adobe Stock
-          </button>
-          <button class="btn-generate" onclick="searchDirectly('shutterstock')" style="margin:0; padding:12px 20px; background:linear-gradient(135deg, #f97316, #ea580c); font-size:13px;">
-            🟠 Shutterstock
-          </button>
-          <button class="btn-generate" id="btnResearchMarket" onclick="researchMarket()" style="margin:0; padding:12px 24px; background:linear-gradient(135deg, var(--purple), #6366f1); font-size:13px; font-weight:700;">
-            🔬 Riset Pasar (AI)
-          </button>
-        </div>
-
-        <!-- Research Loading -->
-        <div id="researchLoading" style="display:none; text-align:center; padding:30px 0;">
-          <div class="spin" style="font-size:28px; margin-bottom:12px; color:var(--purple);">🔬</div>
-          <div style="font-size:14px; color:#fff; font-weight:700;">Mengambil hasil pencarian & menganalisis pasar...</div>
-        </div>
-
-        <!-- Research Results Panel -->
-        <div id="researchResults" style="display:none; background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:12px; padding:24px; margin-top:20px;">
-          <!-- Summary Header -->
-          <div id="researchSummary" style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border);"></div>
-
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:20px;">
-            <!-- Panel 1: Competition & Demand -->
-            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; padding:16px;">
-              <div id="researchCompetition" style="margin-bottom:16px;"></div>
-              <div id="researchDemand"></div>
-            </div>
-
-            <!-- Panel 2: Trends & Keywords -->
-            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; padding:16px;">
-              <div id="researchTrends" style="margin-bottom:16px;"></div>
-              <div id="researchKeywords"></div>
-            </div>
-
-            <!-- Panel 3: Underserved Niches -->
-            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; padding:16px;">
-              <div id="researchNiches"></div>
-            </div>
-
-            <!-- Panel 4: Recommended Titles -->
-            <div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; padding:16px; grid-column: 1 / -1;">
-              <div id="researchTitles" style="margin-bottom:16px;"></div>
-              <div id="researchStrategy"></div>
-            </div>
-          </div>
-
-          <!-- Raw Data Toggle -->
-          <details style="margin-top:20px; font-size:12px; color:var(--text-dim);">
-            <summary style="cursor:pointer; font-weight:600; color:var(--cyan);">📄 Lihat Data Scrape Mentah</summary>
-            <pre id="researchRawData" style="background:#0a0a12; padding:14px; border-radius:8px; margin-top:10px; overflow-x:auto; max-height:240px; font-family:monospace; color:#a78bfa; font-size:11px;"></pre>
-          </details>
-
-          <div style="margin-top:24px; display:flex; gap:12px; justify-content:flex-end;">
-            <button class="btn-generate" id="btnApplyResearch" onclick="applyResearchToGenerator()" style="margin-top:0; padding:12px 24px; font-size:13px; font-weight:700; background:linear-gradient(135deg, #10b981, #059669);">
-              🚀 Gunakan Hasil Riset di Dashboard Generator
-            </button>
+      <!-- MAIN CARD: RECOMMENDATION TABLE SYSTEM -->
+      <div class="input-card">
+        <div style="border-bottom:1px solid var(--border); padding-bottom:20px; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+          <div>
+            <h3 style="font-size:18px; font-weight:800; color:var(--cyan); margin:0; display:flex; align-items:center; gap:8px;">
+              📊 Tabel Rekomendasi & Strategi Jadwal Production Shutterstock
+            </h3>
+            <p style="font-size:12px; color:var(--text-dim); margin:6px 0 0 0;">
+              Gunakan filter multi-select gaya Excel pada header kolom (Demand, Peluang Pasar) untuk centang/hapus centang item pilihan Anda! Klik nama kolom untuk mengurutkan.
+            </p>
           </div>
         </div>
+
+        <!-- QUICK MONTH CHIP SELECTORS -->
+        <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
+          <div style="font-size:12px; font-weight:700; color:var(--text-dim); margin-right:4px;">FILTER BULAN:</div>
+          <div id="monthChipsContainer" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+        </div>
+
+        <!-- FILTERS & SEARCH ROW -->
+        <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap; align-items:center;">
+          <div style="flex:1; min-width:240px;">
+            <input type="text" id="searchInput" class="input-text-field" placeholder="🔍 Cari kata kunci (contoh: new year, ramadan, summer, business, HUD)..." oninput="applyFilters()" />
+          </div>
+
+          <div style="width:170px;">
+            <select id="monthSelect" class="input-text-field" onchange="onMonthSelectChanged(this.value)">
+              <option value="January">01 - Januari</option>
+              <option value="February">02 - Februari</option>
+              <option value="March">03 - Maret</option>
+              <option value="April">04 - April</option>
+              <option value="May">05 - Mei</option>
+              <option value="June">06 - Juni</option>
+              <option value="July">07 - Juli</option>
+              <option value="August">08 - Agustus</option>
+              <option value="September">09 - September</option>
+              <option value="October">10 - Oktober</option>
+              <option value="November">11 - November</option>
+              <option value="December">12 - Desember</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- LOADING SPINNER -->
+        <div id="tableLoading" style="display:none; text-align:center; padding:50px 0;">
+          <div class="spin" style="font-size:32px; color:var(--cyan); margin-bottom:12px;">⏳</div>
+          <div style="font-size:14px; font-weight:700; color:var(--text-mid);">Memuat data rekap kata kunci Shutterstock...</div>
+        </div>
+
+        <!-- RECOMMENDATION TABLE WITH EXCEL MULTI-SELECT CHECKBOX COLUMN FILTERS -->
+        <div id="tableWrapper" style="overflow-x:auto; border:1px solid var(--border); border-radius:12px; background:rgba(0,0,0,0.2);">
+          <table class="trend-table">
+            <thead>
+              <tr>
+                <th style="width:50px; text-align:center;">No</th>
+                <th style="width:140px;">Bulan Rekap</th>
+                <th class="sortable" onclick="toggleColumnSort('keyword')" style="width:280px; cursor:pointer;" title="Klik untuk urutkan A-Z / Z-A">
+                  Keyword Utama <span id="sortArrow_keyword" style="font-size:10px; color:var(--cyan);">↕</span>
+                </th>
+
+                <!-- EXCEL FILTER HEADER: DEMAND -->
+                <th class="sortable" style="width:170px; position:relative;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span onclick="toggleColumnSort('demand')" style="cursor:pointer;" title="Urutkan Demand">Demand <span id="sortArrow_demand" style="font-size:10px; color:var(--cyan);">↕</span></span>
+                    <button class="excel-filter-trigger" id="excelBtn_demand" onclick="toggleExcelFilterMenu('demand', event)" title="Filter Checkbox Demand (Excel style)">🔻</button>
+                  </div>
+                  <div class="excel-filter-popup" id="excelPopup_demand" onclick="event.stopPropagation()"></div>
+                </th>
+
+                <th class="sortable" onclick="toggleColumnSort('supply')" style="width:170px; cursor:pointer;" title="Klik untuk urutkan Supply">
+                  Estimasi Supply <span id="sortArrow_supply" style="font-size:10px; color:var(--cyan);">↕</span>
+                </th>
+
+                <!-- EXCEL FILTER HEADER: PELUANG PASAR -->
+                <th class="sortable" style="width:200px; position:relative;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span onclick="toggleColumnSort('opportunity')" style="cursor:pointer;" title="Urutkan Peluang Pasar">Peluang Pasar <span id="sortArrow_opportunity" style="font-size:10px; color:var(--cyan);">↕</span></span>
+                    <button class="excel-filter-trigger" id="excelBtn_opportunity" onclick="toggleExcelFilterMenu('opportunity', event)" title="Filter Checkbox Peluang Pasar (Excel style)">🔻</button>
+                  </div>
+                  <div class="excel-filter-popup" id="excelPopup_opportunity" onclick="event.stopPropagation()"></div>
+                </th>
+
+                <th class="sortable" onclick="toggleColumnSort('leadtime')" style="width:250px; cursor:pointer;" title="Klik untuk urutkan Lead Time">
+                  Jadwal Upload Ideal <span id="sortArrow_leadtime" style="font-size:10px; color:var(--cyan);">↕</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="recommendationTableBody">
+            </tbody>
+          </table>
+        </div>
+
+        <!-- TABLE FOOTER / COUNTER -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; font-size:12px; color:var(--text-dim);">
+          <div id="tableCountText">Menampilkan 0 kata kunci</div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-refresh" id="btnPrevPage" onclick="changePage(-1)" style="padding:6px 12px; font-size:11px;" disabled>◀ Sblm</button>
+            <span id="pageIndicator" style="padding:6px 10px; font-weight:700; color:var(--cyan);">1</span>
+            <button class="btn-refresh" id="btnNextPage" onclick="changePage(1)" style="padding:6px 12px; font-size:11px;">Stlh ▶</button>
+          </div>
+        </div>
+
       </div>
 
     </div>
@@ -329,30 +484,31 @@
 
   <!-- Modal Pengaturan API Keys -->
   <div id="apiKeysModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(7, 11, 20, 0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center; padding:20px;">
-    <div style="width:100%; max-width:840px; max-height:88vh; background:rgba(15, 23, 42, 0.96); border:1px solid rgba(59,130,246,0.4); border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 60px rgba(0,0,0,0.85);">
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:rgba(59,130,246,0.08); border-bottom:1px solid rgba(59,130,246,0.2);">
-        <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin:0;">🔑 Pengaturan API Keys AI</h3>
-        <span style="cursor:pointer; font-size:24px; color:var(--text-dim);" onclick="toggleApiKeysPanel()">&times;</span>
+    <div style="width:100%; max-width:880px; max-height:88vh; background:rgba(15, 23, 42, 0.98); border:1px solid rgba(168,85,247,0.4); border-radius:18px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 60px rgba(0,0,0,0.9); backdrop-filter:blur(16px);">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:20px 24px; background:linear-gradient(135deg, rgba(168,85,247,0.15), rgba(56,189,248,0.08)); border-bottom:1px solid rgba(168,85,247,0.25);">
+        <h3 style="font-size:16px; font-weight:800; color:var(--purple); margin:0;">🔑 Pengaturan API Keys AI</h3>
+        <span style="cursor:pointer; font-size:22px; color:var(--text-dim);" onclick="toggleApiKeysPanel()">&times;</span>
       </div>
       <div style="padding:24px; overflow-y:auto; flex:1;">
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px;">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
           <div>
-            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router API Key</label>
+            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600; font-size:12px;">9Router API Key</label>
             <input type="password" class="input-text-field" id="keyNinerouter" placeholder="Kunci API 9Router..." />
           </div>
           <div>
-            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Base URL</label>
+            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600; font-size:12px;">9Router Base URL</label>
             <input type="text" class="input-text-field" id="keyNinerouterUrl" placeholder="http://localhost:20128/v1" />
           </div>
           <div>
-            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Model Name</label>
+            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600; font-size:12px;">9Router Model Name</label>
             <input type="text" class="input-text-field" id="keyNinerouterModel" placeholder="9router" />
           </div>
-          <div id="customSlotsContainer" style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:12px;"></div>
+          <div id="customSlotsContainer" style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:14px;"></div>
         </div>
       </div>
-      <div style="padding:16px 24px; background:rgba(0,0,0,0.2); border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:12px;">
-        <button class="btn-generate" onclick="saveApiKeys()" style="background:var(--blue); margin:0;">Simpan</button>
+      <div style="padding:16px 24px; background:rgba(0,0,0,0.3); border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-refresh" onclick="toggleApiKeysPanel()" style="padding:8px 18px;">❌ Batal</button>
+        <button class="btn-generate" onclick="saveApiKeys()" style="background:linear-gradient(135deg, var(--purple), #7c3aed); padding:8px 22px; margin:0;">💾 Simpan API Keys</button>
       </div>
     </div>
   </div>
@@ -379,269 +535,452 @@
       if (el.style.display === 'flex') loadApiKeys();
     }
 
-    let cachedCustomProviders = [];
-    function populateCustomSlotsUI() {
-      const container = document.getElementById('customSlotsContainer');
-      if (!container) return;
-      let html = `<div style="grid-column: 1 / -1; font-weight:700; color:var(--purple); font-size:13px; margin-top:10px; margin-bottom:4px; display:flex; align-items:center; justify-content:space-between; border-top:1px dashed rgba(255,255,255,0.1); padding-top:14px;">
-        <span>⚡ Custom LLM Providers (5 Slot Dengan Enable/Disable & Nama Custom)</span>
-      </div>`;
-      cachedCustomProviders.forEach((p, idx) => {
-        const i = idx + 1;
-        html += `
-        <div style="grid-column: 1 / -1; background:rgba(255,255,255,0.03); border:1px solid ${p.enabled ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.08)'}; border-radius:12px; padding:14px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:10px; flex-wrap:wrap;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <label class="slot-toggle-switch" title="Aktifkan/Nonaktifkan Slot #${i}">
-                <input type="checkbox" id="customEnabled_${i}" ${p.enabled ? 'checked' : ''} onchange="updateCustomProviderField(${i})" />
-                <span class="slot-toggle-slider"></span>
-              </label>
-              <span style="font-weight:700; color:${p.enabled ? 'var(--purple)' : 'var(--text-dim)'}; font-size:13px;">Slot #${i}:</span>
-              <input type="text" id="customName_${i}" value="${escHtml(p.name || 'Custom LLM ' + i)}" onchange="updateCustomProviderField(${i})" class="input-text-field" style="width:160px; padding:3px 8px; font-size:12px; margin:0;" placeholder="Nama Provider" />
-            </div>
-            <button class="btn-refresh" onclick="testApiKey('custom_${i}')" style="padding:4px 10px; font-size:11px; border-color:#a78bfa; color:#a78bfa; background:transparent;">🧪 Test Valid</button>
-            <span id="status_custom_${i}" style="font-size:11px; font-weight:600;"></span>
-          </div>
-          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; opacity:${p.enabled ? '1' : '0.55'};">
-            <div><label style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-dim);">API Key</label><input type="password" class="input-text-field" id="keyCustom_${i}" value="${escHtml(p.key || '')}" onchange="updateCustomProviderField(${i})" /></div>
-            <div><label style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-dim);">Base URL</label><input type="text" class="input-text-field" id="keyCustomUrl_${i}" value="${escHtml(p.url || 'https://api.openai.com/v1')}" onchange="updateCustomProviderField(${i})" /></div>
-            <div><label style="display:block; margin-bottom:4px; font-size:11px; color:var(--text-dim);">Model Name</label><input type="text" class="input-text-field" id="keyCustomModel_${i}" value="${escHtml(p.model || 'gpt-4o')}" onchange="updateCustomProviderField(${i})" /></div>
-          </div>
-        </div>`;
-      });
-      container.innerHTML = html;
+    // ─── SHUTTERSTOCK RECOMMENDATION ENGINE SCRIPT ───
+    let currentSelectedMonth = 'July';
+    let allMonthData = [];
+    let filteredData = [];
+    let currentPage = 1;
+    const pageSize = 50;
+
+    let currentSortColumn = 'opportunity';
+    let currentSortDirection = 'desc';
+
+    // EXCEL MULTI-SELECT CHECKBOX FILTER STATE (Demand, Opportunity)
+    let excelDemandFilters = ['high', 'rising'];
+    let excelOpportunityFilters = ['badge-gold', 'badge-high-opp', 'badge-rising-opp', 'badge-competitive'];
+
+    const EXCEL_OPTIONS = {
+      demand: [
+        { key: 'high', label: '🔥 High Demand', color: '#fca5a5' },
+        { key: 'rising', label: '📈 Rising Trends', color: '#fcd34d' }
+      ],
+      opportunity: [
+        { key: 'badge-gold', label: '🟢 Kuadran 1: Golden Mine', color: '#22c55e' },
+        { key: 'badge-high-opp', label: '🔵 Kuadran 2: Long-Tail Niche', color: '#38bdf8' },
+        { key: 'badge-rising-opp', label: '🟡 Kuadran 3: Low Demand', color: '#f59e0b' },
+        { key: 'badge-competitive', label: '🔴 Kuadran 4: Dead Zone', color: '#ef4444' }
+      ]
+    };
+
+    function parseSupplyCount(str) {
+      if (!str) return 0;
+      const cleaned = String(str).replace(/[^\d]/g, '');
+      return parseInt(cleaned, 10) || 0;
     }
 
-    function updateCustomProviderField(i) {
-      const p = cachedCustomProviders[i - 1];
-      if (!p) return;
-      p.enabled = document.getElementById(`customEnabled_${i}`)?.checked === true;
-      p.name = document.getElementById(`customName_${i}`)?.value || `Custom LLM ${i}`;
-      p.key = document.getElementById(`keyCustom_${i}`)?.value || '';
-      p.url = document.getElementById(`keyCustomUrl_${i}`)?.value || '';
-      p.model = document.getElementById(`keyCustomModel_${i}`)?.value || '';
-    }
+    function calculateUploadLeadTime(keywordMonthName) {
+      const monthListEng = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const currentMonthIdx = new Date().getMonth();
+      
+      const kwMonthIdx = monthListEng.findIndex(m => m.toLowerCase() === String(keywordMonthName).toLowerCase());
+      if (kwMonthIdx === -1) return { status: 'Normal', badge: 'badge-competitive', text: 'Produksi Kapan Saja', score: 50 };
 
-    async function loadApiKeys() {
-      try {
-        const resp = await fetch('/api/keys');
-        const data = await resp.json();
-        document.getElementById('keyNinerouter').value = data.ninerouterKey || '';
-        document.getElementById('keyNinerouterUrl').value = data.ninerouterUrl || '';
-        document.getElementById('keyNinerouterModel').value = data.ninerouterModel || '';
-        if (Array.isArray(data.customLlmProviders)) cachedCustomProviders = data.customLlmProviders;
-        populateCustomSlotsUI();
-      } catch (err) { showToast('Gagal memuat API Keys: ' + err.message, 'error'); }
-    }
+      let diff = (kwMonthIdx - currentMonthIdx + 12) % 12;
 
-    async function saveApiKeys() {
-      const ninerouterKey = document.getElementById('keyNinerouter').value;
-      const ninerouterUrl = document.getElementById('keyNinerouterUrl').value;
-      const ninerouterModel = document.getElementById('keyNinerouterModel').value;
-      const customLlmProviders = cachedCustomProviders;
-      try {
-        const resp = await fetch('/api/keys', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ninerouterKey, ninerouterUrl, ninerouterModel, customLlmProviders })
-        });
-        const data = await resp.json();
-        if (data.error) throw new Error(data.error);
-        showToast('✅ API Keys berhasil disimpan!', 'success');
-        toggleApiKeysPanel();
-      } catch(err) { showToast('❌ Gagal menyimpan API Keys: ' + err.message, 'error'); }
-    }
-
-    async function testApiKey(provider) {
-      let inputId = 'keyNinerouter'; let statusId = 'status_ninerouter';
-      let urlId = 'keyNinerouterUrl'; let modelId = 'keyNinerouterModel';
-      if (typeof provider === 'string' && provider.startsWith('custom_')) {
-        const i = provider.split('_')[1];
-        inputId = `keyCustom_${i}`; statusId = `status_custom_${i}`;
-        urlId = `keyCustomUrl_${i}`; modelId = `keyCustomModel_${i}`;
+      if (diff === 3) {
+        return {
+          status: 'Waktu Emas',
+          badge: 'badge-gold',
+          text: '🚀 Waktu Emas Upload! (+3 Bulan)',
+          desc: 'Indeks algoritma stok akan maksimal pas pembeli mulai mencari!',
+          score: 100
+        };
+      } else if (diff === 2) {
+        return {
+          status: 'Segera Upload',
+          badge: 'badge-high-opp',
+          text: '⚡ Segera Upload (+2 Bulan)',
+          desc: 'Pembeli sedang gencar mencari asset kategori ini!',
+          score: 85
+        };
+      } else if (diff === 1) {
+        return {
+          status: 'Tahap Akhir',
+          badge: 'badge-rising-opp',
+          text: '⚠️ Peak Sales (+1 Bulan)',
+          desc: 'Kejar upload secepatnya sebelum puncak event!',
+          score: 70
+        };
+      } else if (diff === 0) {
+        return {
+          status: 'Bulan Berjalan',
+          badge: 'badge-competitive',
+          text: '📅 Bulan Berjalan',
+          desc: 'Sebagian besar pembeli sudah menyelesaikan pembelian.',
+          score: 55
+        };
+      } else {
+        return {
+          status: 'Jadwal Depan',
+          badge: 'badge-competitive',
+          text: `🗓️ Rencana Produksi (+${diff} Bulan)`,
+          desc: 'Simpan untuk antrean produksi mendatang.',
+          score: 40
+        };
       }
-      let apiKey = document.getElementById(inputId)?.value || 'TIDAK_ADA';
-      const statusEl = document.getElementById(statusId);
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--text-dim);">⏳ Mengecek...</span>';
+    }
+
+    function calculateOpportunity(demand, supplyStr) {
+      const supplyNum = parseSupplyCount(supplyStr);
+      const isHigh = String(demand).toLowerCase().includes('high');
+
+      let demandBase = isHigh ? 90 : 55;
+      
+      let supplyPenalty = 1.0;
+      if (supplyNum > 2000000) supplyPenalty = 0.35;
+      else if (supplyNum > 1000000) supplyPenalty = 0.55;
+      else if (supplyNum > 300000) supplyPenalty = 0.75;
+      else if (supplyNum > 100000) supplyPenalty = 0.90;
+      else supplyPenalty = 1.0;
+
+      const score = Math.min(100, Math.max(10, Math.round(demandBase * supplyPenalty)));
+
+      if (score >= 80) {
+        return {
+          score: score,
+          label: '🟢 Kuadran 1: Golden Mine',
+          badgeClass: 'badge-gold',
+          badgeText: '★ K-1 Golden Mine',
+          quadrant: 'Kuadran 1',
+          desc: 'High Demand + Low Supply! Prioritas #1 Eksekusi Animasi'
+        };
+      } else if (score >= 60) {
+        return {
+          score: score,
+          label: '🔵 Kuadran 2: Long-Tail Niche',
+          badgeClass: 'badge-high-opp',
+          badgeText: '🎯 K-2 Long-Tail Niche',
+          quadrant: 'Kuadran 2',
+          desc: 'High Demand + High Supply. Wajib Diferensiasi / Modifier Varian'
+        };
+      } else if (score >= 45) {
+        return {
+          score: score,
+          label: '🟡 Kuadran 3: Low Demand',
+          badgeClass: 'badge-rising-opp',
+          badgeText: '⚠ K-3 Low Demand',
+          quadrant: 'Kuadran 3',
+          desc: 'Low Supply + Low Demand. Cocok untuk Sampel / Eksperimen Mikro'
+        };
+      } else {
+        return {
+          score: score,
+          label: '🔴 Kuadran 4: Dead Zone',
+          badgeClass: 'badge-competitive',
+          badgeText: '✕ K-4 Dead Zone',
+          quadrant: 'Kuadran 4',
+          desc: 'High Supply + Low Demand / Pasar Jenuh'
+        };
+      }
+    }
+
+    async function loadShutterstockData(month) {
+      const loading = document.getElementById('tableLoading');
+      const wrapper = document.getElementById('tableWrapper');
+      loading.style.display = 'block';
+      wrapper.style.opacity = '0.3';
+
       try {
-        const resp = await fetch('/api/keys/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, apiKey, apiBaseUrl: document.getElementById(urlId)?.value || '', apiModel: document.getElementById(modelId)?.value || '' })
+        const resp = await fetch(`/api/insights/shutterstock-trends?month=${month}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Gagal memuat data');
+
+        currentSelectedMonth = data.currentMonthIndo || data.currentMonth;
+        allMonthData = (data.data || []).map(r => {
+          const opp = calculateOpportunity(r.demand, r.supply);
+          const lead = calculateUploadLeadTime(r.monthName);
+          return { ...r, oppScore: opp.score, oppInfo: opp, leadInfo: lead };
         });
-        const data = await resp.json();
-        if (data.valid) { if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);">✅ Valid</span>'; }
-        else { if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);" title="${data.error || 'Gagal'}">❌ Invalid</span>`; }
-      } catch(err) { if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);">❌ Error</span>`; }
+        
+        document.getElementById('metricActiveMonth').innerText = `${data.currentMonthIndo || data.currentMonth} 2025`;
+        if (data.upcomingMonths && data.upcomingMonths.length) {
+          const upcomingNames = data.upcomingMonths.map(u => u.indo || u);
+          document.getElementById('metricUpcomingSub').innerText = `Bulan Depan: ${upcomingNames.join(', ')}`;
+        }
+
+        renderMonthChips(data.currentMonthIndo || data.currentMonth, data.currentMonthEng, data.upcomingMonths, data.availableMonths);
+        document.getElementById('monthSelect').value = data.currentMonthEng || data.currentMonth;
+
+        renderExcelFilterPopups();
+        applyFilters();
+      } catch (err) {
+        showToast('❌ Error: ' + err.message, 'error');
+      } finally {
+        loading.style.display = 'none';
+        wrapper.style.opacity = '1';
+      }
     }
 
-    // ─── TRENDS & EXPLORER JS ───
-    const DEFAULT_TRENDS_PROMPT_TEMPLATE = `Berikut adalah data tren pencarian harian dari 6 negara (US, DE, GB, JP, CA, FR):
-
-{trends_data}
-
-Tugas Anda:
-Analisis tren di atas dan hasilkan 5-8 ide niche video After Effects / Remotion yang berpotensi tinggi laku di platform stock footage (Adobe Stock & Shutterstock).
-
-Hasilkan data dalam format JSON murni tanpa markdown, penjelasan, atau penutup.
-Format JSON yang wajib diikuti:
-[
-  {
-    "niche": "Judul Niche",
-    "explanation": "Penjelasan konsep visual dalam Bahasa Indonesia",
-    "country": "Nama negara asal tren",
-    "keywords": "tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, tag9, tag10",
-    "source_query": "Kata kunci tren asal"
-  }
-]`;
-
-    let lastFetchedTrendsData = null;
-
-    async function fetchRawTrends() {
-      const btn = document.getElementById('btnFetchRawTrends');
-      const loading = document.getElementById('rawTrendsLoading');
-      const container = document.getElementById('rawTrendsContainer');
-      const aiSection = document.getElementById('aiAnalysisSection');
-      btn.disabled = true; loading.style.display = 'block'; container.style.display = 'none'; aiSection.style.display = 'none';
-      try {
-        showToast('📡 Mengambil data tren mentah...', 'info');
-        const resp = await fetch('/api/trends/raw');
-        const data = await resp.json();
-        if (data.error) throw new Error(data.error);
-        lastFetchedTrendsData = data;
-        renderRawTrends(data);
-        showToast('✅ Berhasil menarik tren mentah!', 'success');
-      } catch (err) { showToast('❌ Gagal: ' + err.message, 'error'); }
-      finally { loading.style.display = 'none'; btn.disabled = false; }
-    }
-
-    function renderRawTrends(data) {
-      const container = document.getElementById('rawTrendsContainer');
-      const aiSection = document.getElementById('aiAnalysisSection');
+    function renderMonthChips(activeIndo, activeEng, upcoming, available) {
+      const container = document.getElementById('monthChipsContainer');
       let html = '';
-      let trendsPromptText = '';
-      data.forEach(c => {
-        trendsPromptText += `- ${c.country}: ${c.queries.join(", ")}\n`;
-        html += `<div style="background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:6px; padding:10px;">
-          <div style="font-weight:700; color:var(--cyan); font-size:12px; margin-bottom:6px;">${escHtml(c.country)}</div>
-          <div style="font-size:11px; color:var(--text-mid); line-height:1.4;">${c.queries.map(q => escHtml(q)).join(", ")}</div>
-        </div>`;
-      });
+
+      html += `<div class="chip-item active" onclick="onMonthSelectChanged('${activeEng}')">🔥 ${activeIndo} (Bulan Ini)</div>`;
+
+      if (upcoming && upcoming.length) {
+        upcoming.forEach((u, i) => {
+          const prefix = i === 0 ? '▶ Bulan Depan' : `⏭ +${i+1} Bulan`;
+          const isAct = activeEng === u.eng ? 'active' : '';
+          html += `<div class="chip-item ${isAct}" onclick="onMonthSelectChanged('${u.eng}')">${prefix} (${u.indo})</div>`;
+        });
+      }
+
       container.innerHTML = html;
-      container.style.display = 'grid';
-      document.getElementById('trendsPromptEditor').value = DEFAULT_TRENDS_PROMPT_TEMPLATE.replace('{trends_data}', trendsPromptText.trim());
-      aiSection.style.display = 'block';
     }
 
-    function resetTrendsPrompt() {
-      if (!lastFetchedTrendsData) return;
-      let trendsPromptText = "";
-      lastFetchedTrendsData.forEach(c => { trendsPromptText += `- ${c.country}: ${c.queries.join(", ")}\n`; });
-      document.getElementById('trendsPromptEditor').value = DEFAULT_TRENDS_PROMPT_TEMPLATE.replace('{trends_data}', trendsPromptText.trim());
+    function onMonthSelectChanged(month) {
+      loadShutterstockData(month);
     }
 
-    async function analyzeTrendsWithAI() {
-      const btn = document.getElementById('btnAnalyzeTrends');
-      const loading = document.getElementById('trendsAnalysisLoading');
-      const container = document.getElementById('trendsTableContainer');
-      const tbody = document.getElementById('trendsTableBody');
-      const promptValue = document.getElementById('trendsPromptEditor').value;
+    // ─── EXCEL MULTI-SELECT CHECKBOX POPUP RENDERER & HANDLERS ───
+    function renderExcelFilterPopups() {
+      ['demand', 'opportunity'].forEach(col => {
+        const popup = document.getElementById('excelPopup_' + col);
+        if (!popup) return;
 
-      btn.disabled = true; loading.style.display = 'block'; container.style.display = 'none';
-      try {
-        showToast('🤖 Menganalisis tren dengan AI...', 'info');
-        const resp = await fetch('/api/trends/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: promptValue })
-        });
-        const data = await resp.json();
-        if (data.error) throw new Error(data.error);
-        renderTrendsAnalysis(data);
-      } catch (err) { showToast('❌ Gagal: ' + err.message, 'error'); }
-      finally { loading.style.display = 'none'; btn.disabled = false; }
+        const options = EXCEL_OPTIONS[col];
+        let currentActiveList = col === 'demand' ? excelDemandFilters : excelOpportunityFilters;
+
+        const isAllSelected = options.every(opt => currentActiveList.includes(opt.key));
+
+        let itemsHtml = options.map(opt => {
+          const checked = currentActiveList.includes(opt.key) ? 'checked' : '';
+          return `
+            <label class="excel-filter-item">
+              <input type="checkbox" data-col="${col}" data-key="${opt.key}" ${checked} onchange="onExcelCheckboxChange('${col}')" />
+              <span style="color:${opt.color}; font-weight:600;">${escHtml(opt.label)}</span>
+            </label>`;
+        }).join('');
+
+        popup.innerHTML = `
+          <div class="excel-filter-popup-header">
+            <span>Filter ${col.toUpperCase()}</span>
+            <span style="cursor:pointer; font-size:16px; color:var(--text-dim);" onclick="toggleExcelFilterMenu('${col}', event)">&times;</span>
+          </div>
+          <div class="excel-filter-list">
+            <label class="excel-filter-item" style="border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:6px; margin-bottom:4px;">
+              <input type="checkbox" id="excelSelectAll_${col}" ${isAllSelected ? 'checked' : ''} onchange="toggleExcelSelectAll('${col}', this.checked)" />
+              <strong style="color:#fff;">(Pilih Semua)</strong>
+            </label>
+            ${itemsHtml}
+          </div>
+          <div style="display:flex; justify-content:space-between; gap:6px; margin-top:8px;">
+            <button class="btn-refresh" onclick="resetExcelFilter('${col}')" style="padding:4px 10px; font-size:10px; border-color:var(--text-dim); color:var(--text-dim); background:transparent;">🔄 Reset</button>
+            <button class="btn-generate" onclick="closeAllExcelFilterMenus()" style="padding:4px 12px; font-size:10px; background:linear-gradient(135deg, var(--purple), #7c3aed); margin:0;">✅ Selesai</button>
+          </div>`;
+      });
     }
 
-    function renderTrendsAnalysis(data) {
-      const container = document.getElementById('trendsTableContainer');
-      const tbody = document.getElementById('trendsTableBody');
+    function toggleExcelFilterMenu(col, evt) {
+      if (evt) evt.stopPropagation();
+      const popup = document.getElementById('excelPopup_' + col);
+      const isVisible = popup.style.display === 'block';
+      closeAllExcelFilterMenus();
+      if (!isVisible) {
+        popup.style.display = 'block';
+      }
+    }
+
+    function closeAllExcelFilterMenus() {
+      ['demand', 'opportunity'].forEach(col => {
+        const popup = document.getElementById('excelPopup_' + col);
+        if (popup) popup.style.display = 'none';
+      });
+    }
+
+    function onExcelCheckboxChange(col) {
+      const popup = document.getElementById('excelPopup_' + col);
+      const checkboxes = popup.querySelectorAll('input[type="checkbox"][data-key]');
+      const selectedKeys = [];
+      checkboxes.forEach(cb => {
+        if (cb.checked) selectedKeys.push(cb.getAttribute('data-key'));
+      });
+
+      if (col === 'demand') excelDemandFilters = selectedKeys;
+      else if (col === 'opportunity') excelOpportunityFilters = selectedKeys;
+
+      const selectAllCb = document.getElementById('excelSelectAll_' + col);
+      if (selectAllCb) selectAllCb.checked = selectedKeys.length === EXCEL_OPTIONS[col].length;
+
+      updateExcelTriggerButtons();
+      applyFilters();
+    }
+
+    function toggleExcelSelectAll(col, checked) {
+      const popup = document.getElementById('excelPopup_' + col);
+      const checkboxes = popup.querySelectorAll('input[type="checkbox"][data-key]');
+      const selectedKeys = [];
+      checkboxes.forEach(cb => {
+        cb.checked = checked;
+        if (checked) selectedKeys.push(cb.getAttribute('data-key'));
+      });
+
+      if (col === 'demand') excelDemandFilters = selectedKeys;
+      else if (col === 'opportunity') excelOpportunityFilters = selectedKeys;
+
+      updateExcelTriggerButtons();
+      applyFilters();
+    }
+
+    function resetExcelFilter(col) {
+      const allKeys = EXCEL_OPTIONS[col].map(o => o.key);
+      if (col === 'demand') excelDemandFilters = [...allKeys];
+      else if (col === 'opportunity') excelOpportunityFilters = [...allKeys];
+
+      renderExcelFilterPopups();
+      updateExcelTriggerButtons();
+      applyFilters();
+    }
+
+    function updateExcelTriggerButtons() {
+      ['demand', 'opportunity'].forEach(col => {
+        const btn = document.getElementById('excelBtn_' + col);
+        if (!btn) return;
+        const currentActive = col === 'demand' ? excelDemandFilters : excelOpportunityFilters;
+        const totalOpts = EXCEL_OPTIONS[col].length;
+        if (currentActive.length < totalOpts) {
+          btn.classList.add('active');
+          btn.innerText = `🔻 (${currentActive.length}/${totalOpts})`;
+        } else {
+          btn.classList.remove('active');
+          btn.innerText = `🔻`;
+        }
+      });
+    }
+
+    function toggleColumnSort(colKey) {
+      if (currentSortColumn === colKey) {
+        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSortColumn = colKey;
+        currentSortDirection = colKey === 'keyword' ? 'asc' : 'desc';
+      }
+      updateSortHeaderArrows();
+      applyFilters();
+    }
+
+    function updateSortHeaderArrows() {
+      const cols = ['keyword', 'demand', 'supply', 'opportunity', 'leadtime'];
+      cols.forEach(c => {
+        const arrowEl = document.getElementById('sortArrow_' + c);
+        if (arrowEl) {
+          if (c === currentSortColumn) {
+            arrowEl.innerText = currentSortDirection === 'asc' ? '▲' : '▼';
+            arrowEl.style.color = 'var(--purple)';
+          } else {
+            arrowEl.innerText = '↕';
+            arrowEl.style.color = 'var(--cyan)';
+          }
+        }
+      });
+    }
+
+    function applyFilters() {
+      const search = document.getElementById('searchInput').value.trim().toLowerCase();
+
+      filteredData = allMonthData.filter(item => {
+        const matchSearch = !search || item.keyword.toLowerCase().includes(search);
+        
+        const isHigh = item.demand.toLowerCase().includes('high');
+        const demandKey = isHigh ? 'high' : 'rising';
+        const matchDemand = excelDemandFilters.includes(demandKey);
+
+        const oppBadgeClass = item.oppInfo ? item.oppInfo.badgeClass : 'badge-competitive';
+        const matchOpportunity = excelOpportunityFilters.includes(oppBadgeClass);
+
+        return matchSearch && matchDemand && matchOpportunity;
+      });
+
+      // Interactive Column Sorting
+      filteredData.sort((a, b) => {
+        let res = 0;
+        if (currentSortColumn === 'keyword') {
+          res = a.keyword.localeCompare(b.keyword);
+        } else if (currentSortColumn === 'demand') {
+          const aHigh = a.demand.toLowerCase().includes('high') ? 1 : 0;
+          const bHigh = b.demand.toLowerCase().includes('high') ? 1 : 0;
+          res = bHigh - aHigh;
+        } else if (currentSortColumn === 'supply') {
+          res = parseSupplyCount(a.supply) - parseSupplyCount(b.supply);
+        } else if (currentSortColumn === 'opportunity') {
+          res = b.oppScore - a.oppScore || parseSupplyCount(a.supply) - parseSupplyCount(b.supply);
+        } else if (currentSortColumn === 'leadtime') {
+          res = b.leadInfo.score - a.leadInfo.score;
+        }
+        return currentSortDirection === 'asc' ? res : -res;
+      });
+
+      const goldCount = allMonthData.filter(r => r.oppScore >= 90).length;
+      const goldenUpload = allMonthData.filter(r => r.leadInfo.score === 100).length;
+      const highCount = allMonthData.filter(r => r.demand.toLowerCase().includes('high')).length;
+      document.getElementById('metricGoldCount').innerText = goldCount;
+      document.getElementById('metricGoldenUploadCount').innerText = goldenUpload;
+      document.getElementById('metricHighDemandCount').innerText = highCount;
+
+      currentPage = 1;
+      renderTable();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('recommendationTableBody');
+      const startIdx = (currentPage - 1) * pageSize;
+      const pageData = filteredData.slice(startIdx, startIdx + pageSize);
+
+      document.getElementById('tableCountText').innerText = `Menampilkan ${pageData.length} dari ${filteredData.length} kata kunci di bulan ${currentSelectedMonth}`;
+      document.getElementById('pageIndicator').innerText = `${currentPage} / ${Math.ceil(filteredData.length / pageSize) || 1}`;
+
+      document.getElementById('btnPrevPage').disabled = currentPage <= 1;
+      document.getElementById('btnNextPage').disabled = currentPage >= Math.ceil(filteredData.length / pageSize);
+
+      if (!pageData.length) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:var(--text-dim);">Tidak ada kata kunci ditemukan untuk kriteria filter ini.</td></tr>`;
+        return;
+      }
+
       let html = '';
-      data.forEach(item => {
-        html += `<tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:10px; font-weight:700; color:#fff;">${escHtml(item.niche)}</td>
-          <td style="padding:10px; color:var(--text-mid);">${escHtml(item.explanation)}</td>
-          <td style="padding:10px; color:var(--cyan); font-size:11px;">${escHtml(item.country)}</td>
-          <td style="padding:10px; color:var(--purple); font-size:10px;">${escHtml(item.keywords)}</td>
-          <td style="padding:10px; text-align:center;">
-            <button class="btn-generate" onclick="sendToGenerator('${escHtml(item.niche)}', '${escHtml(item.explanation)}', '${escHtml(item.keywords)}')" style="padding:4px 10px; font-size:11px; margin:0; background:var(--green);">🚀 Buat Kode</button>
+      pageData.forEach((row, i) => {
+        const rank = startIdx + i + 1;
+        const isHigh = row.demand.toLowerCase().includes('high');
+        const badgeClass = isHigh ? 'badge-high' : 'badge-rising';
+        const badgeIcon = isHigh ? '🔥' : '📈';
+        const opp = row.oppInfo || calculateOpportunity(row.demand, row.supply);
+        const lead = row.leadInfo || calculateUploadLeadTime(row.monthName);
+
+        html += `
+        <tr>
+          <td style="text-align:center; font-weight:700; color:var(--text-dim);">${rank}</td>
+          <td><span style="background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.25); color:var(--cyan); padding:3px 8px; border-radius:6px; font-size:11px; font-weight:700;">🗓️ ${escHtml(row.rawMonth)}</span></td>
+          <td style="font-weight:700; color:#fff; font-size:13px;">${escHtml(row.keyword)}</td>
+          <td><span class="badge-demand ${badgeClass}">${badgeIcon} ${escHtml(row.demand)}</span></td>
+          <td style="font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-mid);">${escHtml(row.supply)}</td>
+          <td>
+            <span class="badge-demand ${opp.badgeClass}" title="K-Score: ${opp.score}/100 — ${escHtml(opp.desc)}" style="font-weight:700; white-space:nowrap;">
+              ${escHtml(opp.badgeText || opp.label)} <span style="opacity:0.85; font-size:10px; font-weight:800;">(${opp.score})</span>
+            </span>
+          </td>
+          <td>
+            <span class="badge-demand ${lead.badge}" title="${escHtml(lead.desc)}" style="white-space:nowrap;">${escHtml(lead.text)}</span>
           </td>
         </tr>`;
       });
+
       tbody.innerHTML = html;
-      container.style.display = 'block';
     }
 
-    function sendToGenerator(title, desc, tags) {
-      sessionStorage.setItem('pending_paste_title', title);
-      sessionStorage.setItem('pending_paste_desc', desc);
-      sessionStorage.setItem('pending_paste_tags', tags);
-      window.location.href = '/dashboard?mode=paste';
+    function changePage(delta) {
+      const maxPage = Math.ceil(filteredData.length / pageSize) || 1;
+      currentPage += delta;
+      if (currentPage < 1) currentPage = 1;
+      if (currentPage > maxPage) currentPage = maxPage;
+      renderTable();
     }
 
-    function searchDirectly(platform) {
-      const input = document.getElementById('stockSearchInput');
-      const query = input.value.trim();
-      if (!query) return;
-      if (platform === 'adobe') {
-        window.open(`https://stock.adobe.com/search/video?k=${encodeURIComponent(query)}&search_type=usertyped`, '_blank');
-      } else if (platform === 'shutterstock') {
-        const slug = query.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-        window.open(`https://www.shutterstock.com/video/search/${slug}`, '_blank');
-      }
-    }
-
-    let lastResearchData = null;
-    async function researchMarket() {
-      const input = document.getElementById('stockSearchInput');
-      const keyword = input.value.trim();
-      if (!keyword) return;
-      const btn = document.getElementById('btnResearchMarket');
-      const loading = document.getElementById('researchLoading');
-      const results = document.getElementById('researchResults');
-      btn.disabled = true; loading.style.display = 'block'; results.style.display = 'none';
-      try {
-        const resp = await fetch('/api/research-market', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyword })
-        });
-        const data = await resp.json();
-        if (data.error) throw new Error(data.error);
-        lastResearchData = data;
-        renderResearchResults(data);
-        results.style.display = 'block';
-      } catch (err) { showToast('❌ Riset gagal: ' + err.message, 'error'); }
-      finally { loading.style.display = 'none'; btn.disabled = false; }
-    }
-
-    function renderResearchResults(data) {
-      const a = data.analysis || {};
-      const s = data.scrapeData || {};
-      document.getElementById('researchSummary').innerHTML = `<div style="font-size:16px; font-weight:800; color:#fff;">📊 Riset: "${data.keyword}"</div><div style="font-size:13px; color:var(--text-mid); margin-top:4px;">${a.marketSummary || ''}</div>`;
-      document.getElementById('researchCompetition').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">Kompetisi</div><div style="font-size:20px; font-weight:800; color:var(--cyan);">${a.competitionLevel || 'N/A'}</div>`;
-      document.getElementById('researchDemand').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">Demand Signal</div><div style="font-size:20px; font-weight:800; color:var(--green);">${a.demandSignal || 'N/A'}</div>`;
-      document.getElementById('researchTrends').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">🔥 Tren Visual</div><div>${(a.topTrends || []).join(', ')}</div>`;
-      document.getElementById('researchKeywords').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">🏷 Keywords</div><div>${(a.commonKeywords || []).slice(0, 10).join(', ')}</div>`;
-      document.getElementById('researchNiches').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">🎯 Niche Potensial</div><div>${(a.underservedNiches || []).join('<br>')}</div>`;
-      document.getElementById('researchTitles').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim);">✨ Rekomendasi Judul</div><div>${(a.recommendedTitles || []).map(t=>t.title).join('<br>')}</div>`;
-      document.getElementById('researchStrategy').innerHTML = `<div style="font-size:11px; font-weight:700; color:var(--text-dim); margin-top:10px;">📈 Strategi</div><div>${a.actionableStrategy || ''}</div>`;
-    }
-
-    function applyResearchToGenerator() {
-      if (!lastResearchData) return;
-      sessionStorage.setItem('pending_paste_title', lastResearchData.keyword);
-      window.location.href = '/dashboard?mode=paste';
-    }
+    // Init page load
+    (function() {
+      const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const currentMonth = months[new Date().getMonth()];
+      loadShutterstockData(currentMonth);
+    })();
   </script>
 </body>
 </html>

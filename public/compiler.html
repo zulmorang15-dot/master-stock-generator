@@ -63,9 +63,8 @@
     .nav-btn:hover { background: var(--bg3); color: var(--text); }
     .nav-btn.active { background: var(--purple-dim); border-color: var(--purple); color: #c084fc; }
 
-    header, .header { position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px); }
+    header, .header { position: relative !important; top: auto !important; z-index: 100; backdrop-filter: blur(12px); }
     @media (max-width: 768px) {
-      header, .header { position: relative !important; top: auto !important; }
       .studio-layout { grid-template-columns: 1fr; height: auto; padding: 12px; }
     }
 
@@ -322,14 +321,30 @@
           </div>
         </div>
 
+        <div id="imagePreviewArea" style="display:none; margin-bottom:8px; position:relative;">
+          <div style="display:inline-block; position:relative;">
+            <img id="imagePreviewImg" src="" style="max-height:75px; max-width:120px; border-radius:8px; border:1px solid var(--purple); box-shadow:0 4px 12px rgba(168,85,247,0.3); display:block;" />
+            <span onclick="removeAttachedImage()" style="position:absolute; top:-6px; right:-6px; background:var(--red); color:#fff; border-radius:50%; width:18px; height:18px; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:11px; font-weight:800; box-shadow:0 2px 6px rgba(0,0,0,0.5);" title="Hapus gambar terlampir">&times;</span>
+          </div>
+          <span style="font-size:11px; color:#c084fc; margin-left:8px; font-weight:600;">🖼️ Gambar terlampir (Gunakan /buat untuk mereplikasi animasi)</span>
+        </div>
+
         <div class="chip-container">
-          <span class="prompt-chip" onclick="useQuickPrompt('/buat HUD Futuristic Hologram dengan neon glowing grid')">⚡ /buat HUD</span>
-          <span class="prompt-chip" onclick="useQuickPrompt('/edit Ubah warna tema animasi menjadi neon cyan')">✏️ /edit Warna</span>
-          <span class="prompt-chip" onclick="useQuickPrompt('/buat Kinetic Typography intro text dengan partikel')">✨ /buat Kinetic</span>
+          <span class="prompt-chip" onclick="useQuickPrompt('/buat 4K Futuristic HUD Hologram Grid Animation Loop')">⚡ /buat HUD Loop</span>
+          <span class="prompt-chip" onclick="useQuickPrompt('/buat Glowing Stock Market Candlestick Growth Chart')">📊 /buat Stock Chart</span>
+          <span class="prompt-chip" onclick="useQuickPrompt('/edit Change color theme to cyan glowing gradient')">✏️ /edit Color Theme</span>
+          <span class="prompt-chip" onclick="useQuickPrompt('/buat Replicate 4K HTML Stock Animation from Attached Image')">📷 /buat from Image</span>
           <span class="prompt-chip" onclick="useQuickPrompt('/help')">❓ /help</span>
         </div>
+        
+        <input type="file" id="chatImageInput" accept="image/*" style="display:none;" onchange="handleImageSelected(this)" />
+        
         <div style="display:flex; gap:8px; align-items:flex-end;">
-          <textarea id="chatInput" class="chat-textarea" placeholder="Tulis instruksi atau ketik / untuk command... (Tekan Enter untuk kirim)" oninput="handleChatInput(this)" onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendChatMessage(); }"></textarea>
+          <button class="btn-refresh" onclick="document.getElementById('chatImageInput').click()" style="height:70px; width:44px; padding:0; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:2px; border-color:rgba(168,85,247,0.4); color:#c084fc; background:rgba(168,85,247,0.1);" title="Lampirkan Gambar (Screenshot/Mockup/Diagram)">
+            <span style="font-size:18px;">📷</span>
+            <span style="font-size:9px; font-weight:700;">Foto</span>
+          </button>
+          <textarea id="chatInput" class="chat-textarea" placeholder="Tulis instruksi atau ketik / untuk command... (Tekan Enter untuk kirim, Ctrl+V paste gambar)" oninput="handleChatInput(this)" onpaste="handleChatPaste(event)" onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendChatMessage(); }"></textarea>
           <button class="btn-generate" id="btnSendChat" onclick="sendChatMessage()" style="height:70px; width:90px; background:linear-gradient(135deg, var(--purple), #7c3aed); display:flex; flex-direction:column; justify-content:center; align-items:center; gap:4px;">
             <span>🚀</span>
             <span>Kirim</span>
@@ -355,8 +370,9 @@
         </div>
 
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn-refresh" id="btnUndoCode" onclick="undoCompilerCode()" style="border-color:rgba(255,255,255,0.15); color:var(--text-dim); background:transparent; opacity:0.4; cursor:not-allowed;" title="Undo ke versi sebelumnya (Ctrl+Z)" disabled>↩ Undo</button>
+          <button class="btn-refresh" id="btnRedoCode" onclick="redoCompilerCode()" style="border-color:rgba(255,255,255,0.15); color:var(--text-dim); background:transparent; opacity:0.4; cursor:not-allowed;" title="Redo ke versi selanjutnya (Ctrl+Y)" disabled>↪ Redo</button>
           <button class="btn-refresh" onclick="runHtmlCompiler()" style="border-color:var(--green); color:var(--green); background:transparent;" title="Jalankan Ulang Animasi">▶ Run</button>
-          <button class="btn-refresh" onclick="loadCompilerTemplate()" style="border-color:var(--cyan); color:var(--cyan); background:transparent;">📄 Template</button>
           <button class="btn-refresh" onclick="downloadCompiledHtml()" style="border-color:var(--purple); color:var(--purple); background:rgba(168,85,247,0.12);" title="Download File HTML">📥 Download HTML</button>
           <button class="btn-generate" onclick="sendCompiledHtmlToGenerator()" style="background:linear-gradient(135deg, var(--purple), #7c3aed); padding:8px 16px; margin:0;">
             🚀 KIRIM KE GENERATOR
@@ -374,7 +390,7 @@
 
         <!-- Code Editor Textarea -->
         <div id="codeContainer" style="width:100%; height:100%; display:none;">
-          <textarea class="code-editor-textarea" id="compilerHtmlCode" placeholder="<!-- Kode HTML animasi di sini... -->" oninput="saveCompilerState(); runHtmlCompiler();"></textarea>
+          <textarea class="code-editor-textarea" id="compilerHtmlCode" placeholder="<!-- Kode HTML animasi di sini... -->" oninput="handleManualEditorInput()"></textarea>
         </div>
       </div>
     </div>
@@ -402,40 +418,41 @@
 
   <!-- Modal Pengaturan API Keys -->
   <div id="apiKeysModal" class="modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(7, 11, 20, 0.85); backdrop-filter:blur(8px); z-index:9999; justify-content:center; align-items:center; padding:20px;">
-    <div style="width:100%; max-width:840px; max-height:88vh; background:rgba(15, 23, 42, 0.96); border:1px solid rgba(59,130,246,0.4); border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 60px rgba(0,0,0,0.85);">
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:rgba(59,130,246,0.08); border-bottom:1px solid rgba(59,130,246,0.2);">
-        <h3 style="font-size:16px; font-weight:700; color:var(--blue); margin:0; display:flex; align-items:center; gap:8px;">
-          🔑 Pengaturan API Keys AI & Layanan Pembantu
+    <div style="width:100%; max-width:880px; max-height:88vh; background:rgba(15, 23, 42, 0.98); border:1px solid rgba(168,85,247,0.4); border-radius:18px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 25px 60px rgba(0,0,0,0.9); backdrop-filter:blur(16px);">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:20px 24px; background:linear-gradient(135deg, rgba(168,85,247,0.15), rgba(56,189,248,0.08)); border-bottom:1px solid rgba(168,85,247,0.25);">
+        <h3 style="font-size:16px; font-weight:800; color:var(--purple); margin:0; display:flex; align-items:center; gap:10px; letter-spacing:-0.2px;">
+          🔑 Pengaturan API Keys & Model Provider LLM
         </h3>
-        <span style="cursor:pointer; font-size:24px; color:var(--text-dim);" onclick="toggleApiKeysPanel()">&times;</span>
+        <span style="cursor:pointer; font-size:22px; color:var(--text-dim); transition:color 0.2s;" onclick="toggleApiKeysPanel()" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--text-dim)'">&times;</span>
       </div>
       <div style="padding:24px; overflow-y:auto; flex:1;">
-        <p style="font-size:12px; color:var(--text-dim); margin-top:0; margin-bottom:20px;">
-          Isi API Key untuk 9Router dan 5 Slot Custom LLM Provider di bawah ini. Kunci disimpan secara aman di server.
+        <p style="font-size:12px; color:var(--text-dim); margin-top:0; margin-bottom:20px; line-height:1.5;">
+          Isi API Key untuk 9Router dan 5 Slot Custom LLM Provider di bawah ini. Kunci Anda tersimpan secara aman di server lokal.
         </p>
 
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:20px;">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px;">
           <div>
-            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router API Key</label>
+            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600; font-size:12px;">9Router API Key</label>
             <input type="password" class="input-text-field" id="keyNinerouter" placeholder="Kunci API 9Router..." />
-            <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
-              <button class="btn-refresh" onclick="testApiKey('ninerouter')" style="padding:4px 8px; font-size:11px; border-color:var(--blue); color:var(--blue);">🧪 Test Valid</button>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+              <button class="btn-refresh" onclick="testApiKey('ninerouter')" style="padding:4px 10px; font-size:11px; border-color:var(--cyan); color:var(--cyan); background:transparent;">🧪 Test Valid</button>
               <span id="status_ninerouter" style="font-size:11px; font-weight:600;"></span>
             </div>
           </div>
           <div>
-            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Base URL</label>
+            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600; font-size:12px;">9Router Base URL</label>
             <input type="text" class="input-text-field" id="keyNinerouterUrl" placeholder="http://localhost:20128/v1" />
           </div>
           <div>
-            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600;">9Router Model Name</label>
+            <label class="option-label" style="display:block; margin-bottom:6px; font-weight:600; font-size:12px;">9Router Model Name</label>
             <input type="text" class="input-text-field" id="keyNinerouterModel" placeholder="9router" />
           </div>
-          <div id="customSlotsContainer" style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:12px;"></div>
+          <div id="customSlotsContainer" style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:14px;"></div>
         </div>
       </div>
-      <div style="padding:16px 24px; background:rgba(0,0,0,0.2); border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:12px;">
-        <button class="btn-generate" onclick="saveApiKeys()" style="background:var(--blue); margin:0;">Simpan</button>
+      <div style="padding:16px 24px; background:rgba(0,0,0,0.3); border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn-refresh" onclick="toggleApiKeysPanel()" style="padding:8px 18px; border-color:var(--text-dim); color:var(--text-mid); background:transparent;">❌ Batal</button>
+        <button class="btn-generate" onclick="saveApiKeys()" style="background:linear-gradient(135deg, var(--purple), #7c3aed); padding:8px 22px; margin:0;">💾 Simpan API Keys</button>
       </div>
     </div>
   </div>
@@ -681,6 +698,8 @@
     }
 
     // ─── HISTORY SESSION SYSTEM ───
+    let activeSessionId = 'session_' + Date.now();
+
     function getStoredHistorySessions() {
       try {
         return JSON.parse(localStorage.getItem('compiler_history_sessions') || '[]');
@@ -690,27 +709,36 @@
     function saveCurrentSessionToHistory() {
       const chatHtml = document.getElementById('chatMessages')?.innerHTML || '';
       const code = document.getElementById('compilerHtmlCode')?.value || '';
-      if (!code.trim() && !chatHtml.includes('msg-user')) return; // Don't save empty clean state
+      
+      // Hanya simpan sesi jika pengguna benar-benar pernah berinteraksi (ada .msg-user)
+      if (!chatHtml.includes('msg-user')) return;
 
       const sessions = getStoredHistorySessions();
       const userMsgs = Array.from(document.querySelectorAll('.msg-user')).map(el => el.innerText.trim());
       const titlePreview = userMsgs.length ? userMsgs[userMsgs.length - 1] : 'Animasi HTML';
 
-      const newSession = {
-        id: 'session_' + Date.now(),
+      const sessionData = {
+        id: activeSessionId,
         timestamp: new Date().toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' }),
         title: titlePreview.slice(0, 40) + (titlePreview.length > 40 ? '...' : ''),
         chatHtml: chatHtml,
         code: code
       };
 
-      sessions.unshift(newSession);
-      if (sessions.length > 30) sessions.pop(); // Keep max 30
+      const existingIdx = sessions.findIndex(s => s.id === activeSessionId);
+      if (existingIdx !== -1) {
+        sessions[existingIdx] = sessionData;
+      } else {
+        sessions.unshift(sessionData);
+      }
+
+      if (sessions.length > 50) sessions.pop(); // Keep max 50
       localStorage.setItem('compiler_history_sessions', JSON.stringify(sessions));
     }
 
     function startNewChatSession() {
       saveCurrentSessionToHistory();
+      activeSessionId = 'session_' + Date.now();
       clearChatHistory();
       loadCompilerTemplate();
       showToast('✨ Sesi chat & animasi baru dimulai!', 'success');
@@ -753,9 +781,11 @@
       if (!s) return;
 
       saveCurrentSessionToHistory(); // Save active session before switching
+      activeSessionId = s.id; // Switch active session ID
       if (s.chatHtml) document.getElementById('chatMessages').innerHTML = s.chatHtml;
       if (s.code) {
         document.getElementById('compilerHtmlCode').value = s.code;
+        pushCodeHistory(s.code);
         saveCompilerState();
         runHtmlCompiler();
       }
@@ -777,6 +807,51 @@
         renderHistoryList();
         showToast('🗑 Seluruh riwayat dihapus', 'info');
       }
+    }
+
+    let attachedImageBase64 = null;
+
+    function handleImageSelected(input) {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        showToast('⚠️ File harus berupa gambar!', 'warning');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        attachedImageBase64 = e.target.result;
+        document.getElementById('imagePreviewImg').src = attachedImageBase64;
+        document.getElementById('imagePreviewArea').style.display = 'block';
+        showToast('📷 Gambar berhasil dilampirkan!', 'info');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function handleChatPaste(event) {
+      const items = (event.clipboardData || event.originalEvent.clipboardData)?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.indexOf('image') !== -1) {
+          const file = item.getAsFile();
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            attachedImageBase64 = e.target.result;
+            document.getElementById('imagePreviewImg').src = attachedImageBase64;
+            document.getElementById('imagePreviewArea').style.display = 'block';
+            showToast('📷 Gambar dari clipboard dilampirkan!', 'info');
+          };
+          reader.readAsDataURL(file);
+          break;
+        }
+      }
+    }
+
+    function removeAttachedImage() {
+      attachedImageBase64 = null;
+      document.getElementById('chatImageInput').value = '';
+      document.getElementById('imagePreviewImg').src = '';
+      document.getElementById('imagePreviewArea').style.display = 'none';
     }
 
     function handleChatInput(el) {
@@ -801,7 +876,10 @@
       const btn = document.getElementById('btnSendChat');
       let prompt = input.value.trim();
       document.getElementById('slashMenu').style.display = 'none';
-      if (!prompt) return;
+
+      const imageToSend = attachedImageBase64;
+      if (!prompt && !imageToSend) return;
+      if (!prompt && imageToSend) prompt = "/buat Replikasi animasi HTML dari gambar terlampir ini";
 
       // Local Slash Commands handling
       if (prompt === '/help') {
@@ -809,7 +887,7 @@
         input.value = '';
         appendMessage(`
           <strong>💡 Bantuan Slash Commands AI Compiler:</strong><br/>
-          • <strong style="color:#c084fc;">/buat &lt;deskripsi&gt;</strong>: Buat animasi HTML baru dari nol.<br/>
+          • <strong style="color:#c084fc;">/buat &lt;deskripsi&gt;</strong>: Buat animasi HTML baru dari nol (bisa dengan gambar terlampir).<br/>
           • <strong style="color:#38bdf8;">/edit &lt;deskripsi&gt;</strong>: Edit / tweak animasi yang tampil di Live Preview.<br/>
           • <strong style="color:#34d399;">/code</strong>: Buka tab Code Editor HTML.<br/>
           • <strong style="color:#f59e0b;">/run</strong>: Jalankan ulang animasi preview.<br/>
@@ -864,8 +942,11 @@
         };
       });
 
-      appendMessage(input.value.trim(), true);
+      const userDisplayPrompt = imageToSend ? `🖼️ [Gambar Terlampir]\n${input.value.trim()}` : input.value.trim();
+      appendMessage(userDisplayPrompt, true);
+
       input.value = '';
+      removeAttachedImage();
       btn.disabled = true;
       btn.innerHTML = '<span class="spin">⏳</span> AI...';
 
@@ -879,20 +960,22 @@
         const resp = await fetch('/api/compiler/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, currentCode, preferModel, mode, history })
+          body: JSON.stringify({ prompt, currentCode, preferModel, mode, history, attachedImage: imageToSend })
         });
         const data = await resp.json();
         if (data.error) throw new Error(data.error);
 
         if (data.isCodeUpdate && data.code) {
           document.getElementById('compilerHtmlCode').value = data.code;
+          pushCodeHistory(data.code);
           saveCompilerState();
           runHtmlCompiler();
-          loadingBubble.innerHTML = formatMarkdown(data.message || '🎉 Kode animasi berhasil diperbarui di Live Preview!');
+          loadingBubble.innerHTML = formatMarkdown(data.message || '🎉 Kode animasi berhasil diperbarui dari gambar di Live Preview!');
           showToast('✨ Live Preview diperbarui!', 'success');
         } else {
           loadingBubble.innerHTML = formatMarkdown(data.message || 'Halo! Silakan ketik perintah animasi yang ingin Anda buat.');
         }
+        saveCurrentSessionToHistory();
       } catch (err) {
         loadingBubble.innerHTML = `❌ Gagal: ${escHtml(err.message)}`;
         showToast('❌ Gagal memproses: ' + err.message, 'error');
@@ -902,10 +985,111 @@
       }
     }
 
+    // ─── UNDO / REDO CODE HISTORY SYSTEM ───
+    let compilerHistoryStack = [];
+    let compilerHistoryIndex = -1;
+    let editorDebounceTimer = null;
+
+    function pushCodeHistory(code) {
+      if (typeof code !== 'string') return;
+      // Don't push duplicate if identical to current top
+      if (compilerHistoryIndex >= 0 && compilerHistoryStack[compilerHistoryIndex] === code) return;
+
+      // Truncate redo history if we are in the middle of stack and push new change
+      if (compilerHistoryIndex < compilerHistoryStack.length - 1) {
+        compilerHistoryStack = compilerHistoryStack.slice(0, compilerHistoryIndex + 1);
+      }
+
+      compilerHistoryStack.push(code);
+      if (compilerHistoryStack.length > 50) compilerHistoryStack.shift(); // keep max 50
+      compilerHistoryIndex = compilerHistoryStack.length - 1;
+      updateUndoRedoButtons();
+    }
+
+    function updateUndoRedoButtons() {
+      const btnUndo = document.getElementById('btnUndoCode');
+      const btnRedo = document.getElementById('btnRedoCode');
+      
+      const canUndo = compilerHistoryIndex > 0;
+      const canRedo = compilerHistoryIndex >= 0 && compilerHistoryIndex < compilerHistoryStack.length - 1;
+
+      if (btnUndo) {
+        btnUndo.disabled = !canUndo;
+        btnUndo.style.opacity = canUndo ? '1' : '0.4';
+        btnUndo.style.borderColor = canUndo ? 'var(--cyan)' : 'rgba(255,255,255,0.15)';
+        btnUndo.style.color = canUndo ? 'var(--cyan)' : 'var(--text-dim)';
+        btnUndo.style.cursor = canUndo ? 'pointer' : 'not-allowed';
+      }
+
+      if (btnRedo) {
+        btnRedo.disabled = !canRedo;
+        btnRedo.style.opacity = canRedo ? '1' : '0.4';
+        btnRedo.style.borderColor = canRedo ? 'var(--purple)' : 'rgba(255,255,255,0.15)';
+        btnRedo.style.color = canRedo ? 'var(--purple)' : 'var(--text-dim)';
+        btnRedo.style.cursor = canRedo ? 'pointer' : 'not-allowed';
+      }
+    }
+
+    function flushPendingManualEdits() {
+      if (editorDebounceTimer) {
+        clearTimeout(editorDebounceTimer);
+        editorDebounceTimer = null;
+      }
+      const currentCode = document.getElementById('compilerHtmlCode')?.value || '';
+      pushCodeHistory(currentCode);
+    }
+
+    function handleManualEditorInput() {
+      saveCompilerState();
+      runHtmlCompiler();
+      clearTimeout(editorDebounceTimer);
+      editorDebounceTimer = setTimeout(() => {
+        const currentCode = document.getElementById('compilerHtmlCode')?.value || '';
+        pushCodeHistory(currentCode);
+      }, 400);
+    }
+
+    function undoCompilerCode() {
+      flushPendingManualEdits();
+      if (compilerHistoryIndex <= 0) {
+        showToast('⚠️ Sudah di batas revisi awal!', 'warning');
+        return;
+      }
+      compilerHistoryIndex--;
+      const code = compilerHistoryStack[compilerHistoryIndex];
+      const editor = document.getElementById('compilerHtmlCode');
+      if (editor && code !== undefined) {
+        editor.value = code;
+        runHtmlCompiler();
+        saveCompilerState();
+        updateUndoRedoButtons();
+        showToast('↩ Undo: Kembali ke versi sebelumnya', 'info');
+      }
+    }
+
+    function redoCompilerCode() {
+      flushPendingManualEdits();
+      if (compilerHistoryIndex < 0 || compilerHistoryIndex >= compilerHistoryStack.length - 1) {
+        showToast('⚠️ Sudah di revisi terbaru!', 'warning');
+        return;
+      }
+      compilerHistoryIndex++;
+      const code = compilerHistoryStack[compilerHistoryIndex];
+      const editor = document.getElementById('compilerHtmlCode');
+      if (editor && code !== undefined) {
+        editor.value = code;
+        runHtmlCompiler();
+        saveCompilerState();
+        updateUndoRedoButtons();
+        showToast('↪ Redo: Maju ke revisi selanjutnya', 'info');
+      }
+    }
+
     function loadCompilerTemplate() {
       const editor = document.getElementById('compilerHtmlCode');
       if (editor) {
         editor.value = BOILERPLATE_TEMPLATE;
+        pushCodeHistory(BOILERPLATE_TEMPLATE);
         saveCompilerState();
         runHtmlCompiler();
         showToast('📄 Template berhasil dimuat!', 'success');
@@ -917,6 +1101,7 @@
         const editor = document.getElementById('compilerHtmlCode');
         if (editor) {
           editor.value = '';
+          pushCodeHistory('');
           saveCompilerState();
           const iframe = document.getElementById('compilerPreviewIframe');
           if (iframe) iframe.srcdoc = '';
@@ -979,6 +1164,23 @@
       }
     }
 
+    // Keyboard shortcuts (Ctrl+Z / Ctrl+Y)
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        if (activeTag !== 'input' && activeTag !== 'textarea') {
+          e.preventDefault();
+          undoCompilerCode();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        if (activeTag !== 'input' && activeTag !== 'textarea') {
+          e.preventDefault();
+          redoCompilerCode();
+        }
+      }
+    });
+
     // Init page
     (function() {
       loadApiKeys();
@@ -989,9 +1191,18 @@
       const editor = document.getElementById('compilerHtmlCode');
       if (savedCode && editor) {
         editor.value = savedCode;
+        pushCodeHistory(savedCode);
         runHtmlCompiler();
       } else if (editor) {
         loadCompilerTemplate();
+      }
+
+      // Auto-fill prompt if redirected from Insights Shutterstock Recommendation table
+      const pendingPrompt = sessionStorage.getItem('pending_compiler_prompt');
+      if (pendingPrompt) {
+        sessionStorage.removeItem('pending_compiler_prompt');
+        useQuickPrompt(pendingPrompt);
+        showToast('✨ Prompt rekomendasi kata kunci berhasil dimuat!', 'success');
       }
     })();
   </script>
