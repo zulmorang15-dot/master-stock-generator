@@ -467,8 +467,13 @@
         </div>
 
         <!-- TABLE FOOTER / COUNTER -->
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; font-size:12px; color:var(--text-dim);">
-          <div id="tableCountText">Menampilkan 0 kata kunci</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; font-size:12px; color:var(--text-dim); flex-wrap:wrap; gap:10px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div id="tableCountText">Menampilkan 0 kata kunci</div>
+            <button class="btn-refresh" onclick="clearAllLongTailCache()" style="padding:4px 10px; font-size:10px; border-color:rgba(239,68,68,0.4); color:#ef4444; background:transparent;" title="Hapus semua cache Long-Tail lama di browser untuk generate ulang">
+              🗑️ Reset Cache Long-Tail
+            </button>
+          </div>
           <div style="display:flex; gap:8px;">
             <button class="btn-refresh" id="btnPrevPage" onclick="changePage(-1)" style="padding:6px 12px; font-size:11px;" disabled>◀ Sblm</button>
             <span id="pageIndicator" style="padding:6px 10px; font-weight:700; color:var(--cyan);">1</span>
@@ -1037,6 +1042,18 @@
       }
     }
 
+    function clearAllLongTailCache() {
+      let count = 0;
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('insights_longtail_')) {
+          localStorage.removeItem(key);
+          count++;
+        }
+      });
+      showToast(`🗑️ Berhasil menghapus ${count} cache Long-Tail! Silakan generate ulang.`, 'success');
+      renderTable();
+    }
+
     async function renderLongTailContent(idx, keyword, monthName, demand, supply, forceRegenerate = false) {
       const container = document.getElementById(`longtailContainer_${idx}`);
       if (!container) return;
@@ -1048,8 +1065,14 @@
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            displayLongTailData(idx, parsed, keyword, monthName, demand, supply);
-            return;
+            // Check if saved data has commercialAngles (Option B format)
+            if (parsed && parsed.commercialAngles && parsed.commercialAngles.length > 0) {
+              displayLongTailData(idx, parsed, keyword, monthName, demand, supply);
+              return;
+            } else {
+              // Auto invalidate old 6-card format cache
+              localStorage.removeItem(storageKey);
+            }
           } catch(e) {}
         }
       }
